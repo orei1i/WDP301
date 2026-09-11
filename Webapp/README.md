@@ -1,48 +1,32 @@
-# VeggieHub — Web (UI-first)
+# Webapp
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · lucide-react.
-Mock data + local state only — no backend yet.
+Next.js (App Router) + Tailwind v4, backed by the real API in `BE/` and Firebase Auth (email/password + Google).
 
-```bash
-npm install
-npm run dev        # http://localhost:3000
-npm run typecheck
-```
+## Setup
+1. BE running with seeded data (`npm run seed`, `npm run api` from the repo root — see `BE/README.md`).
+2. Firebase console → *Project settings → General → Your apps → Add app → Web* → copy the SDK config.
+3. `cp Webapp/.env.local.example Webapp/.env.local` and fill:
+   - `NEXT_PUBLIC_API_URL` (default `http://localhost:4000/api`)
+   - `NEXT_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID`
+   - optional `NEXT_PUBLIC_DEMO_PASSWORD` (= `SEED_PASSWORD` in BE) → one-click demo logins on `/login`
+4. From the repo root: `npm install` then `npm run web` → http://localhost:3000
 
-Use the **Preview as: Guest / User / Admin** switch at the bottom of the sidebar to see each role.
+`localhost` is an authorised domain in Firebase by default; add your deployed domain under *Authentication → Settings → Authorized domains*.
 
-## Structure
+## How data flows
+- `lib/firebase.ts` — Firebase web SDK; sign-in / sign-up / Google popup / password reset / email verification.
+- `lib/api.ts` — `fetch` wrapper that attaches the Firebase ID token and maps `{ error: { code, message } }` to `ApiError`.
+- `lib/actions.ts` — one function per UI action → one REST call.
+- `lib/store.tsx` — on sign-in: `POST /auth/sync` then `GET /bootstrap` (a snapshot already filtered by role and facility on the server).
+  `run(action, payload, successText?, onOk?)` calls the API, then re-fetches the snapshot. Pages read `db` exactly as before.
+- Public pages (`/`, `/facilities`, `/facilities/[id]`) use `GET /facilities/public…` — availability and quotes are computed by the server.
+- `lib/domain.ts` only derives read-only numbers for dashboards (occupancy, revenue, refund preview). Every rule is enforced by BE.
 
-```
-src/
-├─ app/
-│  ├─ layout.tsx                 # root: fonts, globals, <SessionProvider>
-│  ├─ globals.css                # Tailwind v4 @theme (fonts, animations)
-│  ├─ (main)/                    # public + user shell (Navbar/Sidebar/MobileTabBar)
-│  │  ├─ layout.tsx              # <AppShell>
-│  │  ├─ page.tsx                # Screen 1 — Discovery feed  "/"
-│  │  ├─ recipes/[slug]/         # Screen 2 — Video recipe detail (SSG from mock)
-│  │  ├─ recipes/new/            # upload form (later)
-│  │  ├─ forum/  nearby/  planner/  nutrition/  saved/
-│  ├─ (auth)/  login/ register/  # full-page auth (?next= redirect); modal = AuthModal
-│  └─ admin/                     # dark admin shell: moderation, roles/, categories/
-├─ components/
-│  ├─ ui/         # atoms: Button/ButtonLink, Badge, Card, Chip, Input, Avatar(+Stack), Modal, SectionHeader
-│  ├─ layout/     # AppShell, Navbar, Sidebar, AuthHeader, MobileTabBar, Logo, ComingSoon
-│  ├─ feed/       # FeaturedRecipe, RecipeFeed, RecipeVideoCard, ForumFeed, ForumThreadCard, feed-rail widgets
-│  ├─ recipe/     # player-context, VideoPlayer+ChapterStrip, RecipeHeader, RecipeStats, RecipeBody,
-│  │              # IngredientList, StepList, NutritionCard, ShopSuggestions, AuthorCard, RecipeReviews
-│  ├─ ai/         # AiChatWidget (floating, guest quota 3), RichText
-│  ├─ auth/       # AuthForm (login/register), AuthModal, AuthPage
-│  └─ providers/  # Providers = Session → AuthModal → AiChat
-├─ lib/
-│  ├─ mock/       # users/roles, recipes, forum, taxonomy, notifications, restaurants, reviews, ai
-│  ├─ navigation.ts  cn.ts  format.ts  hooks/
-└─ types/index.ts # Recipe, ForumPost, Restaurant, UserRole, MealPlan, Session…
-```
+`lib/mock-data.ts` is no longer used by the Webapp at runtime; `BE/src/scripts/seed.ts` imports it so the database starts with the same demo data.
 
-## Demo tips
-
-- Guests get **3 free AI queries** (floating "Ask AI" button). The 4th opens the auth modal.
-- Any email + 8-char password signs in; emails starting with `admin` sign in as Admin.
-- Recipe detail: "Watch this step" jumps the stub player; the active step highlights while "playing".
+## Test flows
+See the 13 flows in the earlier checklist — they now run against the API. New ones:
+- **Sign up** (email) → verification email → banner “Tôi đã xác minh” → can book.
+- **Google** → first login creates a CUSTOMER profile automatically.
+- **Admin creates staff** → reset link is copied to the clipboard → staff sets a password → signs in scoped to the assigned branch.
+- **Role change** by admin → the affected user's next request gets `TOKEN_REVOKED` and is signed out.

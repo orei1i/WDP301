@@ -1,40 +1,20 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
-  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
-
-  --animate-fade-in: fade-in 150ms ease-out;
-  --animate-pop-in: pop-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1.15);
-
-  @keyframes fade-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  @keyframes pop-in {
-    from { opacity: 0; transform: translateY(6px) scale(0.98); }
-    to { opacity: 1; transform: none; }
-  }
-}
-
-@utility no-scrollbar {
-  scrollbar-width: none;
-  &::-webkit-scrollbar {
-    display: none;
-  }
+  --font-sans: var(--font-be-vietnam), ui-sans-serif, system-ui, sans-serif;
+  --color-brand-50: #effbf8;
+  --color-brand-100: #d6f4ec;
+  --color-brand-200: #aee8d9;
+  --color-brand-500: #14a085;
+  --color-brand-600: #0e8570;
+  --color-brand-700: #0d6b5b;
+  --color-brand-800: #0e554a;
+  --color-brand-900: #0b3f37;
+  --color-ink: #16201e;
 }
 
 @layer base {
-  html {
-    -webkit-tap-highlight-color: transparent;
-  }
-  body {
-    @apply bg-stone-50 text-stone-800 antialiased;
-  }
-  ::selection {
-    @apply bg-emerald-200 text-emerald-950;
-  }
-  input[type="search"]::-webkit-search-cancel-button {
-    appearance: none;
-  }
+  html { color-scheme: light; }
+  body { @apply bg-stone-50 text-ink antialiased; }
+  :focus-visible { @apply outline-2 outline-offset-2 outline-brand-600; }
 }

@@ -1,25 +1,24 @@
-import type { Metadata, Viewport } from "next";
-// Self-hosted variable fonts (no Google Fonts fetch at build → works offline / behind proxies).
-import "@fontsource-variable/inter";
-import "@fontsource-variable/fraunces";
-import { Providers } from "@/components/providers";
-import "./globals.css";
+import type { Metadata } from 'next';
+import { Be_Vietnam_Pro } from 'next/font/google';
+import { StoreProvider } from '@/lib/store';
+import { Toasts } from '@/components/toasts';
+import './globals.css';
+
+const font = Be_Vietnam_Pro({ subsets: ['latin', 'vietnamese'], weight: ['400', '500', '600', '700'], variable: '--font-be-vietnam', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: { default: "VeggieHub — Vegan recipes, community & AI nutrition", template: "%s · VeggieHub" },
-  description: "Discover plant-based video recipes, join the vegan community forum, find nearby vegan spots and plan your meals.",
-  // Ask Dark Reader not to restyle the app (it injects attrs → hydration mismatch).
-  other: { "darkreader-lock": "true" },
+  title: { default: 'KhoAn — Kho tự quản', template: '%s · KhoAn' },
+  description: 'Hệ thống quản lý kho tự quản: đặt kho, nhận kho, thanh toán và vận hành chuỗi chi nhánh.',
 };
-
-export const viewport: Viewport = { themeColor: "#047857" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // suppressHydrationWarning: browser extensions (Dark Reader, Grammarly…) mutate <html>/<body> attrs before hydration.
-    <html lang="en" suppressHydrationWarning>
-      <body className="font-sans" suppressHydrationWarning>
-        <Providers>{children}</Providers>
+    <html lang="vi" className={font.variable} suppressHydrationWarning>
+      <body className="font-sans">
+        <StoreProvider>
+          {children}
+          <Toasts />
+        </StoreProvider>
       </body>
     </html>
   );

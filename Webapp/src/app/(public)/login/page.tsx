@@ -1,0 +1,135 @@
+'use client';
+
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState, type FormEvent } from 'react';
+import { ArrowRight, KeyRound, TriangleAlert } from 'lucide-react';
+import { useStore } from '@/lib/store';
+import { HOME } from '@/lib/nav';
+import { ROLE } from '@/lib/labels';
+import { Badge, Button, Card, Field, cx, inputCls } from '@/components/ui';
+
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+const DEMO_ACCOUNTS = [
+  { email: 'khach.demo@khoan.dev', label: 'Khách hàng' },
+  { email: 'nhanvien.q7@khoan.dev', label: 'Nhân viên kho · Quận 7' },
+  { email: 'quanly.q7@khoan.dev', label: 'Quản lý chi nhánh · Quận 7' },
+  { email: 'quanly.td@khoan.dev', label: 'Quản lý · Thủ Đức + Tân Bình' },
+  { email: 'vanhanh@khoan.dev', label: 'Quản lý vận hành' },
+  { email: 'admin@khoan.dev', label: 'Quản trị hệ thống' },
+];
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 48 48" className="size-4" aria-hidden>
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />
+      <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z" />
+    </svg>
+  );
+}
+
+function LoginInner() {
+  const { user, busy, firebaseReady, loginEmail, loginGoogle, register, resetPassword, logout } = useStore();
+  const router = useRouter();
+  const next = useSearchParams().get('next');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [waiting, setWaiting] = useState(false);
+
+  // Firebase sign-in resolves before the profile sync finishes; navigate once the profile is loaded.
+  useEffect(() => {
+    if (user && waiting) router.replace(next && next.startsWith('/') ? next : HOME[user.role]);
+  }, [user, waiting, next, router]);
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const ok = mode === 'login' ? await loginEmail(email, password) : await register(fullName, email, password);
+    if (ok) setWaiting(true);
+  };
+
+  if (!firebaseReady) {
+    return (
+      <main className="mx-auto max-w-lg px-4 py-16">
+        <Card className="flex gap-3 border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+          <TriangleAlert className="size-5 shrink-0" />
+          <p>Chưa cấu hình Firebase. Chép <code>Webapp/.env.local.example</code> thành <code>.env.local</code>, điền <code>NEXT_PUBLIC_FIREBASE_*</code> rồi khởi động lại <code>npm run web</code>.</p>
+        </Card>
+      </main>
+    );
+  }
+
+  if (user && !waiting) {
+    return (
+      <main className="mx-auto max-w-lg px-4 py-16">
+        <Card className="p-6">
+          <p className="text-sm text-stone-500">Đang đăng nhập với</p>
+          <p className="mt-1 text-lg font-semibold">{user.fullName} <Badge tone={ROLE[user.role].tone}>{ROLE[user.role].label}</Badge></p>
+          <p className="text-sm text-stone-500">{user.email}</p>
+          <div className="mt-5 flex gap-2">
+            <Button onClick={() => router.push(HOME[user.role])}>Vào bảng điều khiển <ArrowRight className="size-4" /></Button>
+            <Button variant="secondary" onClick={() => void logout()}>Đăng xuất</Button>
+          </div>
+        </Card>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto grid max-w-5xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_360px]">
+      <Card className="p-6 sm:p-8">
+        <div className="flex gap-1 rounded-lg bg-stone-100 p-1 text-sm font-medium">
+          {(['login', 'register'] as const).map((m) => (
+            <button key={m} type="button" onClick={() => setMode(m)} className={cx('flex-1 rounded-md py-2', mode === m ? 'bg-white shadow-sm' : 'text-stone-500')}>
+              {m === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+            </button>
+          ))}
+        </div>
+
+        <Button variant="secondary" size="lg" className="mt-6 w-full" disabled={busy} onClick={async () => { if (await loginGoogle()) setWaiting(true); }}>
+          <GoogleIcon /> Tiếp tục với Google
+        </Button>
+        <div className="my-6 flex items-center gap-3 text-xs text-stone-400"><span className="h-px flex-1 bg-stone-200" />hoặc dùng email<span className="h-px flex-1 bg-stone-200" /></div>
+
+        <form className="grid gap-4" onSubmit={submit}>
+          {mode === 'register' && (
+            <Field label="Họ tên"><input className={inputCls} required minLength={2} value={fullName} onChange={(e) => setFullName(e.target.value)} autoComplete="name" /></Field>
+          )}
+          <Field label="Email"><input type="email" className={inputCls} required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" /></Field>
+          <Field label="Mật khẩu" hint={mode === 'register' ? 'Ít nhất 6 ký tự. Sau khi đăng ký, xác minh email để đặt kho.' : undefined}>
+            <input type="password" className={inputCls} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
+          </Field>
+          <Button type="submit" size="lg" disabled={busy}>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</Button>
+          {mode === 'login' && (
+            <button type="button" className="text-left text-sm text-brand-700 hover:underline" onClick={() => (email ? void resetPassword(email) : undefined)} disabled={!email}>
+              Quên mật khẩu? {email ? 'Gửi email đặt lại' : '(nhập email trước)'}
+            </button>
+          )}
+        </form>
+        <p className="mt-6 text-xs text-stone-500">Tài khoản nhân viên và quản lý do Quản trị hệ thống cấp — dùng link đặt mật khẩu trong email được gửi.</p>
+      </Card>
+
+      {DEMO_PASSWORD && (
+        <div>
+          <p className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="size-4" />Tài khoản demo (dev)</p>
+          <p className="mt-1 text-xs text-stone-500">Tạo bởi <code>npm run seed</code>. Chỉ hiện khi có <code>NEXT_PUBLIC_DEMO_PASSWORD</code>.</p>
+          <div className="mt-3 grid gap-2">
+            {DEMO_ACCOUNTS.map((a) => (
+              <button key={a.email} disabled={busy} onClick={async () => { if (await loginEmail(a.email, DEMO_PASSWORD)) setWaiting(true); }}
+                className="rounded-lg bg-white px-4 py-3 text-left ring-1 ring-stone-200 transition hover:ring-brand-500 disabled:opacity-50">
+                <p className="text-sm font-medium">{a.label}</p>
+                <p className="text-xs text-stone-500">{a.email}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+export default function LoginPage() {
+  return <Suspense><LoginInner /></Suspense>;
+}

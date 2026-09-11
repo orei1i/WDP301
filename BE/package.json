@@ -1,0 +1,28 @@
+{
+  "name": "be",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "sync-indexes": "tsx src/scripts/sync-indexes.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ssm/shared": "*",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.0.0",
+    "helmet": "^8.0.0",
+    "mongoose": "^8.9.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22",
+    "tsx": "^4.19.0",
+    "typescript": "^5"
+  }
+}

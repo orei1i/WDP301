@@ -1,0 +1,17 @@
+{
+  "name": "wdp301-self-storage",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "Webapp",
+    "BE"
+  ],
+  "scripts": {
+    "web": "npm run dev --workspace Webapp",
+    "api": "npm run dev --workspace BE",
+    "seed": "npm run seed --workspace BE"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0"
+  }
+}

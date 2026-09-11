@@ -1,54 +1,49 @@
-/** 12400 → "12.4k" */
-export function compactNumber(n: number): string {
-  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+const TZ = 'Asia/Ho_Chi_Minh';
+const DAY = 86_400_000;
+
+const nf = new Intl.NumberFormat('vi-VN');
+export const vnd = (n: number) => `${nf.format(Math.round(n))} ₫`;
+export const compactVnd = (n: number) => {
+  if (Math.abs(n) >= 1e9) return `${(n / 1e9).toFixed(2).replace('.', ',')} tỷ`;
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(1).replace('.', ',')} tr`;
+  return vnd(n);
+};
+export const pct = (v: number, digits = 0) => `${(v * 100).toFixed(digits).replace('.', ',')}%`;
+
+/** Date-only values are stored as the facility-local calendar day at 00:00Z. */
+export function todayISO(): string {
+  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  return `${ymd}T00:00:00.000Z`;
+}
+export const addDays = (iso: string, n: number) => new Date(new Date(iso).getTime() + n * DAY).toISOString();
+export function addMonths(iso: string, months: number): string {
+  const d = new Date(iso);
+  const r = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+  const last = new Date(Date.UTC(r.getUTCFullYear(), r.getUTCMonth() + 1, 0)).getUTCDate();
+  r.setUTCDate(Math.min(d.getUTCDate(), last));
+  return r.toISOString();
+}
+export const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY);
+export const monthKey = (iso: string) => iso.slice(0, 7);
+
+const dFmt = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' });
+const dtFmt = new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: TZ });
+export const fmtDate = (iso?: string | null) => (iso ? dFmt.format(new Date(iso)) : '—');
+export const fmtDateTime = (iso?: string | null) => (iso ? dtFmt.format(new Date(iso)) : '—');
+export const fmtMonth = (key: string) => `T${Number(key.slice(5, 7))}/${key.slice(2, 4)}`;
+
+export function relativeDay(iso: string): string {
+  const d = daysBetween(todayISO(), iso);
+  if (d === 0) return 'Hôm nay';
+  if (d === 1) return 'Ngày mai';
+  if (d === -1) return 'Hôm qua';
+  return d > 0 ? `${d} ngày nữa` : `${-d} ngày trước`;
 }
 
-/** 245 → "4:05" */
-export function formatDuration(totalSec: number): string {
-  const m = Math.floor(totalSec / 60);
-  const s = Math.floor(totalSec % 60);
-  return `${m}:${s.toString().padStart(2, "0")}`;
+export function minutesLeft(iso?: string | null): number {
+  if (!iso) return 0;
+  return Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 60_000));
 }
 
-/** Relative time against a fixed "now" so SSR and client render the same string. */
-export const MOCK_NOW = new Date("2026-09-10T18:00:00+07:00").getTime();
-
-export function timeAgo(iso: string, now: number = MOCK_NOW): string {
-  const diff = Math.max(0, now - new Date(iso).getTime());
-  const min = Math.round(diff / 60_000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.round(h / 24);
-  if (d < 7) return `${d}d ago`;
-  const w = Math.round(d / 7);
-  if (w < 5) return `${w}w ago`;
-  return new Date(iso).toLocaleDateString("en", { month: "short", day: "numeric" });
-}
-
-export function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0]!.toUpperCase())
-    .join("");
-}
-
-const FRACTIONS: [number, string][] = [
-  [0.125, "⅛"], [0.25, "¼"], [0.333, "⅓"], [0.5, "½"], [0.667, "⅔"], [0.75, "¾"],
-];
-
-/** 1.5 → "1½", 0.25 → "¼", 133.33 → "135" (rounds big numbers to friendly steps). */
-export function formatQuantity(q: number | null): string {
-  if (q == null) return "";
-  if (q >= 20) return String(Math.round(q / 5) * 5);
-  if (q >= 5) return String(Math.round(q));
-  const whole = Math.floor(q);
-  const rest = q - whole;
-  if (rest < 0.06) return String(whole || q.toFixed(1));
-  if (rest > 0.94) return String(whole + 1);
-  const [, glyph] = FRACTIONS.reduce((best, f) => (Math.abs(f[0] - rest) < Math.abs(best[0] - rest) ? f : best));
-  return `${whole || ""}${glyph}`;
-}
+export const initials = (name: string) =>
+  name.split(' ').filter(Boolean).slice(-2).map((p) => p[0]).join('').toUpperCase();

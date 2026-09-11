@@ -1,0 +1,58 @@
+'use client';
+
+import { useState } from 'react';
+import type { SupportTicket } from '@ssm/shared';
+import { nextStates, type Actor } from '@ssm/shared';
+import { TICKET_MACHINE } from '@ssm/shared';
+import { useStore } from '@/lib/store';
+import { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
+import { facilityName, unitLabel, userName } from '@/lib/domain';
+import { fmtDate, fmtDateTime } from '@/lib/format';
+import { Badge, Button, KV, Modal, StatusBadge, cx, inputCls } from './ui';
+
+const ACTION_LABEL: Record<string, string> = { ASSIGNED: 'Giao việc', IN_PROGRESS: 'Bắt đầu xử lý', RESOLVED: 'Đánh dấu đã xử lý', CLOSED: 'Đóng yêu cầu', OPEN: 'Trả về hàng chờ' };
+
+export function TicketModal({ ticket, onClose }: { ticket: SupportTicket | null; onClose: () => void }) {
+  const { db, user, run } = useStore();
+  const [body, setBody] = useState('');
+  const [internal, setInternal] = useState(false);
+  if (!ticket || !user) return null;
+  const t = db.tickets.find((x) => x._id === ticket._id) ?? ticket;
+  const isCustomer = user.role === 'CUSTOMER';
+  const actions = nextStates(TICKET_MACHINE, t.status, user.role as Actor).filter((s) => s !== 'ASSIGNED');
+
+  return (
+    <Modal open onClose={onClose} size="lg" title={t.subject} description={`${t.ticketNumber} · ${facilityName(db, t.facilityId)}`}
+      footer={actions.map((s) => (
+        <Button key={s} variant={s === 'CLOSED' ? 'secondary' : 'primary'} size="sm" onClick={() => run('setTicketStatus', { ticketId: t._id, to: s }, `Đã chuyển sang "${TICKET_STATUS[s].label}"`)}>{ACTION_LABEL[s] ?? s}</Button>
+      ))}>
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge map={TICKET_STATUS} value={t.status} />
+        <StatusBadge map={TICKET_PRIORITY} value={t.priority} />
+        <Badge>{TICKET_CATEGORY[t.category]}</Badge>
+      </div>
+      <div className="mt-4"><KV items={[['Người gửi', userName(db, t.reporterId)], ['Phụ trách', t.assigneeId ? userName(db, t.assigneeId) : 'Chưa giao'], ['Kho', t.unitId ? unitLabel(db, t.unitId) : '—'], ['Hạn xử lý', fmtDate(t.dueAt)]]} /></div>
+      <div className="mt-5 space-y-3">
+        {t.messages.filter((m) => !isCustomer || !m.internal).map((m, i) => {
+          const mine = m.authorId === user._id;
+          return (
+            <div key={i} className={cx('max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm', mine ? 'ml-auto bg-brand-700 text-white' : m.internal ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200' : 'bg-stone-100')}>
+              <p className={cx('mb-1 text-[11px]', mine ? 'text-brand-100' : 'text-stone-500')}>{userName(db, m.authorId)} · {fmtDateTime(m.at)}{m.internal && ' · ghi chú nội bộ'}</p>
+              {m.body}
+            </div>
+          );
+        })}
+        {t.messages.length === 0 && <p className="text-sm text-stone-500">Chưa có trao đổi.</p>}
+      </div>
+      {t.status !== 'CLOSED' && (
+        <form className="mt-4 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); void run('addTicketMessage', { ticketId: t._id, body, internal }, undefined, () => setBody('')); }}>
+          <textarea className={inputCls} rows={2} placeholder="Nhập phản hồi…" value={body} onChange={(e) => setBody(e.target.value)} />
+          <div className="flex items-center justify-between gap-2">
+            {!isCustomer ? <label className="flex items-center gap-2 text-xs text-stone-600"><input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} />Ghi chú nội bộ (khách không thấy)</label> : <span />}
+            <Button size="sm" type="submit" disabled={!body.trim()}>Gửi</Button>
+          </div>
+        </form>
+      )}
+    </Modal>
+  );
+}
