@@ -6,7 +6,6 @@ import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, KeyRound, TriangleAlert } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { HOME } from '@/lib/nav';
-import { SKIP_SETPW } from '@/lib/auth-prefs';
 import { ROLE } from '@/lib/labels';
 import { Badge, Button, Card, Field, cx, inputCls } from '@/components/ui';
 
@@ -46,11 +45,9 @@ function LoginInner() {
     if (!user || !waiting) return;
     const dest = next && next.startsWith('/') ? next : HOME[user.role];
 
-    // Vừa đăng nhập bằng Google và chưa có mật khẩu → đưa thẳng tới trang đặt mật khẩu,
-    // khỏi bắt người dùng tự mò URL. Bấm "Để sau" ở đó thì lần sau không hỏi lại nữa.
-    let skipped = false;
-    try { skipped = localStorage.getItem(SKIP_SETPW) === '1'; } catch { /* private mode */ }
-    if (!providers.includes('password') && !skipped) {
+    // Chưa có mật khẩu (tài khoản Google mới) → bắt buộc đặt trước khi đi tiếp.
+    // RequirePassword trong RootLayout cũng chặn lại nếu ai đó gõ thẳng URL khác.
+    if (!providers.includes('password')) {
       router.replace(`/dat-mat-khau?next=${encodeURIComponent(dest)}`);
       return;
     }
@@ -87,8 +84,8 @@ function LoginInner() {
           </div>
           {!providers.includes('password') && (
             <div className="mt-5 rounded-lg bg-stone-50 p-4 text-sm ring-1 ring-stone-200">
-              <p className="font-medium">Bạn đang dùng Google để đăng nhập.</p>
-              <p className="mt-1 text-stone-600">Đặt thêm mật khẩu để lần sau vào được bằng email, không phụ thuộc cửa sổ Google.</p>
+              <p className="font-medium">Tài khoản chưa có mật khẩu.</p>
+              <p className="mt-1 text-stone-600">Cần đặt mật khẩu để hoàn tất tài khoản — sau đó vào được bằng cả email lẫn Google.</p>
               <Link href="/dat-mat-khau" className="mt-2 inline-flex items-center gap-1 font-medium text-brand-700 hover:underline">
                 <KeyRound className="size-4" />Đặt mật khẩu
               </Link>

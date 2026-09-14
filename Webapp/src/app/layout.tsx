@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Be_Vietnam_Pro } from 'next/font/google';
 import { StoreProvider } from '@/lib/store';
 import { Toasts } from '@/components/toasts';
+import { RequirePassword } from '@/components/require-password';
 import './globals.css';
 
 const font = Be_Vietnam_Pro({ subsets: ['latin', 'vietnamese'], weight: ['400', '500', '600', '700'], variable: '--font-be-vietnam', display: 'swap' });
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="vi" className={font.variable} suppressHydrationWarning>
       <body className="font-sans">
         <StoreProvider>
+          <RequirePassword />
           {children}
           <Toasts />
         </StoreProvider>
