@@ -12,6 +12,7 @@
   "scripts": {
     "web": "npm run dev --workspace Webapp",
     "api": "npm run dev --workspace BE",
+    "docs": "npm run docs --workspace BE",
     "seed": "npm run seed --workspace BE",
     "start": "npm run start --workspace BE"
   },

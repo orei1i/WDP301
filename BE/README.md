@@ -26,19 +26,42 @@ From the repo root (`WDP301/`):
 ```bash
 npm install          # links @ssm/shared into BE
 npm run seed         # ⚠ wipes the configured DB, loads the same demo data as the Webapp mock, creates Firebase demo logins
-npm run api          # http://localhost:4000/api  (tsx watch)
+npm run api          # tsx watch — in ra sẵn các link doc
+npm run docs         # mở Swagger trong trình duyệt (chạy ở cửa sổ khác)
 ```
 Node ≥ 20.12 required (`process.loadEnvFile`).
 
-API docs (all generated from the running code, no hand-written spec):
+## 3. API docs
 
-| URL | What |
+Everything below is generated from the running code — there is no hand-written spec to keep in step.
+
+`npm run api` prints the links on startup (Ctrl/Cmd-click them in VS Code's terminal):
+
+```
+  🚀  API        http://localhost:4000/api                (env=development)
+  📘  Swagger    http://localhost:4000/api/docs           ← bấm vào đây để thử API
+  📄  OpenAPI    http://localhost:4000/api/openapi.json   (dán vào Postman)
+  📑  Tóm tắt    http://localhost:4000/api                (tiếng Việt, có ô lấy token)
+  ❤   Health     http://localhost:4000/health
+```
+
+`npm run docs` (from the repo root, in a second terminal) opens Swagger in your browser. It is a separate
+command on purpose: `npm run api` runs under `tsx watch` and restarts on every file save, so opening a tab
+from there would spawn a new tab each time.
+
+| Path | What |
 |---|---|
-| <http://localhost:4000/api/docs> | **Swagger UI** — has *Try it out*. Click **Authorize** → paste a Firebase ID token into `bearerAuth`, or in dev use `devUser` with an email (needs `AUTH_DEV_BYPASS=true`). |
-| <http://localhost:4000/api/openapi.json> | OpenAPI 3.0.3 spec, rebuilt on every request. Import into Postman/Insomnia/codegen. |
-| <http://localhost:4000/api> | Compact Vietnamese reference page (searchable, no JS framework). |
-| <http://localhost:4000/api/docs.json> | Same page's data as plain JSON. |
-| <http://localhost:4000/health> | Liveness + Mongo connection state. |
+| `/api/docs` | **Swagger UI** — has *Try it out*. |
+| `/api/openapi.json` | OpenAPI 3.0.3, rebuilt on every request. Import into Postman/Insomnia/codegen. |
+| `/api` | Compact Vietnamese reference page (searchable, no JS framework) + the token box below. |
+| `/api/docs.json` | Same page's data as plain JSON. |
+| `/health` | Liveness + Mongo connection state. |
+
+Paths are relative because the docs follow whatever host served them — no base URL is configured anywhere.
+`req.protocol` + `req.get('host')` build it per request, and `app.set('trust proxy', 1)` makes that resolve to
+`https://…` behind Railway's proxy rather than `http://`. So the same code gives you
+`http://localhost:4000/api` locally and `https://wdp301-production.up.railway.app/api` in production, and
+Swagger's *Try it out* always calls the server you are actually looking at.
 
 **Getting a token for *Try it out*.** Set `FIREBASE_WEB_API_KEY` (Firebase Console → Project settings → General → Your apps → Web app → `apiKey` — already public, it ships in the Webapp bundle) and `GET /api` grows an email/password box. The browser calls Firebase directly, so this server never sees the password; the token is stored in `localStorage` on this origin and `/api/docs` picks it up and presses Authorize for you.
 
@@ -67,7 +90,7 @@ Demo logins created by the seed (password = `SEED_PASSWORD`, default `Demo@12345
 | OPS_MANAGER | vanhanh@khoan.dev |
 | ADMIN | admin@khoan.dev |
 
-## 3. Auth flow
+## 4. Auth flow
 ```
 client ── Firebase signIn (email/password | Google) ──> idToken
 client ── POST /api/auth/sync  (Bearer idToken) ──> creates CUSTOMER profile or links a pre-created one (verified email)
@@ -82,7 +105,7 @@ BE     ── verifyIdToken(token, checkRevoked) → User by firebaseUid → rol
 curl -H "x-dev-user: quanly.q7@khoan.dev" http://localhost:4000/api/reservations?status=CONFIRMED
 ```
 
-## 4. Endpoints (`/api`)
+## 5. Endpoints (`/api`)
 This table is prose only. The authoritative, always-current list is `GET /api/docs` (Swagger) / `GET /api/openapi.json`, generated from the route code itself.
 
 | Method & path | Roles | Notes |
@@ -114,13 +137,13 @@ This table is prose only. The authoritative, always-current list is `GET /api/do
 
 Errors: `{ "error": { "code", "message", "details" } }`. Codes include `SOLD_OUT`, `UNIT_NOT_AVAILABLE`, `INVALID_STATE_TRANSITION`, `FACILITY_SCOPE`, `OWNERSHIP`, `HOLD_EXPIRED`, `WAIVER_LIMIT`, `TOKEN_REVOKED`.
 
-## 5. Background jobs (in-process)
+## 6. Background jobs (in-process)
 - every minute: expire unpaid holds → `CANCELLED(HOLD_EXPIRED)`
 - hourly: issue due rent, mark `DELINQUENT` after the grace period (late fee), auto `LOCKED_OUT` after `lockoutAfterDays`
 
 Run one API instance, or move `src/jobs` to a single worker before scaling out.
 
-## 6. Structure
+## 7. Structure
 ```
 src/
   config/       env (zod), firebase-admin
