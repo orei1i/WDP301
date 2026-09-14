@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, Check, KeyRound, Mail, TriangleAlert } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { HOME } from '@/lib/nav';
+import { SKIP_SETPW } from '@/lib/auth-prefs';
 import { Button, Card, Field, inputCls } from '@/components/ui';
 
 const LABEL: Record<string, string> = {
@@ -14,15 +15,29 @@ const LABEL: Record<string, string> = {
   'facebook.com': 'Facebook',
 };
 
-export default function SetPasswordPage() {
+function SetPasswordInner() {
   const { user, busy, providers, setPassword, logout } = useStore();
   const router = useRouter();
+  const nextParam = useSearchParams().get('next');
   const [password, setPw] = useState('');
   const [confirm, setConfirm] = useState('');
   const [done, setDone] = useState(false);
 
   const hasPassword = providers.includes('password');
   const mismatch = confirm.length > 0 && password !== confirm;
+  const dest = nextParam && nextParam.startsWith('/') ? nextParam : user ? HOME[user.role] : '/';
+
+  // Đặt xong thì tự đi tiếp, không bắt bấm thêm.
+  useEffect(() => {
+    if (!done) return;
+    const t = setTimeout(() => router.replace(dest), 1800);
+    return () => clearTimeout(t);
+  }, [done, dest, router]);
+
+  const skip = () => {
+    try { localStorage.setItem(SKIP_SETPW, '1'); } catch { /* private mode */ }
+    router.replace(dest);
+  };
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -49,12 +64,12 @@ export default function SetPasswordPage() {
       <Card className="p-6 sm:p-8">
         <p className="flex items-center gap-2 text-lg font-semibold">
           <KeyRound className="size-5" />
-          {hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu'}
+          {hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu cho tài khoản'}
         </p>
         <p className="mt-2 text-sm text-stone-500">
           {hasPassword
             ? 'Đổi mật khẩu dùng để đăng nhập bằng email.'
-            : 'Tài khoản của bạn đang đăng nhập bằng Google. Đặt thêm mật khẩu để lần sau đăng nhập được bằng email — vẫn là cùng một tài khoản, không tạo tài khoản mới.'}
+            : 'Bạn vừa đăng nhập bằng Google. Đặt thêm mật khẩu để lần sau vào được bằng email — hữu ích khi trình duyệt chặn cửa sổ Google. Vẫn là cùng một tài khoản, không tạo tài khoản mới.'}
         </p>
 
         <div className="mt-5 rounded-lg bg-stone-50 p-4 text-sm ring-1 ring-stone-200">
@@ -69,7 +84,7 @@ export default function SetPasswordPage() {
             <Check className="size-5 shrink-0" />
             <div>
               <p className="font-medium">{hasPassword ? 'Đã cập nhật mật khẩu.' : 'Xong.'}</p>
-              <p className="mt-1">Từ giờ bạn đăng nhập được bằng <strong>{user.email}</strong> và mật khẩu vừa đặt. Nút Google vẫn dùng bình thường.</p>
+              <p className="mt-1">Từ giờ đăng nhập được bằng <strong>{user.email}</strong> và mật khẩu vừa đặt. Đang chuyển tiếp…</p>
             </div>
           </div>
         )}
@@ -78,18 +93,27 @@ export default function SetPasswordPage() {
           {/* trình quản lý mật khẩu cần thấy email để lưu đúng tài khoản */}
           <input type="email" value={user.email} readOnly hidden autoComplete="username" />
           <Field label={hasPassword ? 'Mật khẩu mới' : 'Mật khẩu'} hint="Ít nhất 6 ký tự">
-            <input type="password" className={inputCls} required minLength={6} value={password} onChange={(e) => { setPw(e.target.value); setDone(false); }} autoComplete="new-password" />
+            <input type="password" className={inputCls} required minLength={6} autoFocus value={password} onChange={(e) => { setPw(e.target.value); setDone(false); }} autoComplete="new-password" />
           </Field>
           <Field label="Nhập lại mật khẩu" hint={mismatch ? 'Hai lần nhập chưa khớp' : undefined}>
             <input type="password" className={inputCls} required minLength={6} value={confirm} onChange={(e) => { setConfirm(e.target.value); setDone(false); }} autoComplete="new-password" />
           </Field>
-          <Button type="submit" size="lg" disabled={busy || mismatch || password.length < 6}>
-            {hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="lg" disabled={busy || mismatch || password.length < 6}>
+              {hasPassword ? 'Đổi mật khẩu' : 'Đặt mật khẩu'}
+            </Button>
+            {!hasPassword && (
+              <Button type="button" variant="secondary" size="lg" onClick={skip} disabled={busy}>
+                Để sau <ArrowRight className="size-4" />
+              </Button>
+            )}
+          </div>
         </form>
 
+        {!hasPassword && <p className="mt-3 text-xs text-stone-500">Bấm “Để sau” thì hệ thống sẽ không hỏi lại ở những lần đăng nhập sau. Bạn vẫn quay lại trang này bất cứ lúc nào từ trang Đăng nhập.</p>}
+
         <div className="mt-6 flex flex-wrap gap-2 border-t border-stone-200 pt-5">
-          <Button variant="secondary" onClick={() => router.push(HOME[user.role])}>Vào bảng điều khiển <ArrowRight className="size-4" /></Button>
+          <Button variant="secondary" onClick={() => router.push(dest)}>Vào bảng điều khiển <ArrowRight className="size-4" /></Button>
           <Button variant="secondary" onClick={() => void logout()}>Đăng xuất</Button>
         </div>
 
@@ -99,4 +123,8 @@ export default function SetPasswordPage() {
       </Card>
     </main>
   );
+}
+
+export default function SetPasswordPage() {
+  return <Suspense><SetPasswordInner /></Suspense>;
 }

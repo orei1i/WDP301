@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, KeyRound, TriangleAlert } from 'lucide-react';
 import { useStore } from '@/lib/store';
 import { HOME } from '@/lib/nav';
+import { SKIP_SETPW } from '@/lib/auth-prefs';
 import { ROLE } from '@/lib/labels';
 import { Badge, Button, Card, Field, cx, inputCls } from '@/components/ui';
 
@@ -42,8 +43,19 @@ function LoginInner() {
 
   // Firebase sign-in resolves before the profile sync finishes; navigate once the profile is loaded.
   useEffect(() => {
-    if (user && waiting) router.replace(next && next.startsWith('/') ? next : HOME[user.role]);
-  }, [user, waiting, next, router]);
+    if (!user || !waiting) return;
+    const dest = next && next.startsWith('/') ? next : HOME[user.role];
+
+    // Vừa đăng nhập bằng Google và chưa có mật khẩu → đưa thẳng tới trang đặt mật khẩu,
+    // khỏi bắt người dùng tự mò URL. Bấm "Để sau" ở đó thì lần sau không hỏi lại nữa.
+    let skipped = false;
+    try { skipped = localStorage.getItem(SKIP_SETPW) === '1'; } catch { /* private mode */ }
+    if (!providers.includes('password') && !skipped) {
+      router.replace(`/dat-mat-khau?next=${encodeURIComponent(dest)}`);
+      return;
+    }
+    router.replace(dest);
+  }, [user, waiting, providers, next, router]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
