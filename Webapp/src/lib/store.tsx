@@ -41,7 +41,8 @@ interface StoreValue {
   loginEmail: (email: string, password: string) => Promise<boolean>;
   loginGoogle: () => Promise<boolean>;
   register: (fullName: string, email: string, password: string) => Promise<boolean>;
-  resetPassword: (email: string) => Promise<void>;
+  /** Trả true nếu đã gửi (hoặc email không tồn tại — cố ý không phân biệt, xem phần cài đặt bên dưới). */
+  resetPassword: (email: string) => Promise<boolean>;
   resendVerification: () => Promise<void>;
   confirmVerification: () => Promise<void>;
   logout: () => Promise<void>;
@@ -152,9 +153,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     toast('Đã gửi email xác minh — mở hộp thư để kích hoạt tài khoản', 'info');
   }), [wrapAuth, toast]);
 
-  const resetPassword = useCallback(async (email: string) => {
-    if (await wrapAuth(() => sendPasswordResetEmail(firebaseAuth(), email.trim()))) toast('Đã gửi email đặt lại mật khẩu', 'success');
-  }, [wrapAuth, toast]);
+  /**
+   * Không bao giờ để lộ email nào đã có tài khoản: `auth/user-not-found` bị nuốt và vẫn báo thành công,
+   * nếu không thì trang này thành công cụ dò danh sách người dùng.
+   * Email sai định dạng thì vẫn báo lỗi — đó là lỗi nhập liệu của chính họ, không phải thông tin về người khác.
+   */
+  const resetPassword = useCallback(async (email: string): Promise<boolean> => {
+    setBusy(true);
+    try {
+      await sendPasswordResetEmail(firebaseAuth(), email.trim());
+      return true;
+    } catch (e) {
+      const code = (e as { code?: string })?.code ?? '';
+      if (code === 'auth/user-not-found') return true;
+      toast(authErrorMessage(e), 'error');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }, [toast]);
 
   const resendVerification = useCallback(async () => {
     const cu = firebaseAuth().currentUser;

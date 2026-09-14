@@ -11,7 +11,7 @@ import { useStore } from '@/lib/store';
  * Chỉ chạy sau khi providers đã nạp (mảng rỗng nghĩa là chưa biết) để không đá nhầm người dùng
  * trong lúc Firebase còn đang khôi phục phiên.
  */
-const ALLOWED = ['/dat-mat-khau'];
+const ALLOWED = ['/dat-mat-khau', '/quen-mat-khau', '/xu-ly-tai-khoan'];
 
 export function RequirePassword() {
   const { user, providers, ready } = useStore();

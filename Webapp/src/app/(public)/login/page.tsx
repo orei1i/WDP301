@@ -31,7 +31,7 @@ function GoogleIcon() {
 }
 
 function LoginInner() {
-  const { user, busy, firebaseReady, providers, loginEmail, loginGoogle, register, resetPassword, logout } = useStore();
+  const { user, busy, firebaseReady, providers, loginEmail, loginGoogle, register, logout } = useStore();
   const router = useRouter();
   const next = useSearchParams().get('next');
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -122,9 +122,9 @@ function LoginInner() {
           </Field>
           <Button type="submit" size="lg" disabled={busy}>{mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}</Button>
           {mode === 'login' && (
-            <button type="button" className="text-left text-sm text-brand-700 hover:underline" onClick={() => (email ? void resetPassword(email) : undefined)} disabled={!email}>
-              Quên mật khẩu? {email ? 'Gửi email đặt lại' : '(nhập email trước)'}
-            </button>
+            <Link href={email ? `/quen-mat-khau?email=${encodeURIComponent(email)}` : '/quen-mat-khau'} className="text-left text-sm text-brand-700 hover:underline">
+              Quên mật khẩu?
+            </Link>
           )}
         </form>
         <p className="mt-6 text-xs text-stone-500">
