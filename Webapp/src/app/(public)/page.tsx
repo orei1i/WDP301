@@ -9,13 +9,15 @@ import { useStore } from '@/lib/store';
 import { UNIT_CATEGORY } from '@/lib/labels';
 import { isActiveFacility, unitRate } from '@/lib/domain';
 import { vnd } from '@/lib/format';
-import { Button, Card, Field, inputCls } from '@/components/ui';
+import { Button, Card, Field, Skeleton, inputCls } from '@/components/ui';
+import { SizeEstimator } from '@/components/size-estimator';
 
 const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL', 'VEHICLE'];
 
 export default function Home() {
   const { catalog } = useStore();
   const router = useRouter();
+  const loading = catalog === null; // catalog về từ /facilities/public, không cần đăng nhập
   const facilities = (catalog?.facilities ?? []).filter(isActiveFacility);
   const unitTypes = catalog?.unitTypes ?? [];
   const [fid, setFid] = useState('');
@@ -39,9 +41,19 @@ export default function Home() {
             <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">Kho tự quản gần bạn.<br /><span className="text-brand-200">Đặt online, nhận kho trong ngày.</span></h1>
             <p className="mt-5 max-w-xl text-base text-stone-300">Từ tủ locker cho sinh viên đến kho drive-up cho doanh nghiệp. Xem chỗ trống theo thời gian thực, đặt cọc qua VNPay/MoMo và quét mã QR để nhận kho.</p>
             <div className="mt-8 flex flex-wrap gap-6 text-sm text-stone-300">
-              <span><b className="text-2xl text-white">{facilities.length}</b> chi nhánh</span>
-              <span><b className="text-2xl text-white">{totalUnits}</b> kho</span>
-              <span><b className="text-2xl text-white">6</b> kích thước</span>
+              {loading ? (
+                <>
+                  <Skeleton className="h-9 w-28 bg-white/10" />
+                  <Skeleton className="h-9 w-24 bg-white/10" />
+                  <Skeleton className="h-9 w-28 bg-white/10" />
+                </>
+              ) : (
+                <>
+                  <span><b className="text-2xl text-white">{facilities.length}</b> chi nhánh</span>
+                  <span><b className="text-2xl text-white">{totalUnits}</b> kho</span>
+                  <span><b className="text-2xl text-white">6</b> kích thước</span>
+                </>
+              )}
             </div>
           </div>
           <Card className="self-center p-5 text-ink shadow-2xl sm:p-6">
@@ -70,6 +82,9 @@ export default function Home() {
         <h2 className="text-2xl font-semibold tracking-tight">Chọn kích thước phù hợp</h2>
         <p className="mt-1 text-sm text-stone-500">Giá tham khảo theo tháng, chưa gồm ưu đãi thuê dài hạn (−5% từ 6 tháng, −10% từ 12 tháng).</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {loading && Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="flex gap-4 p-5"><Skeleton className="size-16 shrink-0" /><div className="flex-1 grid gap-2"><Skeleton className="h-3 w-16" /><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-full" /><Skeleton className="h-4 w-28" /></div></Card>
+          ))}
           {sizes.map(({ c, t, from }) => t && (
             <Card key={c} className="flex gap-4 p-5">
               <div className="grid size-16 shrink-0 place-items-end rounded-lg bg-brand-50 p-2">
@@ -84,6 +99,10 @@ export default function Home() {
             </Card>
           ))}
         </div>
+      </section>
+
+      <section id="uoc-tinh" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-16 sm:px-6 lg:px-8">
+        <SizeEstimator />
       </section>
 
       <section id="how" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-16 sm:px-6 lg:px-8">
@@ -115,6 +134,9 @@ export default function Home() {
           <Link href="/facilities" className="text-sm font-medium text-brand-700 hover:underline">Xem tất cả</Link>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
+          {loading && Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i} className="h-full p-5"><Skeleton className="h-5 w-40" /><Skeleton className="mt-2 h-3 w-56" /><Skeleton className="mt-4 h-3 w-48" /></Card>
+          ))}
           {facilities.map((f) => (
             <Link key={f._id} href={`/facilities/${f._id}`} className="group">
               <Card className="h-full p-5 transition-shadow group-hover:shadow-md">

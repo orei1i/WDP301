@@ -31,6 +31,8 @@ interface StoreValue {
   /** Public catalogue (facilities, unit types, live availability) — loaded for everyone. */
   catalog: Catalog | null;
   busy: boolean;
+  /** false trong lúc Firebase còn khôi phục phiên — dùng để hiện skeleton, đừng kết luận "chưa đăng nhập". */
+  ready: boolean;
   firebaseReady: boolean;
   /** Các cách đăng nhập đã gắn với tài khoản Firebase: 'password' | 'google.com' | … */
   providers: string[];
@@ -228,11 +230,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [refresh, reloadCatalog, toast, logout]);
 
-  if (!ready) return <div className="grid min-h-screen place-items-center text-sm text-stone-500">Đang kết nối…</div>;
+  // Cố ý KHÔNG chặn toàn bộ cây render ở đây: trang public không cần chờ Firebase, chặn hết
+  // làm cả web trắng màn hình mỗi lần tải. Nơi nào cần đăng nhập thì tự đọc `ready` và hiện skeleton.
 
   return (
     <StoreContext.Provider value={{
-      db, user, catalog, busy, firebaseReady: firebaseConfigured, providers, setPassword,
+      db, user, catalog, busy, ready, firebaseReady: firebaseConfigured, providers, setPassword,
       loginEmail, loginGoogle, register, resetPassword, resendVerification, confirmVerification, logout, refresh, reloadCatalog,
       run, toast, toasts, dismiss,
     }}>

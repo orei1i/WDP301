@@ -9,16 +9,34 @@ import { useStore } from '@/lib/store';
 import { ROLE } from '@/lib/labels';
 import { facilityName } from '@/lib/domain';
 import { initials } from '@/lib/format';
-import { Badge, Button, ButtonLink, EmptyState, cx } from './ui';
+import { Badge, Button, ButtonLink, EmptyState, Skeleton, cx } from './ui';
 import { Logo } from './brand';
 
 export function AppShell({ area, children }: { area: Area; children: ReactNode }) {
-  const { user, db, logout, refresh, resendVerification, confirmVerification } = useStore();
+  const { user, db, ready, logout, refresh, resendVerification, confirmVerification } = useStore();
   const pathname = usePathname();
   const router = useRouter();
   const signOutTo = async (href: string) => { await logout(); router.push(href); };
   const [open, setOpen] = useState(false);
   const conf = AREAS[area];
+
+  // Firebase chưa khôi phục xong phiên → chưa biết có đăng nhập hay không.
+  // Hiện khung xám thay vì kết luận vội "chưa đăng nhập" rồi nhấp nháy sang giao diện thật.
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen">
+        <aside className="hidden w-64 shrink-0 bg-ink p-4 lg:block">
+          <Skeleton className="h-8 w-32 bg-white/10" />
+          <div className="mt-8 grid gap-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-9 bg-white/10" />)}</div>
+        </aside>
+        <div className="flex-1 p-6">
+          <Skeleton className="h-8 w-56" />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)}</div>
+          <Skeleton className="mt-6 h-72" />
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (

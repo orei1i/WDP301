@@ -14,16 +14,16 @@ import { useStore } from '@/lib/store';
 const ALLOWED = ['/dat-mat-khau'];
 
 export function RequirePassword() {
-  const { user, providers } = useStore();
+  const { user, providers, ready } = useStore();
   const pathname = usePathname();
   const router = useRouter();
 
   useEffect(() => {
-    if (!user || providers.length === 0) return;
+    if (!ready || !user || providers.length === 0) return;
     if (providers.includes('password')) return;
     if (ALLOWED.some((p) => pathname.startsWith(p))) return;
     router.replace('/dat-mat-khau');
-  }, [user, providers, pathname, router]);
+  }, [ready, user, providers, pathname, router]);
 
   return null;
 }
