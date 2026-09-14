@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, KeyRound, TriangleAlert } from 'lucide-react';
@@ -30,7 +31,7 @@ function GoogleIcon() {
 }
 
 function LoginInner() {
-  const { user, busy, firebaseReady, loginEmail, loginGoogle, register, resetPassword, logout } = useStore();
+  const { user, busy, firebaseReady, providers, loginEmail, loginGoogle, register, resetPassword, logout } = useStore();
   const router = useRouter();
   const next = useSearchParams().get('next');
   const [mode, setMode] = useState<'login' | 'register'>('login');
@@ -68,10 +69,19 @@ function LoginInner() {
           <p className="text-sm text-stone-500">Đang đăng nhập với</p>
           <p className="mt-1 text-lg font-semibold">{user.fullName} <Badge tone={ROLE[user.role].tone}>{ROLE[user.role].label}</Badge></p>
           <p className="text-sm text-stone-500">{user.email}</p>
-          <div className="mt-5 flex gap-2">
+          <div className="mt-5 flex flex-wrap gap-2">
             <Button onClick={() => router.push(HOME[user.role])}>Vào bảng điều khiển <ArrowRight className="size-4" /></Button>
             <Button variant="secondary" onClick={() => void logout()}>Đăng xuất</Button>
           </div>
+          {!providers.includes('password') && (
+            <div className="mt-5 rounded-lg bg-stone-50 p-4 text-sm ring-1 ring-stone-200">
+              <p className="font-medium">Bạn đang dùng Google để đăng nhập.</p>
+              <p className="mt-1 text-stone-600">Đặt thêm mật khẩu để lần sau vào được bằng email, không phụ thuộc cửa sổ Google.</p>
+              <Link href="/dat-mat-khau" className="mt-2 inline-flex items-center gap-1 font-medium text-brand-700 hover:underline">
+                <KeyRound className="size-4" />Đặt mật khẩu
+              </Link>
+            </div>
+          )}
         </Card>
       </main>
     );
@@ -108,7 +118,10 @@ function LoginInner() {
             </button>
           )}
         </form>
-        <p className="mt-6 text-xs text-stone-500">Tài khoản nhân viên và quản lý do Quản trị hệ thống cấp — dùng link đặt mật khẩu trong email được gửi.</p>
+        <p className="mt-6 text-xs text-stone-500">
+          Tài khoản nhân viên và quản lý do Quản trị hệ thống cấp — dùng link đặt mật khẩu trong email được gửi.
+          {' '}Đã đăng nhập bằng Google và muốn thêm mật khẩu? <Link href="/dat-mat-khau" className="text-brand-700 hover:underline">Đặt mật khẩu</Link>.
+        </p>
       </Card>
 
       {DEMO_PASSWORD && (

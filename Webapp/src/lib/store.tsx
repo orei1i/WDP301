@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail,
-  signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
+  createUserWithEmailAndPassword, EmailAuthProvider, linkWithCredential, onAuthStateChanged, reauthenticateWithPopup,
+  reload, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut,
+  updatePassword, updateProfile,
 } from 'firebase/auth';
 import type { Facility, UnitCategory, UnitType, User } from '@ssm/shared';
 import type { DB } from './mock-data';
@@ -31,6 +32,10 @@ interface StoreValue {
   catalog: Catalog | null;
   busy: boolean;
   firebaseReady: boolean;
+  /** Các cách đăng nhập đã gắn với tài khoản Firebase: 'password' | 'google.com' | … */
+  providers: string[];
+  /** Gắn thêm (hoặc đổi) mật khẩu cho tài khoản hiện tại — dùng cho người đăng nhập bằng Google. */
+  setPassword: (password: string) => Promise<boolean>;
   loginEmail: (email: string, password: string) => Promise<boolean>;
   loginGoogle: () => Promise<boolean>;
   register: (fullName: string, email: string, password: string) => Promise<boolean>;
@@ -54,6 +59,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [busy, setBusy] = useState(false);
+  const [providers, setProviders] = useState<string[]>([]);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const userRef = useRef<User | null>(null);
   const pendingName = useRef<string | undefined>(undefined);
@@ -89,9 +95,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!firebaseConfigured) { setReady(true); return; }
     return onAuthStateChanged(firebaseAuth(), async (fb) => {
       if (!fb) {
-        userRef.current = null; setUser(null); setDb(EMPTY_DB); setReady(true);
+        userRef.current = null; setUser(null); setDb(EMPTY_DB); setProviders([]); setReady(true);
         return;
       }
+      setProviders(fb.providerData.map((p) => p.providerId));
       try {
         await api.post('/auth/sync', pendingName.current ? { fullName: pendingName.current } : {});
         pendingName.current = undefined;
@@ -125,10 +132,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       await signInWithPopup(firebaseAuth(), googleProvider);
     } catch (e) {
       const code = (e as { code?: string })?.code ?? '';
-      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
-        throw new Error('Trình duyệt đang chặn cửa sổ Google. Bấm biểu tượng cửa sổ bị chặn ở cuối thanh địa chỉ → "Luôn cho phép", rồi thử lại. Hoặc đăng nhập bằng email/mật khẩu.');
+      console.error('[Google sign-in]', code, e); // mã thật luôn nằm ở đây, đừng đoán từ toast
+      if (code === 'auth/popup-blocked') {
+        throw new Error('Trình duyệt chặn cửa sổ Google. Chrome/Edge: bấm biểu tượng cửa sổ bị chặn ở cuối thanh địa chỉ → "Luôn cho phép". Brave: bật thêm brave://settings/socialBlocking → "Allow Google login buttons on third party sites". Hoặc dùng email/mật khẩu.');
       }
-      throw e;
+      if (code === 'auth/operation-not-supported-in-this-environment') {
+        throw new Error('Trình duyệt này không mở được cửa sổ đăng nhập Google (thường gặp khi mở link trong Zalo/Facebook/Messenger). Mở bằng Chrome hoặc dùng email/mật khẩu.');
+      }
+      throw new Error(`Đăng nhập Google thất bại (${code || 'không rõ mã'}). Mở DevTools → Console để xem chi tiết.`);
     }
   }), [wrapAuth]);
   const register = useCallback((fullName: string, email: string, password: string) => wrapAuth(async () => {
@@ -147,6 +158,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const cu = firebaseAuth().currentUser;
     if (cu && await wrapAuth(() => sendEmailVerification(cu))) toast('Đã gửi lại email xác minh', 'success');
   }, [wrapAuth, toast]);
+
+  /**
+   * Người đăng nhập bằng Google chưa có mật khẩu. Gắn thêm provider 'password' bằng linkWithCredential
+   * → từ đó đăng nhập được bằng cả hai cách, vẫn cùng một tài khoản (cùng uid, cùng hồ sơ trong Mongo).
+   * Đã có mật khẩu rồi thì đây là đổi mật khẩu.
+   *
+   * Firebase đòi phiên "còn mới" cho thao tác nhạy cảm này; hết hạn thì xác thực lại bằng Google rồi thử lại.
+   */
+  const setPassword = useCallback((password: string) => wrapAuth(async () => {
+    const cu = firebaseAuth().currentUser;
+    if (!cu) throw new Error('Chưa đăng nhập');
+    if (!cu.email) throw new Error('Tài khoản này không có email nên không đặt được mật khẩu');
+    const had = cu.providerData.some((p) => p.providerId === 'password');
+
+    const apply = async () => {
+      if (had) await updatePassword(cu, password);
+      else await linkWithCredential(cu, EmailAuthProvider.credential(cu.email!, password));
+    };
+
+    try {
+      await apply();
+    } catch (e) {
+      if ((e as { code?: string })?.code !== 'auth/requires-recent-login') throw e;
+      await reauthenticateWithPopup(cu, googleProvider);
+      await apply();
+    }
+
+    await reload(cu);
+    setProviders(cu.providerData.map((p) => p.providerId));
+    toast(had ? 'Đã đổi mật khẩu' : `Đã đặt mật khẩu — từ giờ đăng nhập được bằng ${cu.email}`, 'success');
+  }), [wrapAuth, toast]);
 
   /** After clicking the link in the email: reload Firebase user, force a fresh token (email_verified=true), re-sync. */
   const confirmVerification = useCallback(async () => {
@@ -190,7 +232,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   return (
     <StoreContext.Provider value={{
-      db, user, catalog, busy, firebaseReady: firebaseConfigured,
+      db, user, catalog, busy, firebaseReady: firebaseConfigured, providers, setPassword,
       loginEmail, loginGoogle, register, resetPassword, resendVerification, confirmVerification, logout, refresh, reloadCatalog,
       run, toast, toasts, dismiss,
     }}>
