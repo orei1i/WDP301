@@ -42,6 +42,7 @@ export function authErrorMessage(e: unknown): string {
     'auth/popup-blocked': 'Trình duyệt chặn cửa sổ đăng nhập Google',
     'auth/account-exists-with-different-credential': 'Email này đã đăng ký bằng cách khác — hãy đăng nhập bằng email/mật khẩu',
     'auth/network-request-failed': 'Không kết nối được Firebase',
+    'auth/unauthorized-domain': 'Tên miền này chưa được cho phép trong Firebase — thêm vào Authentication → Settings → Authorized domains',
   };
   return map[code] ?? (e instanceof Error ? e.message : 'Đăng nhập thất bại');
 }

@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail,
-  signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
+  createUserWithEmailAndPassword, getRedirectResult, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail,
+  signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile,
 } from 'firebase/auth';
 import type { Facility, UnitCategory, UnitType, User } from '@ssm/shared';
 import type { DB } from './mock-data';
@@ -87,6 +87,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reloadCatalog();
     if (!firebaseConfigured) { setReady(true); return; }
+    // Quay lại sau signInWithRedirect: phiên chảy vào onAuthStateChanged bên dưới,
+    // gọi getRedirectResult chỉ để lộ lỗi (vd auth/unauthorized-domain) thay vì im lặng.
+    getRedirectResult(firebaseAuth()).catch((e) => toast(authErrorMessage(e), 'error'));
     return onAuthStateChanged(firebaseAuth(), async (fb) => {
       if (!fb) {
         userRef.current = null; setUser(null); setDb(EMPTY_DB); setReady(true);
@@ -111,7 +114,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [toast]);
 
   const loginEmail = useCallback((email: string, password: string) => wrapAuth(() => signInWithEmailAndPassword(firebaseAuth(), email.trim(), password)), [wrapAuth]);
-  const loginGoogle = useCallback(() => wrapAuth(() => signInWithPopup(firebaseAuth(), googleProvider)), [wrapAuth]);
+  /**
+   * Popup trước (giữ nguyên trang, UX tốt hơn). Trình duyệt chặn popup hoặc môi trường không hỗ trợ
+   * (in-app browser của Facebook/Zalo, iOS Safari chặn cửa sổ mới) thì chuyển sang redirect cùng tab —
+   * redirect không bao giờ bị popup blocker chặn. Người dùng đóng popup thì tôn trọng, không redirect.
+   */
+  const loginGoogle = useCallback(() => wrapAuth(async () => {
+    try {
+      await signInWithPopup(firebaseAuth(), googleProvider);
+    } catch (e) {
+      const code = (e as { code?: string })?.code ?? '';
+      const popupUnavailable = code === 'auth/popup-blocked'
+        || code === 'auth/cancelled-popup-request'
+        || code === 'auth/operation-not-supported-in-this-environment';
+      if (!popupUnavailable) throw e;
+      await signInWithRedirect(firebaseAuth(), googleProvider); // trang rời đi; onAuthStateChanged bắt phiên khi quay lại
+    }
+  }), [wrapAuth]);
   const register = useCallback((fullName: string, email: string, password: string) => wrapAuth(async () => {
     pendingName.current = fullName.trim();
     const cred = await createUserWithEmailAndPassword(firebaseAuth(), email.trim(), password);
