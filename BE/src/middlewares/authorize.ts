@@ -2,9 +2,10 @@ import type { RequestHandler } from 'express';
 import type { Role } from '@ssm/shared';
 import { Forbidden, Unauthorized } from '../core/errors';
 import { auditDenied } from '../services/audit.service';
+import { ROLES_TAG, tag } from './tags';
 
 /** Role gate. Facility scoping is enforced separately (middleware + service-level checks). */
-export const authorize = (...roles: Role[]): RequestHandler => async (req, _res, next) => {
+export const authorize = (...roles: Role[]): RequestHandler => tag<RequestHandler>(async (req, _res, next) => {
   const user = req.auth?.user;
   if (!user) throw Unauthorized();
   if (!roles.includes(user.role)) {
@@ -12,4 +13,4 @@ export const authorize = (...roles: Role[]): RequestHandler => async (req, _res,
     throw Forbidden();
   }
   next();
-};
+}, ROLES_TAG, roles);

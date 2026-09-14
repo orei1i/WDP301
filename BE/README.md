@@ -30,6 +30,28 @@ npm run api          # http://localhost:4000/api  (tsx watch)
 ```
 Node ≥ 20.12 required (`process.loadEnvFile`).
 
+API docs (all generated from the running code, no hand-written spec):
+
+| URL | What |
+|---|---|
+| <http://localhost:4000/api/docs> | **Swagger UI** — has *Try it out*. Click **Authorize** → paste a Firebase ID token into `bearerAuth`, or in dev use `devUser` with an email (needs `AUTH_DEV_BYPASS=true`). |
+| <http://localhost:4000/api/openapi.json> | OpenAPI 3.0.3 spec, rebuilt on every request. Import into Postman/Insomnia/codegen. |
+| <http://localhost:4000/api> | Compact Vietnamese reference page (searchable, no JS framework). |
+| <http://localhost:4000/api/docs.json> | Same page's data as plain JSON. |
+| <http://localhost:4000/health> | Liveness + Mongo connection state. |
+
+**How the spec stays in sync.** `src/modules/openapi.ts` walks the routers listed in `src/modules/registry.ts`
+and reads what the route handlers were tagged with:
+
+- paths + methods ← `router.stack` (`layer.route.path`)
+- path/query/body params, required fields, types, enums, min/max ← the **zod schemas you already pass to `validate()`** (tagged via `SCHEMAS_TAG`)
+- allowed roles ← the list you already pass to `authorize()` (tagged via `ROLES_TAG`)
+- auth required? ← reference comparison against `authenticate` / `verifyFirebase`
+
+So adding an endpoint or changing a zod schema updates Swagger on the next page load — nothing to keep in step by hand.
+Only the prose descriptions come from the `API_GROUPS` table in `src/modules/docs.routes.ts`; a route missing from
+that table still shows up in Swagger, just without a description.
+
 Demo logins created by the seed (password = `SEED_PASSWORD`, default `Demo@12345`):
 
 | Role | Email |
@@ -57,6 +79,8 @@ curl -H "x-dev-user: quanly.q7@khoan.dev" http://localhost:4000/api/reservations
 ```
 
 ## 4. Endpoints (`/api`)
+This table is prose only. The authoritative, always-current list is `GET /api/docs` (Swagger) / `GET /api/openapi.json`, generated from the route code itself.
+
 | Method & path | Roles | Notes |
 |---|---|---|
 | `POST /auth/sync` · `GET /auth/me` | any signed-in | profile link / current user |
