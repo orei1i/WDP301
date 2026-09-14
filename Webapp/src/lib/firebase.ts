@@ -39,7 +39,7 @@ export function authErrorMessage(e: unknown): string {
     'auth/email-already-in-use': 'Email đã được đăng ký',
     'auth/weak-password': 'Mật khẩu cần ít nhất 6 ký tự',
     'auth/popup-closed-by-user': 'Bạn đã đóng cửa sổ Google',
-    'auth/popup-blocked': 'Trình duyệt chặn cửa sổ đăng nhập Google',
+    'auth/popup-blocked': 'Trình duyệt chặn cửa sổ Google — bấm biểu tượng bị chặn ở thanh địa chỉ để cho phép',
     'auth/account-exists-with-different-credential': 'Email này đã đăng ký bằng cách khác — hãy đăng nhập bằng email/mật khẩu',
     'auth/network-request-failed': 'Không kết nối được Firebase',
     'auth/unauthorized-domain': 'Tên miền này chưa được cho phép trong Firebase — thêm vào Authentication → Settings → Authorized domains',

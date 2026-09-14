@@ -2,8 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  createUserWithEmailAndPassword, getRedirectResult, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail,
-  signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, signOut, updateProfile,
+  createUserWithEmailAndPassword, onAuthStateChanged, reload, sendEmailVerification, sendPasswordResetEmail,
+  signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
 } from 'firebase/auth';
 import type { Facility, UnitCategory, UnitType, User } from '@ssm/shared';
 import type { DB } from './mock-data';
@@ -87,9 +87,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void reloadCatalog();
     if (!firebaseConfigured) { setReady(true); return; }
-    // Quay lại sau signInWithRedirect: phiên chảy vào onAuthStateChanged bên dưới,
-    // gọi getRedirectResult chỉ để lộ lỗi (vd auth/unauthorized-domain) thay vì im lặng.
-    getRedirectResult(firebaseAuth()).catch((e) => toast(authErrorMessage(e), 'error'));
     return onAuthStateChanged(firebaseAuth(), async (fb) => {
       if (!fb) {
         userRef.current = null; setUser(null); setDb(EMPTY_DB); setReady(true);
@@ -115,20 +112,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const loginEmail = useCallback((email: string, password: string) => wrapAuth(() => signInWithEmailAndPassword(firebaseAuth(), email.trim(), password)), [wrapAuth]);
   /**
-   * Popup trước (giữ nguyên trang, UX tốt hơn). Trình duyệt chặn popup hoặc môi trường không hỗ trợ
-   * (in-app browser của Facebook/Zalo, iOS Safari chặn cửa sổ mới) thì chuyển sang redirect cùng tab —
-   * redirect không bao giờ bị popup blocker chặn. Người dùng đóng popup thì tôn trọng, không redirect.
+   * CHỈ dùng popup, cố ý không có nhánh signInWithRedirect.
+   *
+   * Redirect bắt buộc trang xử lý (/__/auth/handler) phải nằm cùng origin với app, mà Google chỉ chấp nhận
+   * redirect_uri đã đăng ký trong Google Cloud Console — dự án này không đăng ký, nên redirect sẽ chết ở
+   * "Error 400: redirect_uri_mismatch". Popup thì trang xử lý vẫn ở <project>.firebaseapp.com (Google đăng ký
+   * sẵn) và nói chuyện với app qua postMessage, không đụng storage, nên chạy được mọi nơi — trừ khi trình
+   * duyệt chặn cửa sổ mới, lúc đó chỉ người dùng mới mở khoá được.
    */
   const loginGoogle = useCallback(() => wrapAuth(async () => {
     try {
       await signInWithPopup(firebaseAuth(), googleProvider);
     } catch (e) {
       const code = (e as { code?: string })?.code ?? '';
-      const popupUnavailable = code === 'auth/popup-blocked'
-        || code === 'auth/cancelled-popup-request'
-        || code === 'auth/operation-not-supported-in-this-environment';
-      if (!popupUnavailable) throw e;
-      await signInWithRedirect(firebaseAuth(), googleProvider); // trang rời đi; onAuthStateChanged bắt phiên khi quay lại
+      if (code === 'auth/popup-blocked' || code === 'auth/operation-not-supported-in-this-environment') {
+        throw new Error('Trình duyệt đang chặn cửa sổ Google. Bấm biểu tượng cửa sổ bị chặn ở cuối thanh địa chỉ → "Luôn cho phép", rồi thử lại. Hoặc đăng nhập bằng email/mật khẩu.');
+      }
+      throw e;
     }
   }), [wrapAuth]);
   const register = useCallback((fullName: string, email: string, password: string) => wrapAuth(async () => {
