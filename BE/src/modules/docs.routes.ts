@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
+import { env } from '../config/env';
 
 /**
  * Trang tài liệu API (GET /api) + bản JSON máy đọc được (GET /api/docs.json).
@@ -391,6 +392,16 @@ export const ERROR_CODES: { status: number; code: string; meaning: string }[] = 
   { status: 500, code: 'INTERNAL', meaning: 'Lỗi hệ thống. Ngoài production, details có stack trace.' },
 ];
 
+/** Tài khoản do npm run seed tạo — chỉ dùng cho DB demo. */
+const DEMO_ACCOUNTS = [
+  { email: 'khach.demo@khoan.dev', role: 'CUSTOMER' },
+  { email: 'nhanvien.q7@khoan.dev', role: 'STAFF' },
+  { email: 'quanly.q7@khoan.dev', role: 'FACILITY_MANAGER' },
+  { email: 'quanly.td@khoan.dev', role: 'FACILITY_MANAGER' },
+  { email: 'vanhanh@khoan.dev', role: 'OPS_MANAGER' },
+  { email: 'admin@khoan.dev', role: 'ADMIN' },
+];
+
 const docsPayload = (baseUrl: string) => ({
   name: 'Self-Storage Management API',
   version: 1,
@@ -410,6 +421,13 @@ const docsPayload = (baseUrl: string) => ({
   ],
   groups: API_GROUPS,
   errors: ERROR_CODES,
+  // Trình duyệt gọi thẳng Firebase để lấy token — server không bao giờ nhìn thấy mật khẩu.
+  login: {
+    enabled: Boolean(env.FIREBASE_WEB_API_KEY),
+    apiKey: env.FIREBASE_WEB_API_KEY ?? null,
+    demoPassword: env.DOC_DEMO_PASSWORD ?? null,
+    accounts: DEMO_ACCOUNTS,
+  },
 });
 
 const PAGE = (json: string, nonce: string) => `<!doctype html>
@@ -455,6 +473,18 @@ const PAGE = (json: string, nonce: string) => `<!doctype html>
   code{background:var(--code);padding:2px 6px;border-radius:5px;font-family:ui-monospace,monospace;font-size:12.5px}
   pre{background:var(--code);padding:11px 13px;border-radius:9px;overflow:auto;font-size:12.5px;margin:8px 0 0}
   .hide{display:none}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .f{flex:1 1 200px;min-width:0;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:13px}
+  .btn{padding:9px 15px;border:0;border-radius:8px;background:var(--blue);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .btn:disabled{opacity:.5;cursor:default}
+  .btn.alt{background:var(--green)}
+  .pill{padding:4px 10px;margin:3px 4px 0 0;border:1px solid var(--line);border-radius:20px;background:var(--card);color:var(--ink);font-size:11.5px;cursor:pointer}
+  .pill:hover{border-color:var(--blue);color:var(--blue)}
+  .tok{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--code);font-family:ui-monospace,monospace;font-size:11.5px;word-break:break-all;max-height:96px;overflow:auto}
+  .who{margin-top:8px;font-size:13px}
+  .err{color:var(--orange);margin-top:8px;font-size:13px}
+  .mt{margin-top:10px}
+  .btn.ghost{background:var(--muted)}
   @media (max-width:860px){aside{display:none}main{padding:18px 14px 60px}}
 </style></head><body>
 <div class="wrap">
@@ -462,6 +492,7 @@ const PAGE = (json: string, nonce: string) => `<!doctype html>
   <main>
     <input class="search" id="q" placeholder="Lọc nhanh: gõ đường dẫn, vai trò hoặc từ khóa…" autocomplete="off">
     <div class="panel" id="intro"></div>
+    <div class="panel" id="auth"></div>
     <div id="body"></div>
     <h2 id="errors">Mã lỗi</h2>
     <p class="blurb">Mọi lỗi đều trả về <code>{ "error": { "code", "message", "details?" } }</code>.</p>
@@ -483,6 +514,104 @@ document.getElementById('intro').innerHTML =
   '<p class="label">Quy ước</p><ul class="notes">' + D.conventions.map(c => '<li>' + esc(c) + '</li>').join('') + '</ul>' +
   '<p class="label">Thử API trực tiếp</p><p><a href="/api/docs"><strong>Swagger UI</strong> — có nút Try it out</a></p>' +
   '<p class="label">Máy đọc</p><p><a href="/api/openapi.json">OpenAPI 3.0</a> · <a href="/api/docs.json">bản JSON gọn</a> · <a href="/health">GET /health</a></p>';
+
+// ---------------------------------------------------------------- ô lấy token
+// Trình duyệt gọi THẲNG Firebase; server này không bao giờ nhận mật khẩu.
+const TKEY = 'ssm_api_token';
+const A = document.getElementById('auth');
+const load = () => { try { return JSON.parse(localStorage.getItem(TKEY) || 'null'); } catch (e) { return null; } };
+const alive = t => t && t.token && t.exp > Date.now();
+const mins = t => Math.max(0, Math.round((t.exp - Date.now()) / 60000));
+
+if (!D.login.enabled) {
+  A.innerHTML = '<p class="label">Lấy token để thử API</p>' +
+    '<p class="blurb">Chưa bật. Đặt biến môi trường <code>FIREBASE_WEB_API_KEY</code> cho server ' +
+    '(Firebase Console → Project settings → General → Your apps → Web app → <code>apiKey</code>) rồi khởi động lại. ' +
+    'Key này vốn public — nó đã nằm trong bundle trình duyệt của Webapp.</p>';
+} else {
+  const accts = D.login.accounts.map(a =>
+    '<button class="pill" data-em="' + esc(a.email) + '" title="' + esc(a.email) + '">' + esc(a.role) + '</button>').join('');
+  A.innerHTML =
+    '<p class="label">Lấy token để thử API</p>' +
+    '<div class="row">' +
+      '<input id="em" class="f" placeholder="email" autocomplete="username">' +
+      '<input id="pw" class="f" type="password" placeholder="mật khẩu" autocomplete="current-password">' +
+      '<button id="go" class="btn">Đăng nhập</button>' +
+    '</div>' +
+    '<p class="blurb mt">Tài khoản demo — bấm để điền' +
+      (D.login.demoPassword ? ' cả mật khẩu' : ' email') + ':<br>' + accts + '</p>' +
+    '<div id="out"></div>';
+
+  const em = document.getElementById('em');
+  const pw = document.getElementById('pw');
+  const go = document.getElementById('go');
+  const out = document.getElementById('out');
+
+  A.querySelectorAll('.pill').forEach(b => b.addEventListener('click', () => {
+    em.value = b.dataset.em;
+    if (D.login.demoPassword) pw.value = D.login.demoPassword;
+    (D.login.demoPassword ? go : pw).focus();
+  }));
+
+  let timer = null;
+  function show(t, who) {
+    if (timer) clearInterval(timer);
+    out.innerHTML =
+      '<div class="who" id="who"></div>' +
+      '<div class="tok" id="tk"></div>' +
+      '<div class="row">' +
+        '<button class="btn" id="cp">Sao chép token</button>' +
+        '<button class="btn alt" id="sw">Mở Swagger đã đăng nhập</button>' +
+        '<button class="btn ghost" id="out2">Xóa token</button>' +
+      '</div>';
+    document.getElementById('tk').textContent = t.token;
+    const whoEl = document.getElementById('who');
+    const tick = () => { whoEl.innerHTML = who + ' · còn <strong>' + mins(t) + ' phút</strong>'; };
+    tick(); timer = setInterval(tick, 30000);
+
+    document.getElementById('cp').addEventListener('click', function () {
+      navigator.clipboard.writeText(t.token).then(() => { this.textContent = 'Đã sao chép ✓'; setTimeout(() => { this.textContent = 'Sao chép token'; }, 1500); });
+    });
+    document.getElementById('sw').addEventListener('click', () => { location.href = '/api/docs'; });
+    document.getElementById('out2').addEventListener('click', () => {
+      localStorage.removeItem(TKEY); if (timer) clearInterval(timer); out.innerHTML = '';
+    });
+  }
+
+  async function whoami(token) {
+    try {
+      const r = await fetch(D.baseUrl + '/auth/me', { headers: { authorization: 'Bearer ' + token } });
+      const j = await r.json();
+      if (r.ok && j.user) return '✅ ' + esc(j.user.fullName || j.user.email || '') + ' — <strong>' + esc(j.user.role) + '</strong>';
+      return '⚠️ Firebase OK nhưng API trả ' + r.status + ' ' + esc((j.error && j.error.code) || '');
+    } catch (e) { return '⚠️ Không gọi được /auth/me'; }
+  }
+
+  async function login() {
+    out.innerHTML = ''; go.disabled = true; go.textContent = 'Đang đăng nhập…';
+    try {
+      const r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + encodeURIComponent(D.login.apiKey), {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: em.value.trim(), password: pw.value, returnSecureToken: true }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error((j.error && j.error.message) || 'ĐĂNG NHẬP THẤT BẠI');
+      const t = { token: j.idToken, exp: Date.now() + Number(j.expiresIn || 3600) * 1000, email: em.value.trim() };
+      localStorage.setItem(TKEY, JSON.stringify(t));
+      show(t, await whoami(t.token));
+    } catch (e) {
+      const m = { EMAIL_NOT_FOUND: 'Email không tồn tại', INVALID_PASSWORD: 'Sai mật khẩu', INVALID_LOGIN_CREDENTIALS: 'Email hoặc mật khẩu không đúng',
+        USER_DISABLED: 'Tài khoản bị khóa', TOO_MANY_ATTEMPTS_TRY_LATER: 'Thử quá nhiều lần, đợi ít phút' };
+      out.innerHTML = '<div class="err">' + esc(m[e.message] || e.message) + '</div>';
+    } finally { go.disabled = false; go.textContent = 'Đăng nhập'; }
+  }
+
+  go.addEventListener('click', login);
+  pw.addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+  const saved = load();
+  if (alive(saved)) { em.value = saved.email || ''; whoami(saved.token).then(w => show(saved, w)); }
+}
 
 const roleHtml = a => a === 'PUBLIC' ? '<span class="chip pub">công khai</span>'
   : a === 'ANY' ? '<span class="chip any">mọi vai trò đã đăng nhập</span>'
@@ -538,6 +667,6 @@ docsRouter.get('/', (req, res) => {
     .replace(/</g, '\\u003c').replace(/\\u2028/g, '\\u2028').replace(/\\u2029/g, '\\u2029');
   // helmet đặt CSP mặc định chặn inline script → nới đúng cho trang này bằng nonce, không dùng 'unsafe-inline'
   const nonce = randomBytes(16).toString('base64');
-  res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`);
+  res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; connect-src 'self' https://identitytoolkit.googleapis.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`);
   res.type('html').send(PAGE(json, nonce));
 });

@@ -19,6 +19,29 @@ const swaggerCsp: RequestHandler = (_req, res, next) => {
   next();
 };
 
+/**
+ * Trang /api cho đăng nhập email/password rồi lưu token vào localStorage.
+ * Đoạn này chạy trong Swagger UI, đọc lại token đó và gọi authActions.authorize
+ * để khỏi phải dán tay. Hỏng thì im lặng — vẫn bấm Authorize thủ công được.
+ */
+const AUTO_AUTHORIZE = `(function () {
+  var saved; try { saved = JSON.parse(localStorage.getItem('ssm_api_token') || 'null'); } catch (e) { saved = null; }
+  if (!saved || !saved.token || !(saved.exp > Date.now())) return;
+  var n = 0;
+  var iv = setInterval(function () {
+    if (++n > 150) { clearInterval(iv); return; }
+    var ui = window.ui;
+    if (!ui || !ui.authActions || !ui.specSelectors) return;
+    var defs = ui.specSelectors.securityDefinitions && ui.specSelectors.securityDefinitions();
+    if (!defs) return;
+    clearInterval(iv);
+    try {
+      ui.authActions.authorize({ bearerAuth: { name: 'bearerAuth', schema: { type: 'http', scheme: 'bearer' }, value: saved.token } });
+      console.log('[SSM] Đã tự điền token của ' + (saved.email || '') + ' — hết hạn lúc ' + new Date(saved.exp).toLocaleTimeString());
+    } catch (e) { console.warn('[SSM] Không tự điền được token, bấm Authorize thủ công.', e); }
+  }, 100);
+})();`;
+
 export function createApp() {
   const app = express();
   app.set('trust proxy', 1);
@@ -40,6 +63,8 @@ export function createApp() {
     explorer: true,
     customSiteTitle: 'Self-Storage API',
     swaggerOptions: { url: '/api/openapi.json', persistAuthorization: true, docExpansion: 'none', tryItOutEnabled: true },
+    // Nhận token mà trang /api vừa lấy (cùng origin → chung localStorage) và tự bấm Authorize.
+    customJsStr: AUTO_AUTHORIZE,
   }));
 
   // --- nghiệp vụ (cùng bảng mà openapi.ts đọc để sinh spec)

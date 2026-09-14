@@ -17,6 +17,12 @@ const schema = z.object({
   AUTH_DEV_BYPASS: bool,
   SEED_PASSWORD: z.string().min(8).default('Demo@12345'),
   MOCK_PAYMENTS: z.enum(['true', 'false']).default('true').transform((v) => v === 'true'),
+  // Web API key của Firebase (Console → Project settings → General → Web app → apiKey).
+  // Key này vốn public — nó nằm trong bundle trình duyệt của Webapp. Có key thì trang /api hiện ô đăng nhập lấy token.
+  FIREBASE_WEB_API_KEY: z.string().optional(),
+  // Tùy chọn: điền sẵn mật khẩu cho nút tài khoản demo trên trang /api.
+  // CẢNH BÁO: trang /api công khai, đặt biến này là công bố mật khẩu demo. Chỉ dùng cho DB demo.
+  DOC_DEMO_PASSWORD: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

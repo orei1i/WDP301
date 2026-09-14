@@ -40,6 +40,10 @@ API docs (all generated from the running code, no hand-written spec):
 | <http://localhost:4000/api/docs.json> | Same page's data as plain JSON. |
 | <http://localhost:4000/health> | Liveness + Mongo connection state. |
 
+**Getting a token for *Try it out*.** Set `FIREBASE_WEB_API_KEY` (Firebase Console → Project settings → General → Your apps → Web app → `apiKey` — already public, it ships in the Webapp bundle) and `GET /api` grows an email/password box. The browser calls Firebase directly, so this server never sees the password; the token is stored in `localStorage` on this origin and `/api/docs` picks it up and presses Authorize for you.
+
+Optionally set `DOC_DEMO_PASSWORD` to make the demo-account buttons fill the password too. **That publishes the password on a page anyone can open** — only ever point it at a throwaway demo database.
+
 **How the spec stays in sync.** `src/modules/openapi.ts` walks the routers listed in `src/modules/registry.ts`
 and reads what the route handlers were tagged with:
 
