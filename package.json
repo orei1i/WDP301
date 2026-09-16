@@ -7,11 +7,13 @@
   "workspaces": [
     "shared",
     "Webapp",
-    "BE"
+    "BE",
+    "Mobile/React-Native"
   ],
   "scripts": {
     "web": "npm run dev --workspace Webapp",
     "api": "npm run dev --workspace BE",
+    "mobile": "npm run start --workspace @ssm/mobile",
     "docs": "npm run docs --workspace BE",
     "seed": "npm run seed --workspace BE",
     "start": "npm run start --workspace BE"

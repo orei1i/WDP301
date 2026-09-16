@@ -20,10 +20,7 @@ const loadReservation = async (id: string, session?: ClientSession) => {
 };
 
 // ---------------------------------------------------------------- create (CUSTOMER)
-export async function createReservation(user: UserHydrated, input: {
-  unitTypeId: string; startDate: string; months: number; source: Reservation['source']; idempotencyKey?: string;
-  consent: { termsVersion: string; privacyVersion: string; ip?: string | null; userAgent?: string | null };
-}) {
+export async function createReservation(user: UserHydrated, input: { unitTypeId: string; startDate: string; months: number; source: Reservation['source']; idempotencyKey?: string }) {
   if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
 
   // Retry-safe: same customer + same key returns the original booking instead of a duplicate.
@@ -59,7 +56,6 @@ export async function createReservation(user: UserHydrated, input: {
       startDate: start, durationMonths: input.months, endDate: addMonthsUTC(start, input.months), quote: q,
       holdExpiresAt: new Date(Date.now() + policy.reservationHoldMinutes * 60_000),
       depositPaymentId: deposit._id, source: input.source, idempotencyKey: input.idempotencyKey ?? null,
-      consent: { ...input.consent, acceptedAt: new Date() },
     }], { session });
     await audit({ action: 'reservation.create', entityType: 'Reservation', entityId: id, facilityId: facility._id, changes: { after: { code: r.code, unitType: ut.code, months: input.months } } }, session);
     return r;
@@ -87,6 +83,35 @@ export async function payDeposit(user: UserHydrated, id: string, method: Payment
     // QR payload shown to the customer; only its hash is stored.
     return { reservation: r, qrPayload: `SSM:${r.code}:${qrToken}` };
   });
+}
+
+// ---------------------------------------------------------------- cấp lại mã QR nhận kho (CUSTOMER chủ đặt chỗ)
+/**
+ * payDeposit trả `qrPayload` đúng MỘT lần rồi server chỉ giữ lại sha256 — đóng trang là mất.
+ * App mobile phải hiện được mã bất cứ lúc nào (cài lại app, đổi máy, hoặc đã trả cọc bên web),
+ * nên cần đường cấp lại.
+ *
+ * Mỗi lần gọi sinh token MỚI và ghi đè hash cũ, nên ảnh chụp màn hình mã cũ lập tức vô hiệu.
+ * Đó cũng là lý do cấp mới chứ không lưu token bản rõ ở đâu để "đọc lại".
+ */
+export async function reissueCheckInQr(user: UserHydrated, id: string) {
+  const r = await loadReservation(id);
+  await assertCanAccess(user, r, 'reservation.qr_reissue');
+  if (r.status !== 'CONFIRMED' && r.status !== 'ALLOCATED') {
+    throw Unprocessable('Chỉ cấp mã cho đặt chỗ đã xác nhận và chưa nhận kho');
+  }
+  const token = randomToken(12);
+  const qrExpiresAt = addDays(r.startDate, 2);
+  r.checkIn = {
+    qrTokenHash: sha256(token),
+    qrExpiresAt,
+    checkedInAt: r.checkIn?.checkedInAt ?? null,
+    checkedInBy: r.checkIn?.checkedInBy ?? null,
+  };
+  await r.save();
+  await audit({ action: 'reservation.qr_reissue', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId });
+  // Payload chỉ tồn tại trong response này; server không giữ bản rõ.
+  return { qrPayload: `SSM:${r.code}:${token}`, code: r.code, expiresAt: qrExpiresAt };
 }
 
 // ---------------------------------------------------------------- cancel

@@ -1,0 +1,56 @@
+import { Stack, useRouter, useSegments } from 'expo-router';
+import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StoreProvider, useStore } from '../src/lib/store';
+import { Toasts } from '../src/components/ui';
+import { C } from '../src/theme';
+
+/**
+ * Cổng đăng nhập.
+ *
+ * Ba trạng thái, đừng gộp hai cái đầu: `ready` false nghĩa là Firebase CÒN ĐANG khôi phục phiên
+ * từ AsyncStorage — đá về trang đăng nhập lúc này thì người đang đăng nhập cũng bị văng ra mỗi
+ * lần mở app.
+ */
+function Gate() {
+  const { user, ready } = useStore();
+  const segments = useSegments();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!ready) return;
+    const inAuth = segments[0] === 'login';
+    if (!user && !inAuth) router.replace('/login');
+    else if (user && inAuth) router.replace('/');
+  }, [user, ready, segments, router]);
+
+  if (!ready) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg }}>
+        <ActivityIndicator color={C.brand700} />
+      </View>
+    );
+  }
+
+  return (
+    <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="login" />
+      <Stack.Screen name="qr/[id]" options={{ presentation: 'modal' }} />
+    </Stack>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <SafeAreaProvider>
+      <StoreProvider>
+        <StatusBar style="dark" />
+        <Gate />
+        <Toasts />
+      </StoreProvider>
+    </SafeAreaProvider>
+  );
+}

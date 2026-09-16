@@ -7,7 +7,7 @@ import { authenticate } from '../middlewares/authenticate';
 import { authorize } from '../middlewares/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../middlewares/scope';
 import { idParams, paging, validate, zDate, zId } from '../middlewares/validate';
-import { allocate, cancelReservation, checkIn, createReservation, lookupForCheckIn, payDeposit, unallocate } from '../services/reservation.service';
+import { allocate, cancelReservation, checkIn, createReservation, lookupForCheckIn, payDeposit, reissueCheckInQr, unallocate } from '../services/reservation.service';
 
 const e = <T extends string>(o: Record<string, T>) => z.enum(enumValues(o) as [T, ...T[]]);
 const onlinePay = z.enum(['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER']);
@@ -57,6 +57,11 @@ reservationsRouter.post('/', authorize('CUSTOMER'), validate({ body: z.object({
 
 reservationsRouter.post('/:id/pay-deposit', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ method: onlinePay }) }), async (req, res) => {
   res.json(await payDeposit(req.auth!.user, req.valid.params.id, req.valid.body.method));
+});
+
+/** Cấp lại mã QR nhận kho cho app mobile. Mỗi lần gọi vô hiệu hoá mã đã cấp trước đó. */
+reservationsRouter.post('/:id/qr', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await reissueCheckInQr(req.auth!.user, req.valid.params.id));
 });
 
 reservationsRouter.post('/:id/cancel', validate({ params: idParams, body: z.object({ reason: e(CancellationReason).default('CUSTOMER_REQUEST'), note: z.string().max(500).optional() }) }), async (req, res) => {

@@ -18,6 +18,19 @@ const schema = new Schema<UserDoc, UserModelType, Methods>({
   status: enumOf(enumValues(UserStatus), 'PENDING_VERIFICATION'),
   tokenVersion: { type: Number, default: 0, min: 0 },
   lastLoginAt: { type: Date, default: null },
+  // Bằng chứng khách chấp thuận Điều khoản + Chính sách bảo mật lúc tạo tài khoản.
+  // KHÔNG đặt required: tài khoản có trước tính năng này vẫn phải save() được khi đổi vai trò/trạng thái.
+  // Ràng buộc bắt buộc nằm ở tầng API (auth.routes.ts). immutable vì bằng chứng đã ghi thì không sửa.
+  consent: {
+    type: new Schema({
+      termsVersion: { type: String, required: true, maxlength: 20 },
+      privacyVersion: { type: String, required: true, maxlength: 20 },
+      acceptedAt: { type: Date, required: true },
+      method: { type: String, enum: ['SIGNUP_FORM', 'GOOGLE'], required: true },
+    }, subOptions),
+    default: null,
+    immutable: true,
+  },
   customerProfile: {
     type: new Schema({
       idType: { type: String, enum: ['CCCD', 'PASSPORT'] },

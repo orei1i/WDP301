@@ -6,9 +6,8 @@
  * Vậy nên: MỖI LẦN SỬA NỘI DUNG LÀ PHẢI TĂNG PHIÊN BẢN, không có ngoại lệ.
  */
 
-export const TERMS_VERSION = '1.0';
-export const PRIVACY_VERSION = '1.0';
-export const LEGAL_EFFECTIVE = '16/09/2026';
+// Số phiên bản nằm ở @ssm/shared để app mobile gửi đúng cùng giá trị khi lấy chấp thuận của khách.
+export { TERMS_VERSION, PRIVACY_VERSION, LEGAL_EFFECTIVE } from '@ssm/shared';
 
 export interface LegalSection { heading: string; body: string[]; table?: { head: string[]; rows: string[][] } }
 
