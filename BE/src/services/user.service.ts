@@ -11,7 +11,10 @@ import { audit } from './audit.service';
  * 2) profile pre-created by admin/seed with the same *verified* email → link uid
  * 3) otherwise → self-signup as CUSTOMER
  */
-export async function syncProfile(token: DecodedIdToken, input: { fullName?: string; phone?: string }) {
+export async function syncProfile(token: DecodedIdToken, input: {
+  fullName?: string; phone?: string;
+  consent?: { termsVersion: string; privacyVersion: string; method: 'SIGNUP_FORM' | 'GOOGLE' };
+}) {
   const linked = await UserModel.findOne({ firebaseUid: token.uid });
   if (linked) {
     linked.lastLoginAt = new Date();
@@ -38,6 +41,7 @@ export async function syncProfile(token: DecodedIdToken, input: { fullName?: str
   const user = await UserModel.create({
     firebaseUid: token.uid, email, fullName: input.fullName?.trim() || (token.name as string | undefined) || email.split('@')[0],
     phone: input.phone ?? null, role: 'CUSTOMER', facilityIds: [],
+    consent: input.consent ? { ...input.consent, acceptedAt: new Date() } : null,
     // Google accounts arrive verified; email/password signups must verify before booking
     status: token.email_verified ? 'ACTIVE' : 'PENDING_VERIFICATION', lastLoginAt: new Date(),
   });

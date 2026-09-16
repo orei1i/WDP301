@@ -44,8 +44,15 @@ reservationsRouter.get('/:id', validate({ params: idParams }), async (req, res) 
 reservationsRouter.post('/', authorize('CUSTOMER'), validate({ body: z.object({
   unitTypeId: zId, startDate: zDate, months: z.number().int().min(1).max(60), source: z.enum(['WEB', 'MOBILE']).default('WEB'),
   idempotencyKey: z.string().min(8).max(100).optional(),
+  // Bắt buộc: không có chấp thuận thì không tạo được đặt chỗ. Client chỉ gửi số phiên bản,
+  // thời điểm và IP do server tự đóng dấu để khách không tự khai được.
+  consent: z.object({ termsVersion: z.string().min(1).max(20), privacyVersion: z.string().min(1).max(20) }),
 }) }), async (req, res) => {
-  res.status(201).json(await createReservation(req.auth!.user, { ...req.valid.body, idempotencyKey: req.valid.body.idempotencyKey ?? req.header('idempotency-key') }));
+  res.status(201).json(await createReservation(req.auth!.user, {
+    ...req.valid.body,
+    idempotencyKey: req.valid.body.idempotencyKey ?? req.header('idempotency-key'),
+    consent: { ...req.valid.body.consent, ip: req.ip ?? null, userAgent: req.header('user-agent')?.slice(0, 300) ?? null },
+  }));
 });
 
 reservationsRouter.post('/:id/pay-deposit', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ method: onlinePay }) }), async (req, res) => {

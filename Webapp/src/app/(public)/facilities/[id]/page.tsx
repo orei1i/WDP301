@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Camera, Car, Clock, MapPin, Phone, Thermometer, Truck, Zap } from 'lucide-react';
@@ -7,6 +8,7 @@ import type { BusinessPolicy, Facility, PriceQuote, UnitType } from '@ssm/shared
 import { useStore } from '@/lib/store';
 import { api } from '@/lib/api';
 import { UNIT_CATEGORY } from '@/lib/labels';
+import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal';
 import { addDays, fmtDate, todayISO, vnd } from '@/lib/format';
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/components/ui';
 
@@ -26,6 +28,8 @@ export default function FacilityDetail() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreePrivacy, setAgreePrivacy] = useState(false);
 
   // Server computes availability for the chosen window and the quote with the current policy
   useEffect(() => {
@@ -48,7 +52,11 @@ export default function FacilityDetail() {
   const book = async () => {
     if (!user) { router.push(`/login?next=${encodeURIComponent(`/facilities/${f._id}`)}`); return; }
     if (user.role !== 'CUSTOMER') { toast('Đặt chỗ dành cho tài khoản khách hàng', 'error'); return; }
-    const res = await run('createReservation', { unitTypeId: typeId, startDate: `${start}T00:00:00.000Z`, months, source: 'WEB' }, 'Đã giữ chỗ — vui lòng thanh toán tiền cọc');
+    const res = await run('createReservation', {
+      unitTypeId: typeId, startDate: `${start}T00:00:00.000Z`, months, source: 'WEB',
+      // Bằng chứng chấp thuận: gửi kèm số phiên bản văn bản khách vừa đọc, server đóng dấu thời điểm và IP.
+      consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION },
+    }, 'Đã giữ chỗ — vui lòng thanh toán tiền cọc');
     if (res.ok) router.push(`/booking/${res.value._id}`);
   };
 
@@ -127,7 +135,17 @@ export default function FacilityDetail() {
                 <div className="mt-3 flex justify-between rounded-lg bg-brand-50 px-3 py-2.5 font-semibold text-brand-900"><dt>Đặt cọc ngay</dt><dd className="tabular-nums">{vnd(q.depositAmount)}</dd></div>
               </dl>
             )}
-            <Button size="lg" className="mt-4 w-full" onClick={() => void book()} disabled={!ut || !bookable || (ut?.availability.available ?? 0) === 0}>
+            <div className="mt-5 space-y-2.5 border-t border-dashed border-stone-200 pt-4">
+              <label className="flex cursor-pointer gap-2.5 text-xs leading-relaxed text-stone-700">
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
+                <span>Tôi đã đọc và đồng ý với <Link href="/dieu-khoan" target="_blank" className="font-medium text-brand-700 hover:underline">Điều khoản thuê kho (v{TERMS_VERSION})</Link></span>
+              </label>
+              <label className="flex cursor-pointer gap-2.5 text-xs leading-relaxed text-stone-700">
+                <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={agreePrivacy} onChange={(e) => setAgreePrivacy(e.target.checked)} />
+                <span>Tôi đồng ý cho KhoAn xử lý dữ liệu cá nhân theo <Link href="/bao-mat" target="_blank" className="font-medium text-brand-700 hover:underline">Chính sách bảo mật (v{PRIVACY_VERSION})</Link></span>
+              </label>
+            </div>
+            <Button size="lg" className="mt-4 w-full" onClick={() => void book()} disabled={!ut || !bookable || !agreeTerms || !agreePrivacy || (ut?.availability.available ?? 0) === 0}>
               {bookable ? 'Giữ chỗ & đặt cọc' : 'Chi nhánh chưa nhận đặt chỗ'}
             </Button>
             <p className="mt-3 text-xs leading-relaxed text-stone-500">

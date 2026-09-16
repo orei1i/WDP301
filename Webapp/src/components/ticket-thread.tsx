@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { SupportTicket } from '@ssm/shared';
 import { nextStates, type Actor } from '@ssm/shared';
 import { TICKET_MACHINE } from '@ssm/shared';
 import { useStore } from '@/lib/store';
-import { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
+import { ROLE, TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
 import { facilityName, unitLabel, userName } from '@/lib/domain';
 import { fmtDate, fmtDateTime } from '@/lib/format';
 import { Badge, Button, KV, Modal, StatusBadge, cx, inputCls } from './ui';
@@ -16,6 +16,18 @@ export function TicketModal({ ticket, onClose }: { ticket: SupportTicket | null;
   const { db, user, run } = useStore();
   const [body, setBody] = useState('');
   const [internal, setInternal] = useState(false);
+  const [assignee, setAssignee] = useState('');
+
+  // Mở ticket khác thì ô chọn phải nhảy theo người đang phụ trách của ticket đó.
+  useEffect(() => { setAssignee(ticket?.assigneeId ?? ''); }, [ticket?._id, ticket?.assigneeId]);
+
+  // Chỉ nhân sự đang hoạt động thuộc đúng chi nhánh của ticket — trùng với ràng buộc assertAssignee ở server.
+  const staff = useMemo(() => db.users.filter((u) =>
+    (u.role === 'STAFF' || u.role === 'FACILITY_MANAGER')
+    && u.status === 'ACTIVE'
+    && u.facilityIds.some((f) => String(f) === String(ticket?.facilityId)),
+  ), [db.users, ticket?.facilityId]);
+
   if (!ticket || !user) return null;
   const t = db.tickets.find((x) => x._id === ticket._id) ?? ticket;
   const isCustomer = user.role === 'CUSTOMER';
@@ -32,6 +44,23 @@ export function TicketModal({ ticket, onClose }: { ticket: SupportTicket | null;
         <Badge>{TICKET_CATEGORY[t.category]}</Badge>
       </div>
       <div className="mt-4"><KV items={[['Người gửi', userName(db, t.reporterId)], ['Phụ trách', t.assigneeId ? userName(db, t.assigneeId) : 'Chưa giao'], ['Kho', t.unitId ? unitLabel(db, t.unitId) : '—'], ['Hạn xử lý', fmtDate(t.dueAt)]]} /></div>
+      {user.role === 'FACILITY_MANAGER' && t.status !== 'CLOSED' && (
+        <div className="mt-4 rounded-lg bg-stone-50 p-3 ring-1 ring-stone-200">
+          <p className="text-xs font-medium text-stone-600">Giao cho nhân viên chi nhánh</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <select className={cx(inputCls, 'flex-1')} value={assignee} onChange={(e) => setAssignee(e.target.value)} disabled={staff.length === 0}>
+              <option value="">— Chọn nhân viên —</option>
+              {staff.map((s) => <option key={s._id} value={s._id}>{s.fullName} · {ROLE[s.role].label}</option>)}
+            </select>
+            <Button size="sm" disabled={!assignee || assignee === t.assigneeId}
+              onClick={() => void run('assignTicket', { ticketId: t._id, assigneeId: assignee }, 'Đã giao việc')}>
+              {t.assigneeId ? 'Giao lại' : 'Giao việc'}
+            </Button>
+          </div>
+          {staff.length === 0 && <p className="mt-2 text-xs text-orange-700">Chi nhánh này chưa có nhân viên nào đang hoạt động.</p>}
+        </div>
+      )}
+
       <div className="mt-5 space-y-3">
         {t.messages.filter((m) => !isCustomer || !m.internal).map((m, i) => {
           const mine = m.authorId === user._id;

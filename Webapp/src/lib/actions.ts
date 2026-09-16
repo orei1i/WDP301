@@ -14,7 +14,7 @@ const day = (iso: string) => iso.slice(0, 10);
 const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 
 export const actions = {
-  createReservation: async (p: { unitTypeId: string; startDate: string; months: number; source?: Reservation['source'] }) =>
+  createReservation: async (p: { unitTypeId: string; startDate: string; months: number; source?: Reservation['source']; consent: { termsVersion: string; privacyVersion: string } }) =>
     api.post<Reservation>('/reservations', { unitTypeId: p.unitTypeId, startDate: day(p.startDate), months: p.months, source: p.source === 'MOBILE' ? 'MOBILE' : 'WEB' }, { 'idempotency-key': newKey() }),
 
   payDeposit: async (p: { reservationId: string; method: PaymentMethod }) =>

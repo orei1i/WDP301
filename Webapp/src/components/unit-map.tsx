@@ -51,7 +51,6 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
                   <p className="text-sm font-semibold">{x.unitNumber}</p>
                   <p className="truncate text-[11px] opacity-75">{typeName(db, x.unitTypeId).replace('Phòng ', '')}</p>
                   {x.overlockActive && <Lock className="absolute right-1.5 top-1.5 size-3.5 text-red-600" />}
-                  {x.priceTier === 'PREMIUM' && <span className="absolute bottom-1.5 right-1.5 text-[9px] font-bold text-amber-700">VIP</span>}
                 </button>
               ))}
             </div>
@@ -70,11 +69,11 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <StatusBadge map={UNIT_STATUS} value={u.status} />
-              <Badge>{u.priceTier === 'PREMIUM' ? 'Hạng Premium' : 'Hạng tiêu chuẩn'}</Badge>
               {u.overlockActive && <Badge tone="red"><Lock className="size-3" />Khóa chặn</Badge>}
             </div>
             <KV items={[
-              ['Giá niêm yết', `${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, u))}/tháng`],
+              // Cố ý không truyền `u`: báo giá cho khách tính theo loại kho, hiển thị ở đây phải khớp.
+              ['Giá niêm yết', `${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!))}/tháng`],
               ['Đổi trạng thái lúc', fmtDateTime(u.statusChangedAt)],
               ['Loại khóa', u.lock.type === 'SMART_LOCK' ? 'Khóa thông minh' : 'Ổ khóa cơ'],
               ['Ghi chú', u.statusReason ?? '—'],

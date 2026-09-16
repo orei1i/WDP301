@@ -56,6 +56,19 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
   contractId: refOpt('RentalContract'),
   source: { type: String, enum: ['WEB', 'MOBILE', 'WALK_IN'], required: true },
   idempotencyKey: { type: String, default: null, maxlength: 100 },
+  // Không đặt required: dữ liệu tạo trước khi có tính năng này vẫn phải save() được khi đổi trạng thái.
+  // Ràng buộc bắt buộc nằm ở tầng API (zod) — mọi đặt chỗ mới đều có.
+  consent: {
+    type: new Schema({
+      termsVersion: { type: String, required: true, maxlength: 20 },
+      privacyVersion: { type: String, required: true, maxlength: 20 },
+      acceptedAt: { type: Date, required: true },
+      ip: { type: String, default: null, maxlength: 64 },
+      userAgent: { type: String, default: null, maxlength: 300 },
+    }, subOptions),
+    default: null,
+    immutable: true, // bằng chứng đã ghi thì không sửa
+  },
   statusHistory: { type: [statusHistorySchema(enumValues(ReservationStatus))], default: [], validate: maxLen(30) },
 }, {
   ...baseOptions, collection: 'reservations', optimisticConcurrency: true,

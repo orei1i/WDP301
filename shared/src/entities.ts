@@ -47,6 +47,13 @@ export interface User<I = ID, D = string> extends BaseEntity<I, D>, SoftDeletabl
   /** Bump to invalidate every issued refresh token (logout-all, role change, suspension). */
   tokenVersion: number;
   lastLoginAt?: D | null;
+  /** Chấp thuận Điều khoản + Chính sách bảo mật tại thời điểm tạo tài khoản. null với tài khoản tạo trước tính năng này. */
+  consent?: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: D;
+    method: 'SIGNUP_FORM' | 'GOOGLE';
+  } | null;
   customerProfile?: {
     idType?: 'CCCD' | 'PASSPORT';
     idNumberLast4?: string;               // never store the full national ID
@@ -145,6 +152,17 @@ export interface Reservation<I = ID, D = string> extends BaseEntity<I, D> {
   contractId?: I | null;
   source: 'WEB' | 'MOBILE' | 'WALK_IN';
   idempotencyKey?: string | null;
+  /**
+   * Bằng chứng khách đã chấp thuận Điều khoản + Chính sách bảo mật tại thời điểm đặt.
+   * null với dữ liệu tạo trước khi tính năng này tồn tại; bắt buộc với mọi đặt chỗ mới qua API.
+   */
+  consent?: {
+    termsVersion: string;
+    privacyVersion: string;
+    acceptedAt: D;
+    ip?: string | null;
+    userAgent?: string | null;
+  } | null;
   statusHistory: StatusChange<ReservationStatus, I, D>[];
 }
 

@@ -20,7 +20,10 @@ const loadReservation = async (id: string, session?: ClientSession) => {
 };
 
 // ---------------------------------------------------------------- create (CUSTOMER)
-export async function createReservation(user: UserHydrated, input: { unitTypeId: string; startDate: string; months: number; source: Reservation['source']; idempotencyKey?: string }) {
+export async function createReservation(user: UserHydrated, input: {
+  unitTypeId: string; startDate: string; months: number; source: Reservation['source']; idempotencyKey?: string;
+  consent: { termsVersion: string; privacyVersion: string; ip?: string | null; userAgent?: string | null };
+}) {
   if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
 
   // Retry-safe: same customer + same key returns the original booking instead of a duplicate.
@@ -56,6 +59,7 @@ export async function createReservation(user: UserHydrated, input: { unitTypeId:
       startDate: start, durationMonths: input.months, endDate: addMonthsUTC(start, input.months), quote: q,
       holdExpiresAt: new Date(Date.now() + policy.reservationHoldMinutes * 60_000),
       depositPaymentId: deposit._id, source: input.source, idempotencyKey: input.idempotencyKey ?? null,
+      consent: { ...input.consent, acceptedAt: new Date() },
     }], { session });
     await audit({ action: 'reservation.create', entityType: 'Reservation', entityId: id, facilityId: facility._id, changes: { after: { code: r.code, unitType: ut.code, months: input.months } } }, session);
     return r;

@@ -53,11 +53,6 @@ export default function ManagerUnits() {
             <Field label="Mã kho"><input className={inputCls} value={form.unitNumber} onChange={(e) => setForm({ ...form, unitNumber: e.target.value })} placeholder="M2-09" /></Field>
             <Field label="Tầng"><input type="number" className={inputCls} value={form.floor} onChange={(e) => setForm({ ...form, floor: Number(e.target.value) })} /></Field>
           </div>
-          <Field label="Hạng giá">
-            <select className={inputCls} value={form.priceTier} onChange={(e) => setForm({ ...form, priceTier: e.target.value as PriceTier })}>
-              <option value="ECONOMY">Tiết kiệm (×0,9)</option><option value="STANDARD">Tiêu chuẩn (×1)</option><option value="PREMIUM">Premium (×1,15)</option>
-            </select>
-          </Field>
         </div>
       </Modal>
     </>

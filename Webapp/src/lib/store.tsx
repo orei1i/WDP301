@@ -11,6 +11,7 @@ import type { DB } from './mock-data';
 import { api, ApiError } from './api';
 import { actions, type ActionName, type Payload, type Value } from './actions';
 import { authErrorMessage, firebaseAuth, firebaseConfigured, googleProvider } from './firebase';
+import { PRIVACY_VERSION, TERMS_VERSION } from './legal';
 
 export type RunResult<V> = { ok: true; value: V } | { ok: false; error: string };
 export interface Toast { id: number; tone: 'success' | 'error' | 'info'; text: string }
@@ -41,6 +42,8 @@ interface StoreValue {
   loginEmail: (email: string, password: string) => Promise<boolean>;
   loginGoogle: () => Promise<boolean>;
   register: (fullName: string, email: string, password: string) => Promise<boolean>;
+  /** Gọi ngay trước loginGoogle để lần đăng nhập đó được tính là đã chấp thuận điều khoản. */
+  markGoogleConsent: () => void;
   /** Trả true nếu đã gửi (hoặc email không tồn tại — cố ý không phân biệt, xem phần cài đặt bên dưới). */
   resetPassword: (email: string) => Promise<boolean>;
   resendVerification: () => Promise<void>;
@@ -66,6 +69,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const userRef = useRef<User | null>(null);
   const pendingName = useRef<string | undefined>(undefined);
+  /** Chấp thuận điều khoản kèm theo lần đồng bộ hồ sơ đầu tiên; server chỉ dùng khi tạo hồ sơ mới. */
+  const pendingConsent = useRef<{ termsVersion: string; privacyVersion: string; method: 'SIGNUP_FORM' | 'GOOGLE' } | undefined>(undefined);
 
   const toast = useCallback((text: string, tone: Toast['tone'] = 'info') => {
     const id = Date.now() + Math.random();
@@ -103,8 +108,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       setProviders(fb.providerData.map((p) => p.providerId));
       try {
-        await api.post('/auth/sync', pendingName.current ? { fullName: pendingName.current } : {});
+        await api.post('/auth/sync', {
+          ...(pendingName.current ? { fullName: pendingName.current } : {}),
+          ...(pendingConsent.current ? { consent: pendingConsent.current } : {}),
+        });
         pendingName.current = undefined;
+        pendingConsent.current = undefined;
         await refresh();
       } catch (e) {
         toast(e instanceof Error ? e.message : 'Không đồng bộ được tài khoản', 'error');
@@ -145,8 +154,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       throw new Error(`Đăng nhập Google thất bại (${code || 'không rõ mã'}). Mở DevTools → Console để xem chi tiết.`);
     }
   }), [wrapAuth]);
+  const markGoogleConsent = useCallback(() => {
+    pendingConsent.current = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, method: 'GOOGLE' };
+  }, []);
+
   const register = useCallback((fullName: string, email: string, password: string) => wrapAuth(async () => {
     pendingName.current = fullName.trim();
+    pendingConsent.current = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, method: 'SIGNUP_FORM' };
     const cred = await createUserWithEmailAndPassword(firebaseAuth(), email.trim(), password);
     await updateProfile(cred.user, { displayName: fullName.trim() });
     await sendEmailVerification(cred.user);
@@ -253,7 +267,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   return (
     <StoreContext.Provider value={{
       db, user, catalog, busy, ready, firebaseReady: firebaseConfigured, providers, setPassword,
-      loginEmail, loginGoogle, register, resetPassword, resendVerification, confirmVerification, logout, refresh, reloadCatalog,
+      loginEmail, loginGoogle, register, markGoogleConsent, resetPassword, resendVerification, confirmVerification, logout, refresh, reloadCatalog,
       run, toast, toasts, dismiss,
     }}>
       {busy && <div className="fixed inset-x-0 top-0 z-[70] h-0.5 animate-pulse bg-brand-500" />}
