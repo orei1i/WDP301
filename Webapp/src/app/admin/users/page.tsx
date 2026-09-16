@@ -42,14 +42,18 @@ export default function Users() {
           { key: 'f', header: 'Phạm vi chi nhánh', cell: (u) => (u.facilityIds.length ? <span className="text-xs">{u.facilityIds.map((id) => facilityName(db, id)).join(', ')}</span> : <span className="text-xs text-stone-400">{u.role === 'CUSTOMER' ? '—' : 'Toàn hệ thống'}</span>) },
           { key: 's', header: 'Trạng thái', cell: (u) => <StatusBadge map={USER_STATUS} value={u.status} /> },
           { key: 'l', header: 'Đăng nhập gần nhất', cell: (u) => <span className="text-xs text-stone-500">{fmtDateTime(u.lastLoginAt)}</span> },
-          { key: 't', header: 'Token v', className: 'text-right tabular-nums text-xs text-stone-500', cell: (u) => u.tokenVersion },
         ]} />
       </Card>
 
-      <Modal open={!!form} onClose={() => setForm(null)} title={form?._id ? 'Sửa tài khoản' : 'Tạo tài khoản'} description="Đổi vai trò, phạm vi hoặc trạng thái sẽ tăng tokenVersion → buộc đăng nhập lại."
+      <Modal open={!!form} onClose={() => setForm(null)} title={form?._id ? 'Sửa tài khoản' : 'Tạo tài khoản'} description="Đổi vai trò, phạm vi chi nhánh hoặc trạng thái sẽ thu hồi mọi phiên đăng nhập hiện tại — người dùng phải đăng nhập lại."
         footer={<Button onClick={() => form && void run('saveUser', form, (v) => (v.resetLink ? 'Đã tạo tài khoản — link đặt mật khẩu đã sao chép vào clipboard' : 'Đã lưu tài khoản'), (v) => { if (v.resetLink) void navigator.clipboard?.writeText(v.resetLink); setForm(null); })}>Lưu</Button>}>
         {form && (
           <div className="grid gap-4">
+            {(() => {
+              // tokenVersion đếm số lần quyền bị đổi và phiên bị thu hồi. Bằng 0 thì không có gì để nói.
+              const revoked = db.users.find((u) => u._id === form._id)?.tokenVersion ?? 0;
+              return revoked > 0 ? <p className="rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-600 ring-1 ring-stone-200">Tài khoản này đã bị thu hồi phiên đăng nhập <b>{revoked}</b> lần do thay đổi quyền.</p> : null;
+            })()}
             <Field label="Họ tên"><input className={inputCls} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></Field>
             <Field label="Email"><input className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
             <div className="grid grid-cols-2 gap-3">
