@@ -22,6 +22,8 @@ export default function Users() {
   const rows = useMemo(() => db.users.filter((u) => !u.isDeleted && (role === 'ALL' || u.role === role) && (!q || `${u.fullName} ${u.email}`.toLowerCase().includes(q.toLowerCase()))), [db.users, role, q]);
   const edit = (u: User) => setForm({ _id: u._id, fullName: u.fullName, email: u.email, role: u.role, facilityIds: [...u.facilityIds], status: u.status });
   const scoped = form && (form.role === 'STAFF' || form.role === 'FACILITY_MANAGER');
+  // Quản lý chi nhánh phụ trách đúng 1 kho → chọn một, không phải tick nhiều.
+  const single = form?.role === 'FACILITY_MANAGER';
 
   return (
     <>
@@ -58,7 +60,18 @@ export default function Users() {
               <div className="grid gap-2 sm:grid-cols-2">
                 {facilities.map((f) => (
                   <label key={f._id} className={cx('flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-inset', scoped ? 'ring-stone-300' : 'cursor-not-allowed opacity-50 ring-stone-200')}>
-                    <input type="checkbox" disabled={!scoped} checked={!!scoped && form.facilityIds.includes(f._id)} onChange={(e) => setForm({ ...form, facilityIds: e.target.checked ? [...form.facilityIds, f._id] : form.facilityIds.filter((x) => x !== f._id) })} />
+                    <input
+                      type={single ? 'radio' : 'checkbox'}
+                      name="facilityScope"
+                      disabled={!scoped}
+                      checked={!!scoped && form.facilityIds.includes(f._id)}
+                      onChange={(e) => setForm({
+                        ...form,
+                        facilityIds: single
+                          ? [f._id]
+                          : e.target.checked ? [...form.facilityIds, f._id] : form.facilityIds.filter((x) => x !== f._id),
+                      })}
+                    />
                     {f.name}
                   </label>
                 ))}

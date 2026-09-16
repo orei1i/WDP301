@@ -19,6 +19,7 @@ const DEMO_LOGINS: Record<string, string> = {
   [DEMO_IDS.staff]: 'nhanvien.q7@khoan.dev',
   [DEMO_IDS.manager]: 'quanly.q7@khoan.dev',
   'u-fm-td': 'quanly.td@khoan.dev',
+  'u-fm-tb': 'quanly.tb@khoan.dev',
   [DEMO_IDS.ops]: 'vanhanh@khoan.dev',
   [DEMO_IDS.admin]: 'admin@khoan.dev',
 };

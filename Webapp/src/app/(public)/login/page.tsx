@@ -15,7 +15,8 @@ const DEMO_ACCOUNTS = [
   { email: 'khach.demo@khoan.dev', label: 'Khách hàng' },
   { email: 'nhanvien.q7@khoan.dev', label: 'Nhân viên kho · Quận 7' },
   { email: 'quanly.q7@khoan.dev', label: 'Quản lý chi nhánh · Quận 7' },
-  { email: 'quanly.td@khoan.dev', label: 'Quản lý · Thủ Đức + Tân Bình' },
+  { email: 'quanly.td@khoan.dev', label: 'Quản lý chi nhánh · Thủ Đức' },
+  { email: 'quanly.tb@khoan.dev', label: 'Quản lý chi nhánh · Tân Bình' },
   { email: 'vanhanh@khoan.dev', label: 'Quản lý vận hành' },
   { email: 'admin@khoan.dev', label: 'Quản trị hệ thống' },
 ];

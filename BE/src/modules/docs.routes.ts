@@ -398,6 +398,7 @@ const DEMO_ACCOUNTS = [
   { email: 'nhanvien.q7@khoan.dev', role: 'STAFF' },
   { email: 'quanly.q7@khoan.dev', role: 'FACILITY_MANAGER' },
   { email: 'quanly.td@khoan.dev', role: 'FACILITY_MANAGER' },
+  { email: 'quanly.tb@khoan.dev', role: 'FACILITY_MANAGER' },
   { email: 'vanhanh@khoan.dev', role: 'OPS_MANAGER' },
   { email: 'admin@khoan.dev', role: 'ADMIN' },
 ];

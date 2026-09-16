@@ -18,17 +18,6 @@ const schema = new Schema<UserDoc, UserModelType, Methods>({
   status: enumOf(enumValues(UserStatus), 'PENDING_VERIFICATION'),
   tokenVersion: { type: Number, default: 0, min: 0 },
   lastLoginAt: { type: Date, default: null },
-  // Ghi một lần lúc tạo tài khoản, sau đó bất biến. Tài khoản cũ để null và vẫn save() được.
-  consent: {
-    type: new Schema({
-      termsVersion: { type: String, required: true, maxlength: 20 },
-      privacyVersion: { type: String, required: true, maxlength: 20 },
-      acceptedAt: { type: Date, required: true },
-      method: { type: String, enum: ['SIGNUP_FORM', 'GOOGLE'], required: true },
-    }, subOptions),
-    default: null,
-    immutable: true,
-  },
   customerProfile: {
     type: new Schema({
       idType: { type: String, enum: ['CCCD', 'PASSPORT'] },
@@ -43,10 +32,12 @@ const schema = new Schema<UserDoc, UserModelType, Methods>({
 schema.plugin(actorStampPlugin);
 schema.plugin(softDeletePlugin);
 
-// RBAC invariant: only STAFF / FACILITY_MANAGER carry facility scope, and they must carry >= 1.
+// RBAC invariant: chỉ STAFF / FACILITY_MANAGER có phạm vi chi nhánh.
+// FACILITY_MANAGER quản lý ĐÚNG MỘT chi nhánh — một kho một quản lý, không kiêm nhiệm.
 schema.pre('validate', function () {
   const scoped = FACILITY_SCOPED_ROLES.includes(this.role);
   if (scoped && this.facilityIds.length === 0) this.invalidate('facilityIds', `${this.role} requires >= 1 facilityId`);
+  if (this.role === 'FACILITY_MANAGER' && this.facilityIds.length !== 1) this.invalidate('facilityIds', 'FACILITY_MANAGER phải quản lý đúng 1 chi nhánh');
   if (!scoped && this.facilityIds.length > 0) this.invalidate('facilityIds', `${this.role} must not be facility-scoped`);
   if (this.role !== 'CUSTOMER' && this.customerProfile) this.invalidate('customerProfile', 'customers only');
   if (!this.isNew && (this.isModified('role') || this.isModified('facilityIds') || this.isModified('status'))) this.tokenVersion += 1;
