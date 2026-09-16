@@ -44,7 +44,9 @@ schema.pre('validate', function () {
   if (this.isModified('status')) this.statusChangedAt = new Date();
   const s = this.status;
   if (s === 'RESERVED' && !this.currentReservationId) this.invalidate('currentReservationId', 'required when RESERVED');
-  if ((s === 'OCCUPIED' || s === 'PENDING_INSPECTION') && !this.currentContractId) this.invalidate('currentContractId', `required when ${s}`);
+  // OCCUPIED luôn phải có hợp đồng. PENDING_INSPECTION thì KHÔNG bắt buộc: khi đổi ô kho, ô cũ được
+  // trả về chờ kiểm tra trong khi hợp đồng đã chuyển sang ô mới — lúc đó ô cũ không còn hợp đồng nào.
+  if (s === 'OCCUPIED' && !this.currentContractId) this.invalidate('currentContractId', 'required when OCCUPIED');
   if (s === 'AVAILABLE' && (this.currentReservationId || this.currentContractId)) this.invalidate('status', 'AVAILABLE unit must not hold reservation/contract');
   if (this.overlockActive && s !== 'OCCUPIED') this.invalidate('overlockActive', 'overlock only valid on OCCUPIED');
 });

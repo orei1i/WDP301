@@ -1,4 +1,4 @@
-import type { ContractStatus, PaymentStatus, ReservationStatus, Role, TicketStatus, UnitStatus } from './enums';
+import type { ClaimStatus, ContractStatus, PaymentStatus, ReservationStatus, Role, TicketStatus, UnitStatus } from './enums';
 
 /** Who may fire a transition. SYSTEM = webhooks, cron jobs, internal side effects. */
 export type Actor = Role | 'SYSTEM';
@@ -18,9 +18,11 @@ export const RESERVATION_MACHINE = {
 } as const satisfies StateMachine<ReservationStatus>;
 
 export const UNIT_MACHINE = {
-  AVAILABLE:          { RESERVED: [FM, SYS], MAINTENANCE: [ST, FM] },
+  // AVAILABLE -> OCCUPIED chỉ dùng cho đổi ô kho (contract.swapUnit): hợp đồng đã tồn tại,
+  // ô mới được nhận thẳng chứ không đi qua bước giữ chỗ.
+  AVAILABLE:          { RESERVED: [FM, SYS], OCCUPIED: [ST, FM], MAINTENANCE: [ST, FM] },
   RESERVED:           { AVAILABLE: [FM, SYS], OCCUPIED: [ST, FM] },     // release | check-in
-  OCCUPIED:           { PENDING_INSPECTION: [ST, FM, SYS] },            // keys returned / lease ended
+  OCCUPIED:           { PENDING_INSPECTION: [ST, FM, SYS] },            // keys returned / lease ended / swapped out
   PENDING_INSPECTION: { AVAILABLE: [ST, FM], MAINTENANCE: [ST, FM] },   // inspection pass | damage
   MAINTENANCE:        { AVAILABLE: [ST, FM] },
 } as const satisfies StateMachine<UnitStatus>;
@@ -47,6 +49,19 @@ export const TICKET_MACHINE = {
   RESOLVED:    { CLOSED: [CU, FM, SYS], IN_PROGRESS: [CU, FM] },        // reopen
   CLOSED:      {},
 } as const satisfies StateMachine<TicketStatus>;
+
+/**
+ * Yêu cầu bồi thường. Chỉ Quản lý chi nhánh được quyết số tiền và chi tiền —
+ * Nhân viên chỉ tiếp nhận / xác minh hiện trường.
+ */
+export const CLAIM_MACHINE = {
+  SUBMITTED:    { UNDER_REVIEW: [ST, FM], REJECTED: [FM], WITHDRAWN: [CU] },
+  UNDER_REVIEW: { APPROVED: [FM], REJECTED: [FM], WITHDRAWN: [CU] },
+  APPROVED:     { PAID: [FM, SYS] },
+  REJECTED:     { UNDER_REVIEW: [FM] },   // khách khiếu nại lại, quản lý mở xem xét lần hai
+  PAID:         {},
+  WITHDRAWN:    {},
+} as const satisfies StateMachine<ClaimStatus>;
 
 export class InvalidTransitionError extends Error {
   readonly code = 'INVALID_STATE_TRANSITION';

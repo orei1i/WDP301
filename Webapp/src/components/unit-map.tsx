@@ -63,6 +63,14 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
           <>
             {u.status === 'AVAILABLE' && <Button variant="secondary" onClick={() => void run('setUnitStatus', { unitId: u._id, to: 'MAINTENANCE', reason: reason || 'Bảo trì' }, 'Đã chuyển sang bảo trì', () => setSel(null))}>Chuyển sang bảo trì</Button>}
             {u.status === 'MAINTENANCE' && <Button onClick={() => void run('setUnitStatus', { unitId: u._id, to: 'AVAILABLE', reason: reason || 'Hoàn tất bảo trì' }, 'Kho đã sẵn sàng cho thuê', () => setSel(null))}>Hoàn tất bảo trì</Button>}
+            {/* Ô vừa nhả ra do khách đổi ô kho: không còn hợp đồng nên kiểm tra xong đóng luôn tại đây,
+                khác với ô chờ tất toán trả kho (vẫn còn currentContractId) phải đi qua biên bản kiểm tra. */}
+            {u.status === 'PENDING_INSPECTION' && !u.currentContractId && (
+              <>
+                <Button variant="secondary" onClick={() => void run('setUnitStatus', { unitId: u._id, to: 'MAINTENANCE', reason: reason || 'Cần sửa sau khi khách đổi ô' }, 'Đã chuyển sang bảo trì', () => setSel(null))}>Cần bảo trì</Button>
+                <Button onClick={() => void run('setUnitStatus', { unitId: u._id, to: 'AVAILABLE', reason: reason || 'Kiểm tra đạt sau khi khách đổi ô' }, 'Kho đã sẵn sàng cho thuê', () => setSel(null))}>Kiểm tra đạt</Button>
+              </>
+            )}
           </>
         )}>
         {u && (
@@ -90,10 +98,10 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
                 <p className="mt-1 text-stone-600">{userName(db, reservation.customerId)} · nhận {fmtDate(reservation.startDate)}</p>
               </div>
             )}
-            {(u.status === 'AVAILABLE' || u.status === 'MAINTENANCE') && (
+            {(u.status === 'AVAILABLE' || u.status === 'MAINTENANCE' || (u.status === 'PENDING_INSPECTION' && !u.currentContractId)) && (
               <Field label="Lý do / ghi chú"><input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="VD: thay bản lề cửa cuốn" /></Field>
             )}
-            {(u.status === 'RESERVED' || u.status === 'OCCUPIED' || u.status === 'PENDING_INSPECTION') && (
+            {(u.status === 'RESERVED' || u.status === 'OCCUPIED' || (u.status === 'PENDING_INSPECTION' && !!u.currentContractId)) && (
               <p className="text-xs text-stone-500">Trạng thái này chỉ thay đổi qua quy trình phân kho / nhận kho / trả kho (theo state machine).</p>
             )}
           </div>

@@ -1,7 +1,7 @@
 import type {
-  AccessMethod, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType, ReservationStatus,
-  Role, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus, UserStatus,
-  CancellationReason, InspectionOutcome, DepositStatus,
+  AccessMethod, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
+  ReservationStatus, Role, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus,
+  UserStatus, CancellationReason, InspectionOutcome, DepositStatus,
 } from '@ssm/shared';
 
 export type Tone = 'gray' | 'green' | 'blue' | 'amber' | 'red' | 'violet' | 'teal';
@@ -56,7 +56,19 @@ export const PAYMENT_TYPE: LabelMap<PaymentType> = {
   PENALTY: { label: 'Phí phạt', tone: 'red' },
   REFUND: { label: 'Hoàn tiền', tone: 'violet' },
   WAIVER: { label: 'Miễn giảm', tone: 'gray' },
+  COMPENSATION: { label: 'Bồi thường', tone: 'violet' },
 };
+
+export const CLAIM_STATUS: LabelMap<ClaimStatus> = {
+  SUBMITTED: { label: 'Chờ tiếp nhận', tone: 'blue' },
+  UNDER_REVIEW: { label: 'Đang xác minh', tone: 'amber' },
+  APPROVED: { label: 'Đã duyệt, chờ chi', tone: 'violet' },
+  REJECTED: { label: 'Từ chối', tone: 'red' },
+  PAID: { label: 'Đã bồi thường', tone: 'green' },
+  WITHDRAWN: { label: 'Khách đã rút', tone: 'gray' },
+};
+
+export const CLAIM_TYPE: Record<ClaimType, string> = { DAMAGE: 'Hư hỏng', LOSS: 'Mất mát' };
 
 export const PAYMENT_STATUS: LabelMap<PaymentStatus> = {
   PENDING: { label: 'Chờ thanh toán', tone: 'amber' },

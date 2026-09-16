@@ -36,8 +36,10 @@ export type DepositStatus = (typeof DepositStatus)[keyof typeof DepositStatus];
 export const AccessMethod = { PHYSICAL_KEY: 'PHYSICAL_KEY', PIN: 'PIN', RFID_CARD: 'RFID_CARD' } as const;
 export type AccessMethod = (typeof AccessMethod)[keyof typeof AccessMethod];
 
-export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER' } as const;
+export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION' } as const;
 export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
+/** Tiền đi RA khỏi doanh nghiệp → direction = 'REFUND'. COMPENSATION không có refundOf vì không hoàn lại khoản thu nào. */
+export const OUTBOUND_PAYMENT_TYPES: readonly PaymentType[] = ['REFUND', 'COMPENSATION'];
 
 export const PaymentStatus = { PENDING: 'PENDING', SUCCEEDED: 'SUCCEEDED', FAILED: 'FAILED', CANCELLED: 'CANCELLED', PARTIALLY_REFUNDED: 'PARTIALLY_REFUNDED', REFUNDED: 'REFUNDED' } as const;
 export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
@@ -71,3 +73,18 @@ export type TicketStatus = (typeof TicketStatus)[keyof typeof TicketStatus];
 
 export const AuditResult = { SUCCESS: 'SUCCESS', DENIED: 'DENIED', FAILED: 'FAILED' } as const;
 export type AuditResult = (typeof AuditResult)[keyof typeof AuditResult];
+
+// ---------- Bồi thường hư hỏng / mất mát (A2) ----------
+export const ClaimType = { DAMAGE: 'DAMAGE', LOSS: 'LOSS' } as const;
+export type ClaimType = (typeof ClaimType)[keyof typeof ClaimType];
+
+export const ClaimStatus = {
+  SUBMITTED: 'SUBMITTED',       // khách vừa gửi
+  UNDER_REVIEW: 'UNDER_REVIEW', // chi nhánh đang xác minh
+  APPROVED: 'APPROVED',         // đã duyệt số tiền, chờ chi
+  REJECTED: 'REJECTED',
+  PAID: 'PAID',                 // đã chi tiền
+  WITHDRAWN: 'WITHDRAWN',       // khách tự rút
+} as const;
+export type ClaimStatus = (typeof ClaimStatus)[keyof typeof ClaimStatus];
+export const OPEN_CLAIM_STATUSES: readonly ClaimStatus[] = ['SUBMITTED', 'UNDER_REVIEW', 'APPROVED'];

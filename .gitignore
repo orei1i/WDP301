@@ -18,6 +18,7 @@ build/
 .vscode/
 .idea/
 .qodo/
+.kilo/
 
 # OS
 .DS_Store
@@ -34,3 +35,5 @@ npm-debug.log*
 # Misc
 *.swp
 *.swo
+Claude outputs/
+.commitmsg

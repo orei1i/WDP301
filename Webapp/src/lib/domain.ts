@@ -108,6 +108,15 @@ export function revenueByMonth(db: DB, facilityIds: string[], n = 6) {
   return rows;
 }
 
+/**
+ * Hạn mức trách nhiệm bồi thường cho một sự vụ. PHẢI khớp CLAIM_LIABILITY_CAP ở BE/src/domain/claims.ts —
+ * ở đây chỉ để hiển thị và chặn sớm trên form; quyết định cuối cùng vẫn do server.
+ */
+export const CLAIM_LIABILITY_CAP = 20_000_000;
+export const CLAIM_WINDOW_DAYS = 30;
+export const claimTotal = (items: { quantity: number; unitValue: number }[]) =>
+  items.reduce((sum, it) => sum + it.quantity * it.unitValue, 0);
+
 export const facilityName = (db: DB, id?: string | null) => byId(db.facilities, id)?.name ?? '—';
 export const userName = (db: DB, id?: string | null) => byId(db.users, id)?.fullName ?? '—';
 export const unitLabel = (db: DB, id?: string | null) => byId(db.units, id)?.unitNumber ?? 'Chưa phân';

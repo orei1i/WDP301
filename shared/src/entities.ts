@@ -1,6 +1,6 @@
 import type {
-  AccessMethod, AuditResult, CancellationReason, ContractStatus, DepositStatus, FacilityStatus, InspectionOutcome,
-  InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, PriceTier,
+  AccessMethod, AuditResult, CancellationReason, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
+  InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, PriceTier,
   ReservationStatus, Role, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus, UserStatus,
 } from './enums';
 
@@ -191,6 +191,12 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   };
   terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string };
   renewals: { previousEndDate: D; newEndDate: D; months: number; paymentId?: I | null; at: D }[];
+  /**
+   * Lịch sử đổi ô kho (A1). Chỉ đổi được sang ô CÙNG loại (unitTypeId không đổi), nên
+   * billing.monthlyRate và deposit giữ nguyên theo hợp đồng đã ký — đổi ô không phải là định giá lại.
+   * Optional: hợp đồng tạo trước tính năng này không có trường này khi đọc bằng lean().
+   */
+  unitSwaps?: { fromUnitId: I; toUnitId: I; reason: string; fee: number; paymentId?: I | null; at: D; by?: I | null }[];
   moveOut?: { requestedAt: D; scheduledFor?: D | null; completedAt?: D | null; inspectionId?: I | null } | null;
   closedAt?: D | null;
   statusHistory: StatusChange<ContractStatus, I, D>[];
@@ -260,6 +266,45 @@ export interface SupportTicket<I = ID, D = string> extends BaseEntity<I, D>, Sof
   resolvedAt?: D | null;
   messages: { authorId: I; body: string; internal: boolean; at: D }[];
   statusHistory: StatusChange<TicketStatus, I, D>[];
+}
+
+// ---------- DamageClaim (bồi thường hư hỏng / mất mát) ----------
+export interface ClaimItem {
+  name: string;
+  quantity: number;
+  /** Giá trị khai báo cho MỘT đơn vị. Tổng dòng = quantity * unitValue. */
+  unitValue: number;
+  note?: string;
+}
+
+export interface DamageClaim<I = ID, D = string> extends BaseEntity<I, D> {
+  claimNumber: string;                    // "CLM-260916-3F7K2Q"
+  facilityId: I;
+  customerId: I;
+  contractId: I;
+  unitId: I;
+  /** Sự cố khách đã báo trước đó, nếu có — nối hồ sơ bồi thường với luồng hỗ trợ. */
+  ticketId?: I | null;
+  type: ClaimType;
+  status: ClaimStatus;
+  incidentAt: D;
+  description: string;
+  items: ClaimItem[];
+  /** Tổng khách yêu cầu = sum(quantity * unitValue). Server tự tính, không nhận từ client. */
+  claimedAmount: number;
+  photoUrls: string[];
+  /** Kết quả xét duyệt. Ghi một lần rồi không sửa — mở xem xét lại sẽ ghi đè bản mới kèm statusHistory. */
+  review?: {
+    reviewedBy: I;
+    reviewedAt: D;
+    /** <= min(claimedAmount, liabilityCap). 0 khi từ chối. */
+    approvedAmount: number;
+    /** Hạn mức trách nhiệm theo Điều khoản, chốt tại thời điểm duyệt để sau này đổi chính sách không hồi tố. */
+    liabilityCap: number;
+    decisionNote: string;
+  } | null;
+  settlement?: { paymentId: I; paidAt: D; method: PaymentMethod } | null;
+  statusHistory: StatusChange<ClaimStatus, I, D>[];
 }
 
 // ---------- BusinessPolicy (Ops Manager; versioned, never edited once active) ----------

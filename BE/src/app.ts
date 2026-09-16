@@ -20,6 +20,13 @@ const swaggerCsp: RequestHandler = (_req, res, next) => {
 };
 
 /**
+ * `customJsStr` có thật trong swagger-ui-express nhưng @types/swagger-ui-express 4.1.x chưa khai báo
+ * (chỉ có `customJs` — là URL, không phải mã inline). Ép kiểu đúng một chỗ ở đây thay vì nâng @types,
+ * để việc nâng version không kéo theo thay đổi khác giữa lúc đang làm bài.
+ */
+const swaggerSetup = swaggerUi.setup as unknown as (doc: undefined, opts: Record<string, unknown>) => RequestHandler;
+
+/**
  * Trang /api cho đăng nhập email/password rồi lưu token vào localStorage.
  * Đoạn này chạy trong Swagger UI, đọc lại token đó và gọi authActions.authorize
  * để khỏi phải dán tay. Hỏng thì im lặng — vẫn bấm Authorize thủ công được.
@@ -59,7 +66,8 @@ export function createApp() {
   api.get('/openapi.json', (req, res) => {   // sinh lại mỗi request → luôn khớp code đang chạy
     res.json(buildOpenApi(`${req.protocol}://${req.get('host') ?? 'localhost'}/api`));
   });
-  api.use('/docs', swaggerCsp, swaggerUi.serve, swaggerUi.setup(null, {
+  // Không truyền spec sẵn — Swagger UI tự nạp qua swaggerOptions.url bên dưới, nên luôn khớp code đang chạy.
+  api.use('/docs', swaggerCsp, swaggerUi.serve, swaggerSetup(undefined, {
     explorer: true,
     customSiteTitle: 'Self-Storage API',
     swaggerOptions: { url: '/api/openapi.json', persistAuthorization: true, docExpansion: 'none', tryItOutEnabled: true },

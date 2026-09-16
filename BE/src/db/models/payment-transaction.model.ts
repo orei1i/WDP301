@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { enumValues, PAYMENT_MACHINE, PaymentMethod, PaymentStatus, PaymentType, type PaymentTransaction } from '@ssm/shared';
+import { enumValues, OUTBOUND_PAYMENT_TYPES, PAYMENT_MACHINE, PaymentMethod, PaymentStatus, PaymentType, type PaymentTransaction } from '@ssm/shared';
 import { baseOptions, enumOf, maxLen, money, refOpt, refReq, statusHistorySchema, subOptions, type OID } from '../schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../plugins';
 import { applyTransition, type TransitionCtx } from '../../domain/apply-transition';
@@ -41,9 +41,10 @@ schema.method('transitionTo', function (to: PaymentStatus, ctx: TransitionCtx) {
 });
 
 schema.pre('validate', function () {
-  const isRefund = this.type === 'REFUND';
-  if (isRefund !== (this.direction === 'REFUND')) this.invalidate('direction', 'REFUND type <-> REFUND direction');
-  if (isRefund && !this.refundOf) this.invalidate('refundOf', 'refund must reference the original payment');
+  // Tiền đi ra gồm REFUND (hoàn lại một khoản đã thu) và COMPENSATION (bồi thường — không hoàn khoản nào).
+  const outbound = OUTBOUND_PAYMENT_TYPES.includes(this.type);
+  if (outbound !== (this.direction === 'REFUND')) this.invalidate('direction', 'outbound type <-> REFUND direction');
+  if (this.type === 'REFUND' && !this.refundOf) this.invalidate('refundOf', 'refund must reference the original payment');
   if (this.type === 'WAIVER' && !this.waiver) this.invalidate('waiver', 'approval required for waivers');
   if ((this.type === 'RENT' || this.type === 'RENEWAL') && !this.period) this.invalidate('period', 'rent requires a billing period');
   if (this.method === 'CASH' && !this.recordedBy) this.invalidate('recordedBy', 'cash must record the staff member');

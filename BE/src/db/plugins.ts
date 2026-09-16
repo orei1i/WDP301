@@ -39,7 +39,8 @@ export function softDeletePlugin(schema: Schema) {
   schema.pre('aggregate', function (this: Aggregate<unknown>) {
     if ((this.options as Record<string, unknown>).withDeleted) return;
     const p = this.pipeline();
-    const first = (p[0] ?? {}) as Record<string, unknown>;
+    // PipelineStage là union các stage cụ thể, không có index signature → phải đi qua unknown.
+    const first = (p[0] ?? {}) as unknown as Record<string, unknown>;
     const mustStayFirst = ['$geoNear', '$search', '$searchMeta', '$vectorSearch'].some((k) => k in first);
     p.splice(mustStayFirst ? 1 : 0, 0, { $match: { isDeleted: false } });
   });
@@ -60,7 +61,9 @@ export function appendOnlyPlugin(schema: Schema, opts: { allowUpdates: boolean }
   if (!opts.allowUpdates) blocked.push('updateOne', 'updateMany', 'findOneAndUpdate', 'replaceOne', 'findOneAndReplace');
 
   schema.pre<Query<unknown, unknown>>(blocked, async function () {
-    throw new Error(`${this.model.modelName} is append-only (${this.op} rejected)`);
+    // `op` có thật lúc chạy nhưng không nằm trong kiểu Query của mongoose 8.
+    const op = (this as unknown as { op?: string }).op ?? 'operation';
+    throw new Error(`${this.model.modelName} is append-only (${op} rejected)`);
   });
   schema.pre('deleteOne', { document: true, query: false }, async function () {
     throw new Error('Append-only document cannot be deleted');

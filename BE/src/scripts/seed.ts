@@ -9,8 +9,8 @@ import { env } from '../config/env';
 import { firebaseAuth } from '../config/firebase';
 import { connectMongo } from '../db/connection';
 import {
-  ALL_MODELS, AuditLogModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel, RentalContractModel, ReservationModel,
-  StorageUnitModel, TicketModel, UnitTypeModel, UserModel,
+  ALL_MODELS, AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel,
+  RentalContractModel, ReservationModel, StorageUnitModel, TicketModel, UnitTypeModel, UserModel,
 } from '../db/models';
 import { createSeed, DEMO_IDS } from '../../../Webapp/src/lib/mock-data';
 
@@ -61,7 +61,8 @@ async function main() {
   const plan: [Model<any>, unknown[]][] = [
     [UserModel, data.users], [PolicyModel, data.policies], [FacilityModel, data.facilities], [UnitTypeModel, data.unitTypes],
     [StorageUnitModel, data.units], [ReservationModel, data.reservations], [RentalContractModel, data.contracts],
-    [PaymentModel, data.payments], [InspectionModel, data.inspections], [TicketModel, data.tickets], [AuditLogModel, data.audit],
+    [PaymentModel, data.payments], [InspectionModel, data.inspections], [TicketModel, data.tickets],
+    [DamageClaimModel, data.claims], [AuditLogModel, data.audit],
   ];
   for (const [model, docs] of plan) {
     await model.insertMany(docs.map(convert), { ordered: true });

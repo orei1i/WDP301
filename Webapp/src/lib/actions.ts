@@ -1,8 +1,9 @@
 'use client';
 
 import type {
-  AccessMethod, BusinessPolicy, CancellationReason, Facility, InspectionLog, PaymentMethod, RentalContract, Reservation, Role,
-  StorageUnit, SupportTicket, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitStatus, User,
+  AccessMethod, BusinessPolicy, CancellationReason, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
+  PaymentMethod, RentalContract, Reservation, Role, StorageUnit, SupportTicket, TicketCategory, TicketKind,
+  TicketPriority, TicketStatus, UnitStatus, User,
 } from '@ssm/shared';
 import { api } from './api';
 
@@ -45,6 +46,12 @@ export const actions = {
 
   lockout: async (p: { contractId: string }) => { await api.post(`/contracts/${p.contractId}/lockout`); },
 
+  /** Đổi ô kho cùng loại. Giá thuê và tiền cọc của hợp đồng không đổi — server từ chối nếu ô mới khác loại. */
+  swapUnit: async (p: { contractId: string; toUnitId: string; reason: string; keyTag?: string; fee?: number }) =>
+    (await api.post<{ fromUnit: StorageUnit; toUnit: StorageUnit; fee: number }>(`/contracts/${p.contractId}/swap-unit`, {
+      toUnitId: p.toUnitId, reason: p.reason, keyTag: p.keyTag || undefined, fee: p.fee || undefined,
+    })).toUnit,
+
   waiveLateFees: async (p: { contractId: string; reason: string }) =>
     (await api.post<{ amount: number }>(`/contracts/${p.contractId}/waive-late-fees`, { reason: p.reason })).amount,
 
@@ -58,6 +65,20 @@ export const actions = {
   assignTicket: async (p: { ticketId: string; assigneeId: string }) => { await api.post(`/tickets/${p.ticketId}/assign`, { assigneeId: p.assigneeId }); },
   setTicketStatus: async (p: { ticketId: string; to: TicketStatus }) => { await api.post(`/tickets/${p.ticketId}/status`, { to: p.to }); },
   addTicketMessage: async (p: { ticketId: string; body: string; internal?: boolean }) => { await api.post(`/tickets/${p.ticketId}/messages`, { body: p.body, internal: !!p.internal }); },
+
+  // ---- bồi thường hư hỏng / mất mát
+  createClaim: async (p: { contractId: string; type: ClaimType; incidentAt: string; description: string; items: ClaimItem[]; ticketId?: string | null }) =>
+    api.post<DamageClaim>('/claims', { ...p, ticketId: p.ticketId || undefined }),
+
+  reviewClaim: async (p: { claimId: string }) => { await api.post(`/claims/${p.claimId}/review`); },
+
+  decideClaim: async (p: { claimId: string; approve: boolean; approvedAmount?: number; note: string }) =>
+    api.post<DamageClaim>(`/claims/${p.claimId}/decide`, { approve: p.approve, approvedAmount: p.approve ? p.approvedAmount : undefined, note: p.note }),
+
+  payClaim: async (p: { claimId: string; method: 'BANK_TRANSFER' | 'CASH' }) =>
+    (await api.post<{ payment: { amount: number } }>(`/claims/${p.claimId}/pay`, { method: p.method })).payment.amount,
+
+  withdrawClaim: async (p: { claimId: string; reason?: string }) => { await api.post(`/claims/${p.claimId}/withdraw`, { reason: p.reason || undefined }); },
 
   saveFacility: async (p: Pick<Facility, 'name' | 'code' | 'status'> & { _id?: string; line1: string; district: string; phone: string }) => {
     const body = { name: p.name, status: p.status, line1: p.line1, district: p.district, phone: p.phone };

@@ -80,12 +80,21 @@ export async function addUnit(user: UserHydrated, input: { unitTypeId: string; u
   return u;
 }
 
-/** Manual status changes are limited to AVAILABLE <-> MAINTENANCE; everything else flows through booking/move-out. */
+/**
+ * Đổi trạng thái thủ công. Đích luôn là AVAILABLE hoặc MAINTENANCE; mọi thứ còn lại đi qua quy trình
+ * đặt chỗ / nhận kho / trả kho.
+ *
+ * Nguồn được phép có thêm PENDING_INSPECTION khi ô KHÔNG còn gắn hợp đồng — đó chính là ô vừa nhả ra
+ * do đổi ô kho (contract.service → swapUnit). Ô đang chờ tất toán trả kho vẫn còn currentContractId
+ * nên vẫn buộc phải đi qua biên bản kiểm tra, không lách được đường này.
+ */
 export async function setUnitStatus(user: UserHydrated, id: string, to: UnitStatus, reason?: string) {
   const u = await StorageUnitModel.findById(id);
   if (!u) throw NotFound('kho');
   await assertFacility(user, u.facilityId, 'unit.status');
-  if (!['AVAILABLE', 'MAINTENANCE'].includes(u.status) || !['AVAILABLE', 'MAINTENANCE'].includes(to))
+  const canLeave = ['AVAILABLE', 'MAINTENANCE'].includes(u.status)
+    || (u.status === 'PENDING_INSPECTION' && !u.currentContractId);
+  if (!canLeave || !['AVAILABLE', 'MAINTENANCE'].includes(to))
     throw Conflict('Trạng thái này chỉ đổi qua quy trình phân kho / nhận kho / trả kho', 'FLOW_ONLY');
   const from = u.status;
   u.transitionTo(to, { actor: user.role, by: user._id, reason });

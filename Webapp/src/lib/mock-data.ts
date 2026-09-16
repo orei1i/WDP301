@@ -1,6 +1,7 @@
 import type {
-  AccessMethod, AuditLog, BusinessPolicy, ContractStatus, Facility, InspectionLog, PaymentMethod, PaymentTransaction,
-  RentalContract, Reservation, ReservationStatus, StorageUnit, SupportTicket, UnitCategory, UnitStatus, UnitType, User,
+  AccessMethod, AuditLog, BusinessPolicy, ContractStatus, DamageClaim, Facility, InspectionLog, PaymentMethod,
+  PaymentTransaction, RentalContract, Reservation, ReservationStatus, StorageUnit, SupportTicket, UnitCategory,
+  UnitStatus, UnitType, User,
 } from '@ssm/shared';
 import { addDays, addMonths, todayISO } from './format';
 
@@ -14,6 +15,7 @@ export interface DB {
   payments: PaymentTransaction[];
   inspections: InspectionLog[];
   tickets: SupportTicket[];
+  claims: DamageClaim[];
   policies: BusinessPolicy[];
   audit: AuditLog[];
 }
@@ -77,6 +79,7 @@ export function createSeed(): DB {
     user('u-staff-td', 'Ngô Đức Minh', 'STAFF', ['f-td']),
     user('u-staff-tb', 'Dương Thu Trang', 'STAFF', ['f-tb']),
     user(DEMO_IDS.manager, 'Bùi Thanh Tùng', 'FACILITY_MANAGER', ['f-q7']),
+    // Mỗi chi nhánh đúng một quản lý — user.model.ts chặn FACILITY_MANAGER có số chi nhánh khác 1.
     user('u-fm-td', 'Lý Mỹ Duyên', 'FACILITY_MANAGER', ['f-td']),
     user('u-fm-tb', 'Trần Quốc Bảo', 'FACILITY_MANAGER', ['f-tb']),
     user(DEMO_IDS.ops, 'Phan Hoàng Nam', 'OPS_MANAGER'),
@@ -180,7 +183,7 @@ export function createSeed(): DB {
           location: { building: 'A', floor, zone: t.key === 'XM' ? 'Hầm' : `Dãy ${t.prefix}` },
           status, statusChangedAt: addDays(T, -int(1, 60)),
           statusReason: status === 'MAINTENANCE' ? pick(['Thay bản lề cửa cuốn', 'Sơn lại sàn', 'Kiểm tra rò rỉ trần']) : null,
-          priceTier: i === 0 && t.key !== 'LK' ? 'PREMIUM' : 'STANDARD', monthlyRateOverride: null,
+          priceTier: 'STANDARD', monthlyRateOverride: null, // không phân hạng giá theo từng ô nữa
           currentReservationId: null, currentContractId: null, overlockActive: false,
           lock: { type: t.key === 'XL' || t.key === 'L' ? 'SMART_LOCK' : 'PADLOCK', deviceId: null }, notes: '',
         });
@@ -387,6 +390,61 @@ export function createSeed(): DB {
       checklist: [{ item: 'Cửa cuốn', condition: 'DAMAGED', note: 'Lò xo yếu' }, { item: 'Sàn', condition: 'OK' }], damages: [{ description: 'Thay lò xo cửa cuốn', severity: 'MINOR', cost: 350_000, photoUrls: [] }], photoUrls: [], outcome: 'MAINTENANCE_REQUIRED', totalDamageFee: 350_000, depositSettlement: null },
   ];
 
+  // ---------- damage claims (A2) ----------
+  const claim = (c: RentalContract | undefined, p: Partial<DamageClaim> & Pick<DamageClaim, 'type' | 'status' | 'description' | 'items'>): DamageClaim | null => {
+    if (!c) return null;
+    const id = nid('clm');
+    const createdAt = p.createdAt ?? addDays(NOW, -3);
+    return {
+      ...base(id, createdAt), claimNumber: makeCode('CLM'), facilityId: c.facilityId, customerId: c.customerId,
+      contractId: c._id, unitId: c.unitId, ticketId: null, incidentAt: addDays(createdAt, -1),
+      claimedAmount: p.items.reduce((s, it) => s + it.quantity * it.unitValue, 0),
+      photoUrls: [], review: null, settlement: null,
+      statusHistory: [{ from: null, to: 'SUBMITTED', at: createdAt, by: c.customerId }],
+      ...p,
+    };
+  };
+  const q7Contracts = contracts.filter((c) => c.facilityId === 'f-q7' && c.status !== 'CLOSED');
+  const claims: DamageClaim[] = [
+    claim(demoM, {
+      type: 'DAMAGE', status: 'SUBMITTED',
+      description: 'Trần kho bị thấm sau trận mưa lớn, hai thùng carton đựng sách bị ướt và mốc.',
+      items: [{ name: 'Sách chuyên ngành', quantity: 2, unitValue: 1_200_000, note: 'Thùng carton 50×40×50' }],
+    }),
+    claim(q7Contracts[1], {
+      type: 'LOSS', status: 'UNDER_REVIEW', createdAt: addDays(NOW, -6),
+      description: 'Sau khi mở kho phát hiện mất một máy khoan cầm tay để trong thùng dụng cụ.',
+      items: [{ name: 'Máy khoan cầm tay Bosch', quantity: 1, unitValue: 3_500_000 }],
+      statusHistory: [
+        { from: null, to: 'SUBMITTED', at: addDays(NOW, -6), by: null },
+        { from: 'SUBMITTED', to: 'UNDER_REVIEW', at: addDays(NOW, -5), by: DEMO_IDS.staff, reason: 'Đang trích xuất camera' },
+      ],
+    }),
+    claim(q7Contracts[2], {
+      type: 'DAMAGE', status: 'PAID', createdAt: addDays(NOW, -25),
+      description: 'Xe nâng của kho va vào cửa cuốn làm móp thùng đồ gỗ của khách.',
+      items: [{ name: 'Tủ gỗ 3 cánh', quantity: 1, unitValue: 4_000_000 }],
+      review: { reviewedBy: DEMO_IDS.manager, reviewedAt: addDays(NOW, -22), approvedAmount: 3_200_000, liabilityCap: 20_000_000, decisionNote: 'Lỗi thuộc về kho, đã đối chiếu camera. Duyệt 80% giá trị khai báo theo mức khấu hao.' },
+      settlement: { paymentId: 'pay-claim-demo', paidAt: addDays(NOW, -20), method: 'BANK_TRANSFER' },
+      statusHistory: [
+        { from: null, to: 'SUBMITTED', at: addDays(NOW, -25), by: null },
+        { from: 'SUBMITTED', to: 'UNDER_REVIEW', at: addDays(NOW, -24), by: DEMO_IDS.staff },
+        { from: 'UNDER_REVIEW', to: 'APPROVED', at: addDays(NOW, -22), by: DEMO_IDS.manager },
+        { from: 'APPROVED', to: 'PAID', at: addDays(NOW, -20), by: DEMO_IDS.manager },
+      ],
+    }),
+  ].filter((c): c is DamageClaim => c !== null);
+
+  // Khoản chi bồi thường phải có mặt trong sổ thanh toán, nếu không báo cáo doanh thu sẽ lệch.
+  const paidClaim = claims.find((c) => c.status === 'PAID');
+  if (paidClaim?.settlement) {
+    payments.push(pay({
+      _id: paidClaim.settlement.paymentId, facilityId: paidClaim.facilityId, customerId: paidClaim.customerId,
+      contractId: paidClaim.contractId, type: 'COMPENSATION', direction: 'REFUND', amount: paidClaim.review!.approvedAmount,
+      status: 'SUCCEEDED', method: 'BANK_TRANSFER', paidAt: paidClaim.settlement.paidAt,
+    } as Partial<PaymentTransaction> & Pick<PaymentTransaction, 'facilityId' | 'customerId' | 'type' | 'amount' | 'status'>));
+  }
+
   // ---------- audit ----------
   const log = (hoursAgo: number, a: Partial<AuditLog> & Pick<AuditLog, 'action' | 'result'>): AuditLog => ({
     _id: nid('aud'), at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(), actorId: null, actorRole: 'SYSTEM', entityType: null, entityId: null,
@@ -400,10 +458,11 @@ export function createSeed(): DB {
     log(5, { action: 'auth.login', result: 'DENIED', actorRole: 'ANONYMOUS', reason: 'Sai mật khẩu 5 lần — tạm khóa 15 phút' }),
     log(9, { action: 'payment.waiver', result: 'SUCCESS', actorId: 'u-fm-td', actorRole: 'FACILITY_MANAGER', facilityId: 'f-td', entityType: 'PaymentTransaction', reason: 'Miễn phí trễ hạn do lỗi cổng thanh toán', changes: { after: { amount: 89_500 } } }),
     log(20, { action: 'policy.publish', result: 'SUCCESS', actorId: DEMO_IDS.ops, actorRole: 'OPS_MANAGER', entityType: 'BusinessPolicy', entityId: 'pol-td-1', changes: { after: { gracePeriodDays: 7 } } }),
-    log(26, { action: 'user.role_change', result: 'SUCCESS', actorId: DEMO_IDS.admin, actorRole: 'ADMIN', entityType: 'User', entityId: 'u-fm-td', changes: { before: { facilityIds: ['f-td'] }, after: { facilityIds: ['f-td', 'f-tb'] } } }),
+    // Chuyển quản lý giữa hai chi nhánh — minh hoạ đúng luật 1 quản lý / 1 kho, không phải gán thêm kho.
+    log(26, { action: 'user.role_change', result: 'SUCCESS', actorId: DEMO_IDS.admin, actorRole: 'ADMIN', entityType: 'User', entityId: 'u-fm-tb', changes: { before: { facilityIds: ['f-td'] }, after: { facilityIds: ['f-tb'] } } }),
     log(30, { action: 'contract.override', result: 'DENIED', actorId: DEMO_IDS.staff, actorRole: 'STAFF', facilityId: 'f-q7', reason: 'STAFF không có quyền sửa giá hợp đồng' }),
     log(48, { action: 'facility.update', result: 'SUCCESS', actorId: DEMO_IDS.ops, actorRole: 'OPS_MANAGER', entityType: 'Facility', entityId: 'f-bt', changes: { after: { status: 'UNDER_CONSTRUCTION' } } }),
   ];
 
-  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, policies, audit };
+  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, policies, audit };
 }

@@ -8,7 +8,8 @@ import { authorize } from '../middlewares/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../middlewares/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../middlewares/validate';
 import {
-  extendContract, lockout, payBalance, receiveUnit, requestMoveOut, submitMoveOutInspection, waiveLateFees,
+  extendContract, lockout, payBalance, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from '../services/contract.service';
 
 export const contractsRouter = Router();
@@ -50,6 +51,19 @@ contractsRouter.post('/:id/lockout', authorize('FACILITY_MANAGER'), validate({ p
 contractsRouter.post('/:id/waive-late-fees', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams, body: z.object({ reason: z.string().min(5).max(500) }) }), async (req, res) => {
   res.json(await waiveLateFees(req.auth!.user, req.valid.params.id, req.valid.body.reason));
 });
+// ---- đổi ô kho cùng loại (A1)
+contractsRouter.get('/:id/swap-candidates', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await swapCandidates(req.auth!.user, req.valid.params.id));
+});
+contractsRouter.post('/:id/swap-unit', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+  toUnitId: zId,
+  reason: z.string().min(5).max(500).describe('Lý do đổi ô — ghi vào hợp đồng và nhật ký kiểm toán'),
+  keyTag: z.string().max(50).optional().describe('Nhãn chìa khóa / thẻ mới, nếu đổi luôn khóa'),
+  fee: zMoney.max(SWAP_FEE_MAX).optional().describe('Phí thao tác, chỉ Quản lý chi nhánh được đặt > 0'),
+}) }), async (req, res) => {
+  res.json(await swapUnit(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+
 contractsRouter.post('/:id/move-out', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ date: zDate }) }), async (req, res) => {
   res.json(await requestMoveOut(req.auth!.user, req.valid.params.id, req.valid.body.date));
 });

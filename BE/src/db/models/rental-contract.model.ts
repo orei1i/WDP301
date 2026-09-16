@@ -13,8 +13,10 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
   contractNumber: { type: String, required: true, immutable: true },
   facilityId: { ...refReq('Facility'), immutable: true },
   customerId: { ...refReq('User'), immutable: true },
-  unitId: { ...refReq('StorageUnit'), immutable: true },
-  unitTypeId: { ...refReq('UnitType'), immutable: true },
+  // CỐ Ý không immutable: đổi ô kho cùng loại (contract.service → swapUnit) ghi lại trường này.
+  // Mọi lần đổi đều để dấu vết ở unitSwaps[] bên dưới — không có đường nào đổi ô mà không ghi lịch sử.
+  unitId: refReq('StorageUnit'),
+  unitTypeId: { ...refReq('UnitType'), immutable: true }, // chỉ đổi ô trong cùng loại → giá hợp đồng không đổi
   reservationId: { ...refReq('Reservation'), immutable: true },
   status: enumOf(enumValues(ContractStatus), 'ACTIVE'),
   startDate: { type: Date, required: true, immutable: true },
@@ -69,6 +71,15 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
       months: { type: Number, required: true, min: 1 }, paymentId: refOpt('PaymentTransaction'), at: { type: Date, default: Date.now },
     }, subOptions)],
     default: [], validate: maxLen(120),
+  },
+  unitSwaps: {
+    type: [new Schema({
+      fromUnitId: refReq('StorageUnit'), toUnitId: refReq('StorageUnit'),
+      reason: { type: String, required: true, maxlength: 500 },
+      fee: money(false), paymentId: refOpt('PaymentTransaction'),
+      at: { type: Date, default: Date.now }, by: refOpt('User'),
+    }, subOptions)],
+    default: [], validate: maxLen(20),
   },
   moveOut: {
     type: new Schema({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { KeyRound, LifeBuoy, Lock, PackageOpen, RefreshCw } from 'lucide-react';
+import { HandCoins, KeyRound, LifeBuoy, Lock, PackageOpen, RefreshCw } from 'lucide-react';
 import type { PaymentMethod, RentalContract } from '@ssm/shared';
 import { useStore } from '@/lib/store';
 import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS } from '@/lib/labels';
@@ -57,6 +57,7 @@ export default function MyUnits() {
                   {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'moveout', c })}><PackageOpen className="size-3.5" />Đăng ký trả kho</Button>}
                   {c.status === 'MOVE_OUT_PENDING' && <Badge tone="violet">Hẹn trả kho {fmtDate(c.moveOut?.scheduledFor)}</Badge>}
                   <ButtonLink href={`/portal/tickets?contract=${c._id}`} size="sm" variant="ghost"><LifeBuoy className="size-3.5" />Báo sự cố</ButtonLink>
+                  <ButtonLink href="/portal/claims" size="sm" variant="ghost"><HandCoins className="size-3.5" />Yêu cầu bồi thường</ButtonLink>
                 </div>
               )}
             </Card>

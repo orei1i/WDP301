@@ -1,7 +1,7 @@
 import type { Role } from '@ssm/shared';
 import {
-  Building2, CalendarCheck, ClipboardList, CreditCard, FileText, LayoutDashboard, LayoutGrid, LifeBuoy, ListTodo,
-  PackageOpen, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
+  Building2, CalendarCheck, ClipboardList, CreditCard, FileText, HandCoins, LayoutDashboard, LayoutGrid, LifeBuoy,
+  ListTodo, PackageOpen, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
 } from 'lucide-react';
 
 export type Area = 'portal' | 'staff' | 'manager' | 'ops' | 'admin';
@@ -16,6 +16,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/portal/units', label: 'Kho đang thuê', icon: Warehouse },
       { href: '/portal/payments', label: 'Thanh toán', icon: CreditCard },
       { href: '/portal/tickets', label: 'Hỗ trợ', icon: LifeBuoy },
+      { href: '/portal/claims', label: 'Bồi thường', icon: HandCoins },
     ],
   },
   staff: {
@@ -36,6 +37,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/manager/allocations', label: 'Phân kho', icon: CalendarCheck },
       { href: '/manager/contracts', label: 'Hợp đồng & công nợ', icon: FileText },
       { href: '/manager/tasks', label: 'Yêu cầu & công việc', icon: ListTodo },
+      { href: '/manager/claims', label: 'Bồi thường', icon: HandCoins },
       { href: '/manager/reports', label: 'Báo cáo', icon: TrendingUp },
     ],
   },

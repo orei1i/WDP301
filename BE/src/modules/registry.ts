@@ -6,6 +6,7 @@ import { reservationsRouter } from './reservations.routes';
 import { contractsRouter, inspectionsRouter } from './contracts.routes';
 import { paymentsRouter } from './payments.routes';
 import { ticketsRouter } from './tickets.routes';
+import { claimsRouter } from './claims.routes';
 import { auditRouter, policiesRouter, reportsRouter, usersRouter } from './admin.routes';
 
 /**
@@ -24,6 +25,7 @@ export const API_MOUNTS: Mount[] = [
   { prefix: '/inspections', router: inspectionsRouter },
   { prefix: '/payments', router: paymentsRouter },
   { prefix: '/tickets', router: ticketsRouter },
+  { prefix: '/claims', router: claimsRouter },
   { prefix: '/policies', router: policiesRouter },
   { prefix: '/users', router: usersRouter },
   { prefix: '/audit', router: auditRouter },

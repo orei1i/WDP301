@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { ClientSession, Types } from 'mongoose';
-import type { PaymentMethod, PaymentStatus, PaymentType } from '@ssm/shared';
+import { OUTBOUND_PAYMENT_TYPES, type PaymentMethod, type PaymentStatus, type PaymentType } from '@ssm/shared';
 import { PaymentModel, type PaymentHydrated } from '../db/models';
 
 export const sha256 = (v: string) => createHash('sha256').update(v).digest('hex');
@@ -20,7 +20,7 @@ export async function createPayment(p: NewPayment, session: ClientSession): Prom
   const now = new Date();
   const [doc] = await PaymentModel.create([{
     ...p,
-    direction: p.type === 'REFUND' ? 'REFUND' : 'CHARGE',
+    direction: OUTBOUND_PAYMENT_TYPES.includes(p.type) ? 'REFUND' : 'CHARGE',
     currency: 'VND',
     idempotencyKey: p.idempotencyKey ?? `srv-${randomUUID()}`,
     provider: p.method === 'CASH' || p.method === 'INTERNAL' ? null : { name: p.method, txnRef: `${p.method}-${randomToken(9)}`, rawStatus: 'MOCK' },

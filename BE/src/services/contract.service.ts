@@ -1,6 +1,6 @@
 import { Types, type ClientSession } from 'mongoose';
 import type { InspectionLog, PaymentMethod, UnitStatus } from '@ssm/shared';
-import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, type UserHydrated } from '../db/models';
+import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../core/errors';
 import { assertCanAccess, assertFacility } from '../middlewares/scope';
 import { effectivePolicy } from '../domain/pricing';
@@ -112,6 +112,97 @@ export async function waiveLateFees(user: UserHydrated, id: string, reason: stri
     await audit({ action: 'payment.waiver', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason, changes: { after: { amount: total } } }, session);
     return { contract: c, amount: total };
   });
+}
+
+// ---------------------------------------------------------------- swap unit, same type (STAFF, FACILITY_MANAGER)
+/**
+ * Trần phí đổi ô. Đổi ô CÙNG LOẠI không làm thay đổi giá thuê, nên khoản này chỉ là phí thao tác
+ * (di dời, cấp lại chìa/mã) — mặc định 0. Quản lý chi nhánh mới được thu, và mọi lần thu đều vào
+ * nhật ký kiểm toán kèm lý do.
+ */
+export const SWAP_FEE_MAX = 500_000;
+
+/**
+ * Đổi ô kho cùng loại.
+ *
+ * Bốn bất biến, sai một cái là hỏng dữ liệu:
+ *  1. CÙNG unitTypeId  → giá thuê và tiền cọc đã chốt trong hợp đồng KHÔNG được tính lại.
+ *  2. Chiếm ô mới TRƯỚC, nhả ô cũ SAU, trong cùng một transaction. Làm ngược lại thì ô cũ có thể bị
+ *     người khác lấy mất trong lúc ô mới chiếm không thành công → khách mất cả hai ô.
+ *  3. Lấy ô mới bằng compare-and-swap trên `status: 'AVAILABLE'` → hai người cùng nhắm một ô thì chỉ
+ *     một người khớp filter, người kia nhận 409.
+ *  4. $inc inventoryVersion để hai giao dịch trên cùng loại kho ghi đè nhau → WriteConflict → driver
+ *     retry cả callback (xem services/txn.ts).
+ */
+export async function swapUnit(user: UserHydrated, id: string, input: { toUnitId: string; reason: string; keyTag?: string; fee?: number }) {
+  const fee = Math.max(0, Math.trunc(input.fee ?? 0));
+  if (fee > 0 && user.role !== 'FACILITY_MANAGER') throw Forbidden('Chỉ Quản lý chi nhánh được thu phí đổi ô', 'SWAP_FEE');
+  if (fee > SWAP_FEE_MAX) throw Unprocessable(`Phí đổi ô tối đa ${SWAP_FEE_MAX.toLocaleString('vi-VN')} ₫`);
+
+  return withTxn(async (session) => {
+    const c = await loadContract(id, session);
+    await assertFacility(user, c.facilityId, 'contract.swap_unit');
+    if (c.status !== 'ACTIVE') throw Unprocessable('Chỉ đổi ô cho hợp đồng đang hiệu lực');
+    if (c.balance.outstanding > 0) throw Unprocessable('Hợp đồng còn công nợ — thu xong mới đổi ô');
+    if (String(c.unitId) === String(input.toUnitId)) throw Unprocessable('Ô mới trùng với ô đang thuê');
+
+    await UnitTypeModel.updateOne({ _id: c.unitTypeId }, { $inc: { inventoryVersion: 1 } }, { session });
+
+    const now = new Date();
+    const fromUnitId = c.unitId;
+
+    // (1) chiếm ô mới — đúng chi nhánh, đúng loại, và phải đang trống
+    const toUnit = await StorageUnitModel.findOneAndUpdate(
+      { _id: input.toUnitId, facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', isDeleted: false },
+      { $set: { status: 'OCCUPIED', currentContractId: c._id, currentReservationId: null, statusChangedAt: now, statusReason: `Đổi ô cho ${c.contractNumber}` } },
+      { new: true, session },
+    );
+    if (!toUnit) throw Conflict('Ô kho đã chọn không còn trống hoặc không cùng loại với ô đang thuê', 'UNIT_NOT_AVAILABLE');
+
+    // (2) nhả ô cũ về chờ kiểm tra — hỏng ở đây thì cả transaction rollback, ô mới tự nhả
+    const fromUnit = await StorageUnitModel.findOneAndUpdate(
+      { _id: fromUnitId, status: 'OCCUPIED', currentContractId: c._id },
+      { $set: { status: 'PENDING_INSPECTION', currentContractId: null, overlockActive: false, statusChangedAt: now, statusReason: `Khách đã chuyển sang ô ${toUnit.unitNumber}` } },
+      { new: true, session },
+    );
+    if (!fromUnit) throw Conflict('Ô kho đang thuê không ở trạng thái mong đợi — liên hệ quản lý', 'UNIT_STATE_MISMATCH');
+
+    // (3) phí thao tác (nếu có): cộng vào công nợ, KHÔNG đụng vào giá thuê
+    const feePayment = fee > 0
+      ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'PENALTY', amount: fee, status: 'PENDING', method: 'INTERNAL' }, session)
+      : null;
+
+    // (4) hợp đồng trỏ sang ô mới; billing.monthlyRate và deposit giữ nguyên
+    c.unitId = toUnit._id;
+    c.unitSwaps = [...(c.unitSwaps ?? []), { fromUnitId, toUnitId: toUnit._id, reason: input.reason, fee, paymentId: feePayment?._id ?? null, at: now, by: user._id }];
+    if (input.keyTag !== undefined) {
+      c.access.keyTag = input.keyTag || null;
+      c.access.issuedAt = now;
+      c.access.issuedBy = user._id;
+    }
+    if (fee > 0) c.balance.outstanding += fee;
+    await c.save({ session }); // chỉ mục unique {unitId} trên hợp đồng đang mở là lớp chặn cuối cùng
+
+    // (5) đặt chỗ gốc đi theo hợp đồng để lịch sử của khách không lệch ô
+    await ReservationModel.updateOne({ _id: c.reservationId, status: 'CHECKED_IN' }, { $set: { unitId: toUnit._id } }, { session });
+
+    await UnitTypeModel.updateOne({ _id: c.unitTypeId }, { $inc: { inventoryVersion: 1 } }, { session });
+    await audit({
+      action: 'contract.swap_unit', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: input.reason,
+      changes: { before: { unit: fromUnit.unitNumber }, after: { unit: toUnit.unitNumber, fee, monthlyRate: c.billing.monthlyRate } },
+    }, session);
+    return { contract: c, fromUnit, toUnit, fee };
+  });
+}
+
+/** Danh sách ô còn trống cùng loại với hợp đồng — dùng cho ô chọn ở màn hình đổi ô. */
+export async function swapCandidates(user: UserHydrated, id: string) {
+  const c = await loadContract(id);
+  await assertFacility(user, c.facilityId, 'contract.swap_unit');
+  const items = await StorageUnitModel
+    .find({ facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', _id: { $ne: c.unitId } })
+    .sort({ 'location.floor': 1, unitNumber: 1 }).limit(200).lean();
+  return { currentUnitId: c.unitId, monthlyRate: c.billing.monthlyRate, items };
 }
 
 // ---------------------------------------------------------------- move-out request (CUSTOMER owner, STAFF/FM)

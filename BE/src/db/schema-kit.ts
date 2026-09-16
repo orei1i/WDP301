@@ -1,18 +1,28 @@
 import { randomBytes } from 'node:crypto';
-import { Schema, type SchemaOptions, type Types } from 'mongoose';
+import { Schema, type Types } from 'mongoose';
 
 export const { ObjectId } = Schema.Types;
 export type OID = Types.ObjectId;
 
-export const baseOptions: SchemaOptions = {
+/**
+ * CỐ Ý không chú kiểu `: SchemaOptions`.
+ *
+ * Từ mongoose 8, SchemaOptions là generic theo DocType — nó khai báo `statics` gắn với Model<DocType>.
+ * Chú kiểu trần biến object này thành SchemaOptions<unknown>, nên khi spread vào
+ * `new Schema<MyDoc, …>(def, { ...baseOptions })` thì `statics` hai bên không tương thích → TS bỏ
+ * overload, DocType không được suy ra, và MỌI `this.<field>` trong hook pre('validate') thành lỗi
+ * "Property does not exist". Để object tự suy kiểu (không có key `statics`) thì nó gán được vào
+ * mọi Schema, còn `as const` giữ 'throw' khỏi bị nới thành string.
+ */
+export const baseOptions = {
   timestamps: true,
-  strict: 'throw', // unknown fields -> error instead of silent drop
+  strict: 'throw' as const, // unknown fields -> error instead of silent drop
   strictQuery: true,
   id: false,
   toJSON: { versionKey: false, virtuals: true },
   toObject: { virtuals: true },
 };
-export const subOptions: SchemaOptions = { _id: false, strict: 'throw' };
+export const subOptions = { _id: false, strict: 'throw' as const };
 
 export const refReq = (model: string) => ({ type: ObjectId, ref: model, required: true as const });
 export const refOpt = (model: string) => ({ type: ObjectId, ref: model, default: null });
