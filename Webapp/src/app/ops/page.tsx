@@ -1,12 +1,12 @@
 'use client';
 
 import { Banknote, Building2, Gauge, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { FACILITY_STATUS } from '@/lib/labels';
-import { facilityStats, revenueByMonth } from '@/lib/domain';
-import { compactVnd, fmtMonth, pct, vnd } from '@/lib/format';
-import { Card, CardHeader, PageHeader, Progress, Stat, StatusBadge, Table } from '@/components/ui';
-import { StackedBarChart } from '@/components/charts';
+import { useStore } from '@/shared/store/store';
+import { FACILITY_STATUS } from '@/shared/lib/labels';
+import { facilityStats, revenueByMonth } from '@/shared/lib/domain';
+import { compactVnd, fmtMonth, pct, vnd } from '@/shared/lib/format';
+import { Card, CardHeader, PageHeader, Progress, Stat, StatusBadge, Table } from '@/shared/ui';
+import { StackedBarChart } from '@/shared/ui/charts';
 
 export default function OpsHome() {
   const { db } = useStore();

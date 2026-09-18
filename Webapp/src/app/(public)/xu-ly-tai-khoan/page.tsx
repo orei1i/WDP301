@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from 'react';
 import { applyActionCode, confirmPasswordReset, signInWithEmailAndPassword, verifyPasswordResetCode } from 'firebase/auth';
 import { Check, KeyRound, Loader2, MailCheck, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { HOME } from '@/lib/nav';
-import { authErrorMessage, firebaseAuth, firebaseConfigured } from '@/lib/firebase';
-import { Button, Card, Field, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { HOME } from '@/shared/lib/nav';
+import { authErrorMessage, firebaseAuth, firebaseConfigured } from '@/shared/api/firebase';
+import { Button, Card, Field, inputCls } from '@/shared/ui';
 
 /**
  * Trang xử lý các link Firebase gửi qua email (đặt lại mật khẩu, xác minh email).

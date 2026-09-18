@@ -3,13 +3,13 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { PriceTier } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { UNIT_CATEGORY } from '@/lib/labels';
-import { availability, unitRate } from '@/lib/domain';
-import { vnd } from '@/lib/format';
-import { Button, Card, CardHeader, Field, Modal, PageHeader, Table, inputCls } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
-import { UnitMap } from '@/components/unit-map';
+import { useStore } from '@/shared/store/store';
+import { UNIT_CATEGORY } from '@/shared/lib/labels';
+import { availability, unitRate } from '@/shared/lib/domain';
+import { vnd } from '@/shared/lib/format';
+import { Button, Card, CardHeader, Field, Modal, PageHeader, Table, inputCls } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
+import { UnitMap } from '@/features/facilities/unit-map';
 
 export default function ManagerUnits() {
   const { db, run } = useStore();

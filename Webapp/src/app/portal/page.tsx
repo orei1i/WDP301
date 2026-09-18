@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { CalendarCheck, CreditCard, QrCode, TriangleAlert, Warehouse } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { CONTRACT_STATUS, RESERVATION_STATUS } from '@/lib/labels';
-import { facilityName, typeName, unitLabel } from '@/lib/domain';
-import { fmtDate, relativeDay, vnd } from '@/lib/format';
-import { ButtonLink, Card, CardHeader, EmptyState, PageHeader, Stat, StatusBadge } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { CONTRACT_STATUS, RESERVATION_STATUS } from '@/shared/lib/labels';
+import { facilityName, typeName, unitLabel } from '@/shared/lib/domain';
+import { fmtDate, relativeDay, vnd } from '@/shared/lib/format';
+import { ButtonLink, Card, CardHeader, EmptyState, PageHeader, Stat, StatusBadge } from '@/shared/ui';
 
 export default function PortalHome() {
   const { db, user } = useStore();

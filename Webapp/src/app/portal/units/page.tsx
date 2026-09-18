@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { HandCoins, KeyRound, LifeBuoy, Lock, PackageOpen, RefreshCw } from 'lucide-react';
 import type { PaymentMethod, RentalContract } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS } from '@/lib/labels';
-import { byId, facilityName, typeName, unitLabel } from '@/lib/domain';
-import { addDays, addMonths, fmtDate, todayISO, vnd } from '@/lib/format';
-import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, inputCls } from '@/components/ui';
-import { PayMethodPicker } from '@/components/pay-method';
+import { useStore } from '@/shared/store/store';
+import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS } from '@/shared/lib/labels';
+import { byId, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
+import { addDays, addMonths, fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, inputCls } from '@/shared/ui';
+import { PayMethodPicker } from '@/features/payments/pay-method';
 
 type Dialog = { kind: 'pay' | 'extend' | 'moveout'; c: RentalContract } | null;
 

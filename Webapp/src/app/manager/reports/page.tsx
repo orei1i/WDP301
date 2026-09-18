@@ -1,13 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useStore } from '@/lib/store';
-import { PAYMENT_TYPE } from '@/lib/labels';
-import { facilityStats, revenueByMonth } from '@/lib/domain';
-import { compactVnd, fmtMonth, monthKey, pct, todayISO, vnd } from '@/lib/format';
-import { Card, CardHeader, PageHeader, Progress, Stat, Table } from '@/components/ui';
-import { BarChart } from '@/components/charts';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { PAYMENT_TYPE } from '@/shared/lib/labels';
+import { facilityStats, revenueByMonth } from '@/shared/lib/domain';
+import { compactVnd, fmtMonth, monthKey, pct, todayISO, vnd } from '@/shared/lib/format';
+import { Card, CardHeader, PageHeader, Progress, Stat, Table } from '@/shared/ui';
+import { BarChart } from '@/shared/ui/charts';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 export default function Reports() {
   const { db } = useStore();

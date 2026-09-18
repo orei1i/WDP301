@@ -3,11 +3,11 @@
 import { useMemo, useState } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import type { AuditLog } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { ROLE } from '@/lib/labels';
-import { facilityName, userName } from '@/lib/domain';
-import { fmtDateTime } from '@/lib/format';
-import { Badge, Card, Modal, PageHeader, Table, Tabs, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { ROLE } from '@/shared/lib/labels';
+import { facilityName, userName } from '@/shared/lib/domain';
+import { fmtDateTime } from '@/shared/lib/format';
+import { Badge, Card, Modal, PageHeader, Table, Tabs, cx, inputCls } from '@/shared/ui';
 
 type Tab = 'ALL' | 'DENIED' | 'auth' | 'payment' | 'contract';
 

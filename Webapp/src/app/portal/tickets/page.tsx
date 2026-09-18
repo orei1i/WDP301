@@ -4,12 +4,12 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { MessageSquare, Plus } from 'lucide-react';
 import type { SupportTicket, TicketCategory, TicketPriority } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
-import { byId, facilityName, unitLabel } from '@/lib/domain';
-import { fmtDateTime } from '@/lib/format';
-import { Button, Card, EmptyState, Field, Modal, PageHeader, StatusBadge, Table, inputCls } from '@/components/ui';
-import { TicketModal } from '@/components/ticket-thread';
+import { useStore } from '@/shared/store/store';
+import { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/shared/lib/labels';
+import { byId, facilityName, unitLabel } from '@/shared/lib/domain';
+import { fmtDateTime } from '@/shared/lib/format';
+import { Button, Card, EmptyState, Field, Modal, PageHeader, StatusBadge, Table, inputCls } from '@/shared/ui';
+import { TicketModal } from '@/features/tickets/ticket-thread';
 
 function TicketsInner() {
   const { db, user, run } = useStore();

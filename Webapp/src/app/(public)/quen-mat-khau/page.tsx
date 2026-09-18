@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowLeft, MailCheck, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { Button, Card, Field, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { Button, Card, Field, inputCls } from '@/shared/ui';
 
 const RESEND_SECONDS = 60;
 

@@ -5,12 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Camera, Car, Clock, MapPin, Phone, Thermometer, Truck, Zap } from 'lucide-react';
 import type { BusinessPolicy, Facility, PriceQuote, UnitType } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { api } from '@/lib/api';
-import { UNIT_CATEGORY } from '@/lib/labels';
-import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal';
-import { addDays, fmtDate, todayISO, vnd } from '@/lib/format';
-import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { api } from '@/shared/api/client';
+import { UNIT_CATEGORY } from '@/shared/lib/labels';
+import { PRIVACY_VERSION, TERMS_VERSION } from '@/features/legal/legal-content';
+import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/shared/ui';
 
 type TypeRow = UnitType & { quote: PriceQuote; availability: { total: number; free: number; holds: number; available: number } };
 interface Detail {

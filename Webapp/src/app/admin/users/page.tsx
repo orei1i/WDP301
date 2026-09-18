@@ -3,11 +3,11 @@
 import { useMemo, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
 import type { Role, User, UserStatus } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { ROLE, USER_STATUS } from '@/lib/labels';
-import { facilityName } from '@/lib/domain';
-import { fmtDateTime, initials } from '@/lib/format';
-import { Badge, Button, Card, Field, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { ROLE, USER_STATUS } from '@/shared/lib/labels';
+import { facilityName } from '@/shared/lib/domain';
+import { fmtDateTime, initials } from '@/shared/lib/format';
+import { Badge, Button, Card, Field, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/shared/ui';
 
 type Form = { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: UserStatus };
 const ROLES = Object.keys(ROLE) as Role[];

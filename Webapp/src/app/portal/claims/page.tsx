@@ -4,11 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { HandCoins, Plus, Trash2, TriangleAlert } from 'lucide-react';
 import type { ClaimItem, ClaimType, DamageClaim } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { CLAIM_STATUS, CLAIM_TYPE } from '@/lib/labels';
-import { CLAIM_LIABILITY_CAP, CLAIM_WINDOW_DAYS, claimTotal, typeName, unitLabel } from '@/lib/domain';
-import { addDays, fmtDate, todayISO, vnd } from '@/lib/format';
-import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { CLAIM_STATUS, CLAIM_TYPE } from '@/shared/lib/labels';
+import { CLAIM_LIABILITY_CAP, CLAIM_WINDOW_DAYS, claimTotal, typeName, unitLabel } from '@/shared/lib/domain';
+import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, cx, inputCls } from '@/shared/ui';
 
 const EMPTY_ITEM: ClaimItem = { name: '', quantity: 1, unitValue: 0 };
 

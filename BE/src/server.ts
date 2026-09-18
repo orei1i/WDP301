@@ -1,5 +1,5 @@
-import { env } from './config/env';
-import { connectMongo, disconnectMongo } from './db/connection';
+import { env } from './shared/config/env';
+import { connectMongo, disconnectMongo } from './shared/db/connection';
 import { createApp } from './app';
 import { startJobs } from './jobs';
 

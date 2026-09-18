@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { ArrowLeftRight, Banknote, BadgePercent, Lock } from 'lucide-react';
 import type { RentalContract } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, PAYMENT_STATUS, PAYMENT_TYPE } from '@/lib/labels';
-import { effectivePolicy, typeName, unitLabel, userName } from '@/lib/domain';
-import { addDays, fmtDate, todayISO, vnd } from '@/lib/format';
-import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
+import { effectivePolicy, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 type Tab = 'overdue' | 'expiring' | 'moveout' | 'all';
 

@@ -1,5 +1,5 @@
 import type { DecodedIdToken } from 'firebase-admin/auth';
-import type { UserHydrated } from '../db/models';
+import type { UserHydrated } from '../shared/db/models';
 
 declare global {
   namespace Express {

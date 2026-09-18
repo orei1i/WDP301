@@ -4,13 +4,13 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { CircleCheck, KeyRound, ScanLine, Search, TriangleAlert } from 'lucide-react';
 import type { AccessMethod, PaymentMethod, Reservation } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { api } from '@/lib/api';
-import { ACCESS_METHOD, RESERVATION_STATUS } from '@/lib/labels';
-import { byId, facilityName, inScope, typeName, unitLabel, userName } from '@/lib/domain';
-import { fmtDate, todayISO, vnd } from '@/lib/format';
-import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadge, cx, inputCls } from '@/components/ui';
-import { PayMethodPicker } from '@/components/pay-method';
+import { useStore } from '@/shared/store/store';
+import { api } from '@/shared/api/client';
+import { ACCESS_METHOD, RESERVATION_STATUS } from '@/shared/lib/labels';
+import { byId, facilityName, inScope, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
+import { PayMethodPicker } from '@/features/payments/pay-method';
 
 function CheckInInner() {
   const { db, user, run, refresh } = useStore();

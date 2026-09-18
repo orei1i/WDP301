@@ -2,13 +2,13 @@
 
 import { useState } from 'react';
 import type { SupportTicket } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { TICKET_CATEGORY, TICKET_KIND, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
-import { unitLabel, userName } from '@/lib/domain';
-import { fmtDate } from '@/lib/format';
-import { Card, EmptyState, PageHeader, StatusBadge, Table, Tabs } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
-import { TicketModal } from '@/components/ticket-thread';
+import { useStore } from '@/shared/store/store';
+import { TICKET_CATEGORY, TICKET_KIND, TICKET_PRIORITY, TICKET_STATUS } from '@/shared/lib/labels';
+import { unitLabel, userName } from '@/shared/lib/domain';
+import { fmtDate } from '@/shared/lib/format';
+import { Card, EmptyState, PageHeader, StatusBadge, Table, Tabs } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
+import { TicketModal } from '@/features/tickets/ticket-thread';
 
 type Tab = 'mine' | 'open' | 'done';
 

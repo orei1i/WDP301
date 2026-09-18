@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { Check, KeyRound, Mail, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { HOME } from '@/lib/nav';
-import { Button, Card, Field, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { HOME } from '@/shared/lib/nav';
+import { Button, Card, Field, inputCls } from '@/shared/ui';
 
 const LABEL: Record<string, string> = {
   'google.com': 'Google',

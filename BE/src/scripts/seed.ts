@@ -1,18 +1,18 @@
 /**
- * Resets the database and loads the SAME demo data the Webapp mock uses (Webapp/src/lib/mock-data.ts),
+ * Resets the database and loads the SAME demo data the Webapp mock uses (Webapp/src/shared/lib/mock-data.ts),
  * then creates/links Firebase logins for the demo accounts.
  *   npm run seed            (from BE/)
  * ⚠ Wipes every collection of the configured database. Never point it at production.
  */
 import mongoose, { Types, type Model } from 'mongoose';
-import { env } from '../config/env';
-import { firebaseAuth } from '../config/firebase';
-import { connectMongo } from '../db/connection';
+import { env } from '../shared/config/env';
+import { firebaseAuth } from '../shared/config/firebase';
+import { connectMongo } from '../shared/db/connection';
 import {
   ALL_MODELS, AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel,
   RentalContractModel, ReservationModel, StorageUnitModel, TicketModel, UnitTypeModel, UserModel,
-} from '../db/models';
-import { createSeed, DEMO_IDS } from '../../../Webapp/src/lib/mock-data';
+} from '../shared/db/models';
+import { createSeed, DEMO_IDS } from '../../../Webapp/src/shared/lib/mock-data';
 
 const DEMO_LOGINS: Record<string, string> = {
   [DEMO_IDS.customer]: 'khach.demo@khoan.dev',

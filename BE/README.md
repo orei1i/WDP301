@@ -67,7 +67,7 @@ Swagger's *Try it out* always calls the server you are actually looking at.
 
 Optionally set `DOC_DEMO_PASSWORD` to make the demo-account buttons fill the password too. **That publishes the password on a page anyone can open** — only ever point it at a throwaway demo database.
 
-**How the spec stays in sync.** `src/modules/openapi.ts` walks the routers listed in `src/modules/registry.ts`
+**How the spec stays in sync.** `src/features/docs/openapi.ts` walks the routers listed in `src/routes.ts`
 and reads what the route handlers were tagged with:
 
 - paths + methods ← `router.stack` (`layer.route.path`)
@@ -76,7 +76,7 @@ and reads what the route handlers were tagged with:
 - auth required? ← reference comparison against `authenticate` / `verifyFirebase`
 
 So adding an endpoint or changing a zod schema updates Swagger on the next page load — nothing to keep in step by hand.
-Only the prose descriptions come from the `API_GROUPS` table in `src/modules/docs.routes.ts`; a route missing from
+Only the prose descriptions come from the `API_GROUPS` table in `src/features/docs/docs.routes.ts`; a route missing from
 that table still shows up in Swagger, just without a description.
 
 Demo logins created by the seed (password = `SEED_PASSWORD`, default `Demo@12345`):
@@ -144,15 +144,47 @@ Errors: `{ "error": { "code", "message", "details" } }`. Codes include `SOLD_OUT
 Run one API instance, or move `src/jobs` to a single worker before scaling out.
 
 ## 7. Structure
+
+Mã nguồn chia theo **nghiệp vụ** (mỗi thư mục trong `features/` là một chức năng của app: route + service + model
+của chức năng đó nằm cạnh nhau), phần dùng chung nằm trong `shared/`.
+
 ```
 src/
-  config/       env (zod), firebase-admin
-  core/         errors, request context (AsyncLocalStorage)
-  db/           connection, schema-kit, plugins (soft delete, append-only, actor stamps), models/
-  domain/       dates, pricing/quote, availability, state transition helper
-  middlewares/  context, authenticate (Firebase), authorize (roles), scope (facility/ownership), validate (zod)
-  services/     reservation, contract, ticket, policy, user, inventory, report, audit, txn, payments
-  modules/      *.routes.ts (thin HTTP layer)
+  server.ts     bootstrap process (Mongo, jobs, listen)
+  app.ts        Express app: middleware, docs, mount API_MOUNTS
+  routes.ts     bảng gắn router duy nhất (prefix → router) — app.ts và openapi.ts đều đọc từ đây
+
+  features/                     mỗi thư mục = 1 chức năng nghiệp vụ
+    auth/         đăng nhập / đồng bộ hồ sơ Firebase
+    users/        tài khoản & phân quyền (ADMIN)
+    facilities/   chi nhánh, loại ô, ô kho, tồn kho & availability
+    reservations/ đặt giữ chỗ, cọc, gán ô, check-in
+    contracts/    hợp đồng thuê, gia hạn, trả kho, biên bản bàn giao
+    payments/     giao dịch thanh toán
+    tickets/      phiếu hỗ trợ
+    claims/       bồi thường hư hỏng / mất mát
+    policies/     chính sách nghiệp vụ & bảng giá (pricing/quote)
+    reports/      báo cáo lấp đầy, doanh thu, công nợ
+    audit/        nhật ký thao tác (append-only)
+    bootstrap/    snapshot dữ liệu đầu vào cho dashboard web
+    docs/         trang tóm tắt tiếng Việt + sinh OpenAPI
+
+  shared/                       hạ tầng dùng chung, không thuộc nghiệp vụ nào
+    config/       env (zod), firebase-admin
+    core/         errors, request context (AsyncLocalStorage)
+    db/           connection, schema-kit, plugins (soft delete, append-only, actor stamps),
+                  models.ts (barrel gom model của mọi feature), txn, apply-transition
+    http/         context, authenticate (Firebase), authorize (roles), scope (facility/ownership),
+                  validate (zod), tags
+    utils/        dates
+
   jobs/         hold expiry, billing & delinquency
   scripts/      seed, sync-indexes
+  types/        khai báo mở rộng Express
 ```
+
+Quy ước:
+- Một chức năng mới = thêm `src/features/<tên>/` gồm `<tên>.routes.ts`, `<tên>.service.ts`, `*.model.ts`,
+  rồi khai báo router trong `src/routes.ts` — Swagger tự có ngay.
+- `features/*` được phép import lẫn nhau (ví dụ `reservations` dùng `policies/pricing`), nhưng `shared/*`
+  thì không bao giờ import ngược lên `features/*`, trừ đúng một chỗ: `shared/db/models.ts` gom model lại.

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
-import { LegalPage } from '@/components/legal-page';
-import { TERMS, TERMS_VERSION } from '@/lib/legal';
+import { LegalPage } from '@/features/legal/legal-page';
+import { TERMS, TERMS_VERSION } from '@/features/legal/legal-content';
 
 export const metadata: Metadata = { title: 'Điều khoản thuê kho' };
 

@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
 import type { Facility, FacilityStatus } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { FACILITY_STATUS } from '@/lib/labels';
-import { effectivePolicy, facilityStats } from '@/lib/domain';
-import { pct } from '@/lib/format';
-import { Button, Card, Field, Modal, PageHeader, StatusBadge, Table, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { FACILITY_STATUS } from '@/shared/lib/labels';
+import { effectivePolicy, facilityStats } from '@/shared/lib/domain';
+import { pct } from '@/shared/lib/format';
+import { Button, Card, Field, Modal, PageHeader, StatusBadge, Table, inputCls } from '@/shared/ui';
 
 const EMPTY = { _id: undefined as string | undefined, name: '', code: '', status: 'UNDER_CONSTRUCTION' as FacilityStatus, line1: '', district: '', phone: '' };
 

@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import type { Reservation } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { CANCELLATION_REASON, RESERVATION_STATUS } from '@/lib/labels';
-import { cancellationRefund, facilityName, typeName, unitLabel } from '@/lib/domain';
-import { fmtDate, vnd } from '@/lib/format';
-import { Button, ButtonLink, Card, EmptyState, Modal, PageHeader, StatusBadge, Table, Tabs } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { CANCELLATION_REASON, RESERVATION_STATUS } from '@/shared/lib/labels';
+import { cancellationRefund, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
+import { fmtDate, vnd } from '@/shared/lib/format';
+import { Button, ButtonLink, Card, EmptyState, Modal, PageHeader, StatusBadge, Table, Tabs } from '@/shared/ui';
 
 type Tab = 'upcoming' | 'past';
 

@@ -5,11 +5,11 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useMemo, useState } from 'react';
 import { Clock, MapPin, Search } from 'lucide-react';
 import type { UnitCategory } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { FACILITY_STATUS, UNIT_CATEGORY } from '@/lib/labels';
-import { unitRate } from '@/lib/domain';
-import { vnd } from '@/lib/format';
-import { Badge, ButtonLink, Card, EmptyState, Field, StatusBadge, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { FACILITY_STATUS, UNIT_CATEGORY } from '@/shared/lib/labels';
+import { unitRate } from '@/shared/lib/domain';
+import { vnd } from '@/shared/lib/format';
+import { Badge, ButtonLink, Card, EmptyState, Field, StatusBadge, cx, inputCls } from '@/shared/ui';
 
 const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL', 'VEHICLE'];
 

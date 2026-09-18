@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { ClipboardCheck, KeyRound, Plus, Trash2 } from 'lucide-react';
 import type { InspectionLog, ItemCondition, RentalContract } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { INSPECTION_OUTCOME } from '@/lib/labels';
-import { byId, typeName, unitLabel, userName } from '@/lib/domain';
-import { fmtDate, fmtDateTime, vnd } from '@/lib/format';
-import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatusBadge, Table, cx, inputCls } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { INSPECTION_OUTCOME } from '@/shared/lib/labels';
+import { byId, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
+import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatusBadge, Table, cx, inputCls } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 const ITEMS = ['Cửa cuốn / cửa kho', 'Ổ khóa', 'Sàn', 'Tường & vách ngăn', 'Trần / chống thấm', 'Vệ sinh chung'];
 const COND: { v: ItemCondition; label: string }[] = [{ v: 'OK', label: 'Tốt' }, { v: 'DAMAGED', label: 'Hư hại' }, { v: 'MISSING', label: 'Thiếu' }];

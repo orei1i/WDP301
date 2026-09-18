@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { Banknote, CalendarClock, Gauge, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { byId, effectivePolicy, facilityStats, typeName, unitLabel, userName } from '@/lib/domain';
-import { addDays, compactVnd, fmtDate, fmtDateTime, pct, relativeDay, todayISO, vnd } from '@/lib/format';
-import { Badge, ButtonLink, Card, CardHeader, EmptyState, PageHeader, Progress, Stat } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { byId, effectivePolicy, facilityStats, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { addDays, compactVnd, fmtDate, fmtDateTime, pct, relativeDay, todayISO, vnd } from '@/shared/lib/format';
+import { Badge, ButtonLink, Card, CardHeader, EmptyState, PageHeader, Progress, Stat } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 export default function ManagerHome() {
   const { db } = useStore();

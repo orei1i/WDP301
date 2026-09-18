@@ -1,11 +1,3 @@
-import { ComingSoon } from '../../src/components/soon';
-
-export default function ContractScreen() {
-  return (
-    <ComingSoon
-      back
-      title="Chi tiết hợp đồng"
-      note="Thanh toán công nợ, gia hạn và đăng ký trả kho đang được dựng."
-    />
-  );
-}
+// Route của Expo Router — màn hình nằm ở src/features/ để mã chia theo chức năng.
+// Chi tiết hợp đồng
+export { default } from '../../src/features/contracts/contract-screen';

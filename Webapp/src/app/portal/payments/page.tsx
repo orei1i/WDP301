@@ -1,11 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useStore } from '@/lib/store';
-import { PAYMENT_METHOD, PAYMENT_STATUS, PAYMENT_TYPE } from '@/lib/labels';
-import { byId, facilityName, unitLabel } from '@/lib/domain';
-import { fmtDate, fmtDateTime, vnd } from '@/lib/format';
-import { Card, PageHeader, Stat, StatusBadge, Table, Tabs } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { PAYMENT_METHOD, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
+import { byId, facilityName, unitLabel } from '@/shared/lib/domain';
+import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
+import { Card, PageHeader, Stat, StatusBadge, Table, Tabs } from '@/shared/ui';
 
 type Tab = 'all' | 'due';
 

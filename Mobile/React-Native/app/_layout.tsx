@@ -3,9 +3,9 @@ import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { StoreProvider, useStore } from '../src/lib/store';
-import { Toasts } from '../src/components/ui';
-import { C } from '../src/theme';
+import { StoreProvider, useStore } from '../src/shared/store/store';
+import { Toasts } from '../src/shared/ui';
+import { C } from '../src/shared/ui/theme';
 
 /**
  * Cổng đăng nhập.

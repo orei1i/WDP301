@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { Wand2 } from 'lucide-react';
 import type { Reservation } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { RESERVATION_STATUS } from '@/lib/labels';
-import { effectivePolicy, typeName, unitLabel, unitRate, userName } from '@/lib/domain';
-import { fmtDate, relativeDay, todayISO, vnd } from '@/lib/format';
-import { Badge, Button, Card, EmptyState, Modal, PageHeader, StatusBadge, Table, Tabs, cx } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { RESERVATION_STATUS } from '@/shared/lib/labels';
+import { effectivePolicy, typeName, unitLabel, unitRate, userName } from '@/shared/lib/domain';
+import { fmtDate, relativeDay, todayISO, vnd } from '@/shared/lib/format';
+import { Badge, Button, Card, EmptyState, Modal, PageHeader, StatusBadge, Table, Tabs, cx } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 type Tab = 'todo' | 'allocated' | 'pending';
 

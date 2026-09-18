@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 import { ArrowRight, KeyRound, TriangleAlert } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { HOME } from '@/lib/nav';
-import { ROLE } from '@/lib/labels';
-import { PRIVACY_VERSION, TERMS_VERSION } from '@/lib/legal';
-import { Badge, Button, Card, Field, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { HOME } from '@/shared/lib/nav';
+import { ROLE } from '@/shared/lib/labels';
+import { PRIVACY_VERSION, TERMS_VERSION } from '@/features/legal/legal-content';
+import { Badge, Button, Card, Field, cx, inputCls } from '@/shared/ui';
 
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
 const DEMO_ACCOUNTS = [

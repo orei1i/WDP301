@@ -5,7 +5,7 @@
  * nên Webapp và app mobile BẮT BUỘC phải gửi cùng một giá trị — hai bên lệch phiên bản thì bằng
  * chứng trỏ tới hai văn bản khác nhau. Vì vậy con số nằm ở đây chứ không nằm riêng mỗi bên.
  *
- * Nội dung đầy đủ của hai văn bản vẫn ở Webapp/src/lib/legal.ts (chỉ web hiển thị toàn văn).
+ * Nội dung đầy đủ của hai văn bản vẫn ở Webapp/src/features/legal/legal-content.ts (chỉ web hiển thị toàn văn).
  * MỖI LẦN SỬA NỘI DUNG LÀ PHẢI TĂNG PHIÊN BẢN, không có ngoại lệ.
  */
 export const TERMS_VERSION = '1.0';

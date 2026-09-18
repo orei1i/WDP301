@@ -1,11 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { useStore } from '@/lib/store';
-import { UNIT_CATEGORY } from '@/lib/labels';
-import { unitRate } from '@/lib/domain';
-import { pct, vnd } from '@/lib/format';
-import { Button, Card, CardHeader, PageHeader, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { UNIT_CATEGORY } from '@/shared/lib/labels';
+import { unitRate } from '@/shared/lib/domain';
+import { pct, vnd } from '@/shared/lib/format';
+import { Button, Card, CardHeader, PageHeader, cx, inputCls } from '@/shared/ui';
 
 export default function Pricing() {
   const { db, run, toast } = useStore();

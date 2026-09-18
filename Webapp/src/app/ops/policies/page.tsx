@@ -3,10 +3,10 @@
 import { useMemo, useState } from 'react';
 import { History } from 'lucide-react';
 import type { BusinessPolicy } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { effectivePolicy, facilityName, userName } from '@/lib/domain';
-import { fmtDate, vnd } from '@/lib/format';
-import { Badge, Button, Card, CardHeader, Field, PageHeader, Table, cx, inputCls } from '@/components/ui';
+import { useStore } from '@/shared/store/store';
+import { effectivePolicy, facilityName, userName } from '@/shared/lib/domain';
+import { fmtDate, vnd } from '@/shared/lib/format';
+import { Badge, Button, Card, CardHeader, Field, PageHeader, Table, cx, inputCls } from '@/shared/ui';
 
 export default function Policies() {
   const { db, run } = useStore();

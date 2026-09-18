@@ -1,11 +1,3 @@
-import { ComingSoon } from '../../src/components/soon';
-
-export default function BookingScreen() {
-  return (
-    <ComingSoon
-      back
-      title="Thanh toán cọc"
-      note="Màn hình trả cọc đang được dựng. Tạm thời mở web, vào Đặt chỗ của tôi để thanh toán — xong quay lại app là thấy mã nhận kho."
-    />
-  );
-}
+// Route của Expo Router — màn hình nằm ở src/features/ để mã chia theo chức năng.
+// Thanh toán cọc
+export { default } from '../../src/features/payments/booking-screen';

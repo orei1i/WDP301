@@ -1,11 +1,11 @@
 'use client';
 
-import { useStore } from '@/lib/store';
-import { facilityStats } from '@/lib/domain';
-import { pct } from '@/lib/format';
-import { Card, PageHeader } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
-import { UnitMap } from '@/components/unit-map';
+import { useStore } from '@/shared/store/store';
+import { facilityStats } from '@/shared/lib/domain';
+import { pct } from '@/shared/lib/format';
+import { Card, PageHeader } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
+import { UnitMap } from '@/features/facilities/unit-map';
 
 export default function StaffUnits() {
   const { db } = useStore();

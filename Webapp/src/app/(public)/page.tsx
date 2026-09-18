@@ -5,12 +5,12 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { ArrowRight, Camera, CreditCard, KeyRound, MapPin, ScanLine, ShieldCheck, Thermometer, Truck, Warehouse } from 'lucide-react';
 import type { UnitCategory } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { UNIT_CATEGORY } from '@/lib/labels';
-import { isActiveFacility, unitRate } from '@/lib/domain';
-import { vnd } from '@/lib/format';
-import { Button, Card, Field, Skeleton, inputCls } from '@/components/ui';
-import { SizeEstimator } from '@/components/size-estimator';
+import { useStore } from '@/shared/store/store';
+import { UNIT_CATEGORY } from '@/shared/lib/labels';
+import { isActiveFacility, unitRate } from '@/shared/lib/domain';
+import { vnd } from '@/shared/lib/format';
+import { Button, Card, Field, Skeleton, inputCls } from '@/shared/ui';
+import { SizeEstimator } from '@/features/facilities/size-estimator';
 
 const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL', 'VEHICLE'];
 

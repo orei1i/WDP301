@@ -3,12 +3,12 @@ import express, { type RequestHandler } from 'express';
 import helmet from 'helmet';
 import mongoose from 'mongoose';
 import swaggerUi from 'swagger-ui-express';
-import { env } from './config/env';
-import { errorHandler, NotFound } from './core/errors';
-import { contextMiddleware } from './middlewares/context';
-import { docsRouter } from './modules/docs.routes';
-import { buildOpenApi } from './modules/openapi';
-import { API_MOUNTS } from './modules/registry';
+import { env } from './shared/config/env';
+import { errorHandler, NotFound } from './shared/core/errors';
+import { contextMiddleware } from './shared/http/context';
+import { docsRouter } from './features/docs/docs.routes';
+import { buildOpenApi } from './features/docs/openapi';
+import { API_MOUNTS } from './routes';
 
 /** Swagger UI nạp asset cùng origin nhưng có inline script/style → nới CSP đúng cho nhánh /api/docs. */
 const swaggerCsp: RequestHandler = (_req, res, next) => {

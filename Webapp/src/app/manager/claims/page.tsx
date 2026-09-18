@@ -3,12 +3,12 @@
 import { useState } from 'react';
 import { Banknote, Check, HandCoins, Search, X } from 'lucide-react';
 import type { DamageClaim } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { CLAIM_STATUS, CLAIM_TYPE } from '@/lib/labels';
-import { CLAIM_LIABILITY_CAP, unitLabel, userName } from '@/lib/domain';
-import { fmtDate, vnd } from '@/lib/format';
-import { Badge, Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, inputCls } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { CLAIM_STATUS, CLAIM_TYPE } from '@/shared/lib/labels';
+import { CLAIM_LIABILITY_CAP, unitLabel, userName } from '@/shared/lib/domain';
+import { fmtDate, vnd } from '@/shared/lib/format';
+import { Badge, Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, inputCls } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 type Tab = 'new' | 'review' | 'approved' | 'done';
 

@@ -1,4 +1,4 @@
-import { AppShell } from '@/components/app-shell';
+import { AppShell } from '@/shared/layout/app-shell';
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   return <AppShell area="portal">{children}</AppShell>;

@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { connectMongo } from '../db/connection';
-import { ALL_MODELS } from '../db/models';
+import { connectMongo } from '../shared/db/connection';
+import { ALL_MODELS } from '../shared/db/models';
 
 /** Creates missing indexes and drops ones no longer declared in the schemas. Run on deploy (autoIndex is off in prod). */
 async function main() {

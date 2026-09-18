@@ -2,12 +2,12 @@
 
 import Link from 'next/link';
 import { ArrowRight, CalendarCheck, ListTodo, Lock, PackageOpen, ScanLine } from 'lucide-react';
-import { useStore } from '@/lib/store';
-import { CONTRACT_STATUS, RESERVATION_STATUS, TICKET_PRIORITY, TICKET_STATUS } from '@/lib/labels';
-import { byId, typeName, unitLabel, userName } from '@/lib/domain';
-import { addDays, fmtDate, relativeDay, todayISO, vnd } from '@/lib/format';
-import { Badge, ButtonLink, Card, CardHeader, EmptyState, PageHeader, Stat, StatusBadge } from '@/components/ui';
-import { FacilityPicker, useFacilityScope } from '@/components/facility-picker';
+import { useStore } from '@/shared/store/store';
+import { CONTRACT_STATUS, RESERVATION_STATUS, TICKET_PRIORITY, TICKET_STATUS } from '@/shared/lib/labels';
+import { byId, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { addDays, fmtDate, relativeDay, todayISO, vnd } from '@/shared/lib/format';
+import { Badge, ButtonLink, Card, CardHeader, EmptyState, PageHeader, Stat, StatusBadge } from '@/shared/ui';
+import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 export default function StaffQueue() {
   const { db } = useStore();

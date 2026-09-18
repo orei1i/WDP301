@@ -4,12 +4,12 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { CircleCheck, Clock, Timer } from 'lucide-react';
 import type { PaymentMethod } from '@ssm/shared';
-import { useStore } from '@/lib/store';
-import { PAYMENT_METHOD, RESERVATION_STATUS } from '@/lib/labels';
-import { byId, cancellationRefund, facilityName, typeName, unitLabel } from '@/lib/domain';
-import { fmtDate, minutesLeft, vnd } from '@/lib/format';
-import { Button, ButtonLink, Card, EmptyState, KV, StatusBadge, cx } from '@/components/ui';
-import { FakeQr } from '@/components/qr';
+import { useStore } from '@/shared/store/store';
+import { PAYMENT_METHOD, RESERVATION_STATUS } from '@/shared/lib/labels';
+import { byId, cancellationRefund, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
+import { fmtDate, minutesLeft, vnd } from '@/shared/lib/format';
+import { Button, ButtonLink, Card, EmptyState, KV, StatusBadge, cx } from '@/shared/ui';
+import { FakeQr } from '@/features/reservations/qr';
 
 const METHODS: PaymentMethod[] = ['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'];
 
