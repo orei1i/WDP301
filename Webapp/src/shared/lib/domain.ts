@@ -109,7 +109,7 @@ export function revenueByMonth(db: DB, facilityIds: string[], n = 6) {
 }
 
 /**
- * Hạn mức trách nhiệm bồi thường cho một sự vụ. PHẢI khớp CLAIM_LIABILITY_CAP ở BE/src/domain/claims.ts —
+ * Hạn mức trách nhiệm bồi thường cho một sự vụ. PHẢI khớp CLAIM_LIABILITY_CAP ở BE/src/features/claims/claim-rules.ts —
  * ở đây chỉ để hiển thị và chặn sớm trên form; quyết định cuối cùng vẫn do server.
  */
 export const CLAIM_LIABILITY_CAP = 20_000_000;
