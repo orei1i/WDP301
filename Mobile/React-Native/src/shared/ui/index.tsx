@@ -5,7 +5,8 @@ import {
   type StyleProp, type TextInputProps, type ViewStyle,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { Tone } from '@ssm/shared';
+import { useRouter } from 'expo-router';
+import { addDays, fmtDate, todayISO, type Tone } from '@ssm/shared';
 import { C, R, S, TONE } from './theme';
 import { useStore } from '../store/store';
 
@@ -35,6 +36,27 @@ export function Muted({ children, style }: { children: ReactNode; style?: StyleP
 
 export function Card({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   return <View style={[st.card, style]}>{children}</View>;
+}
+
+/**
+ * Header cho màn full-page mới: nút back + tiêu đề + slot phải tuỳ chọn. Đặt làm children đầu
+ * tiên trong <Screen>, không phải header cố định của navigator (mỗi screen tự vẽ, headerShown
+ * đã tắt toàn cục).
+ */
+export function ScreenHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+  const router = useRouter();
+  return (
+    <View style={st.screenHeader}>
+      <Pressable onPress={() => router.back()} hitSlop={12} style={st.screenHeaderBack}>
+        <Ionicons name="chevron-back" size={24} color={C.ink} />
+      </Pressable>
+      <View style={{ flex: 1 }}>
+        <Text style={st.h1}>{title}</Text>
+        {subtitle ? <Muted style={{ marginTop: 2 } as never}>{subtitle}</Muted> : null}
+      </View>
+      {right ? <View>{right}</View> : null}
+    </View>
+  );
 }
 
 type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -79,6 +101,71 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 
 export function Input(props: TextInputProps) {
   return <TextInput placeholderTextColor={C.faint} {...props} style={[st.input, props.style]} />;
+}
+
+/** Hàng nút chọn dạng pill — chọn số tháng, loại ticket, mức ưu tiên, loại claim, phương thức thanh toán... */
+export function Chips<T extends string>({ options, value, onChange, columns }: {
+  options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; columns?: number;
+}) {
+  return (
+    <View style={st.chipsRow}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <Pressable
+            key={o.value}
+            onPress={() => onChange(o.value)}
+            style={[
+              st.chip,
+              active ? st.chipActive : st.chipInactive,
+              columns ? { flexBasis: `${100 / columns}%` } as ViewStyle : { flexGrow: 0 },
+            ]}
+          >
+            <Text style={[st.chipText, active && st.chipTextActive]} numberOfLines={1}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Chọn một ngày bằng chevron ±1 ngày + chip nhanh, không dùng date-picker gốc (chưa cài lib đó).
+ * value/min/max là ISO date string; presets là số ngày cộng thêm từ hôm nay (vd [0,3,7,30]).
+ */
+export function DateStepper({ value, onChange, min, max, label, presets }: {
+  value: string; onChange: (iso: string) => void; min?: string; max?: string; label: string; presets?: number[];
+}) {
+  const clamp = (iso: string) => (min && iso < min ? min : max && iso > max ? max : iso);
+  const atMin = min !== undefined && value <= min;
+  const atMax = max !== undefined && value >= max;
+  return (
+    <View>
+      <Text style={st.label}>{label}</Text>
+      <View style={st.stepperRow}>
+        <Pressable onPress={() => onChange(clamp(addDays(value, -1)))} disabled={atMin} hitSlop={8} style={st.stepperBtn}>
+          <Ionicons name="chevron-back" size={20} color={atMin ? C.faint : C.ink} />
+        </Pressable>
+        <Text style={st.stepperDate}>{fmtDate(value)}</Text>
+        <Pressable onPress={() => onChange(clamp(addDays(value, 1)))} disabled={atMax} hitSlop={8} style={st.stepperBtn}>
+          <Ionicons name="chevron-forward" size={20} color={atMax ? C.faint : C.ink} />
+        </Pressable>
+      </View>
+      {presets ? (
+        <View style={[st.chipsRow, { marginTop: S.sm }]}>
+          {presets.map((n) => {
+            const iso = clamp(addDays(todayISO(), n));
+            const active = iso === value;
+            return (
+              <Pressable key={n} onPress={() => onChange(iso)} style={[st.chip, active ? st.chipActive : st.chipInactive, { flexGrow: 0 }]}>
+                <Text style={[st.chipText, active && st.chipTextActive]}>{n === 0 ? 'Hôm nay' : `+${n} ngày`}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
+  );
 }
 
 export function Badge({ tone = 'gray', children }: { tone?: Tone; children: ReactNode }) {
@@ -167,4 +254,15 @@ const st = StyleSheet.create({
   emptyDesc: { fontSize: 13, color: C.muted, textAlign: 'center', paddingHorizontal: S.xl },
   toastWrap: { position: 'absolute', left: S.lg, right: S.lg, bottom: S.xxl + S.xl, gap: S.sm },
   toast: { borderWidth: 1, borderRadius: R.md, padding: S.md },
+  screenHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm, marginBottom: S.lg },
+  screenHeaderBack: { padding: 2, marginTop: 2 },
+  chipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: S.sm },
+  chip: { paddingVertical: S.sm, paddingHorizontal: S.md, borderRadius: R.full, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  chipActive: { backgroundColor: C.brand50, borderColor: C.brand600 },
+  chipInactive: { backgroundColor: C.card, borderColor: C.line },
+  chipText: { fontSize: 13, fontWeight: '600', color: C.text },
+  chipTextActive: { color: C.brand700 },
+  stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: C.line, borderRadius: R.md, paddingVertical: S.sm, paddingHorizontal: S.md },
+  stepperBtn: { padding: S.xs },
+  stepperDate: { fontSize: 15, fontWeight: '700', color: C.ink },
 });
