@@ -15,10 +15,25 @@ Express 5 · Mongoose 8 (MongoDB Atlas) · Firebase Auth (email/password + Googl
 2. *Project settings → Service accounts → Generate new private key* → take `project_id`, `client_email`, `private_key` from the JSON.
 3. *Project settings → General → Your apps → Web app* → the web config is for Webapp/Mobile (step 3), not for BE.
 
-**Env**
+**Env** — repo không kèm `.env.example`; tạo `BE/.env` (đã nằm trong `.gitignore`) với nội dung sau, biến bắt buộc là 4 dòng đầu:
 ```bash
-cp .env.example .env     # then fill MONGODB_URI + FIREBASE_*
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/selfstorage?retryWrites=true&w=majority
+FIREBASE_PROJECT_ID=<project_id>
+FIREBASE_CLIENT_EMAIL=<client_email>
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+"
 ```
+| Biến tuỳ chọn | Mặc định | Ý nghĩa |
+|---|---|---|
+| `PORT` | `4000` | Cổng API |
+| `CORS_ORIGINS` | `http://localhost:3000` | Các origin được gọi API, cách nhau bằng dấu phẩy — thêm domain Webapp đã deploy |
+| `SEED_PASSWORD` | `Demo@12345` | Mật khẩu các tài khoản demo do `npm run seed` tạo |
+| `AUTH_DEV_BYPASS` | `false` | Chỉ để dev: nhận header `x-dev-user`. Bị bỏ qua khi `NODE_ENV=production` |
+| `FIREBASE_WEB_API_KEY` | — | Có thì trang `/api` hiện ô đăng nhập lấy token (mục 3) |
+| `DOC_DEMO_PASSWORD` | — | Điền sẵn mật khẩu cho nút tài khoản demo trên `/api` — **công bố mật khẩu**, chỉ dùng với DB demo |
+
 > The service-account key is full admin access to your Firebase project. Keep it only in `BE/.env` (git-ignored). Never commit it or paste it anywhere.
 
 ## 2. Run
@@ -28,6 +43,7 @@ npm install          # links @ssm/shared into BE
 npm run seed         # ⚠ wipes the configured DB, loads the same demo data as the Webapp mock, creates Firebase demo logins
 npm run api          # tsx watch — in ra sẵn các link doc
 npm run docs         # mở Swagger trong trình duyệt (chạy ở cửa sổ khác)
+npm run sync-indexes --workspace BE   # đồng bộ index Mongo theo schema (sau khi đổi index trong model)
 ```
 Node ≥ 20.12 required (`process.loadEnvFile`).
 
@@ -86,7 +102,8 @@ Demo logins created by the seed (password = `SEED_PASSWORD`, default `Demo@12345
 | CUSTOMER | khach.demo@khoan.dev |
 | STAFF (Quận 7) | nhanvien.q7@khoan.dev |
 | FACILITY_MANAGER (Quận 7) | quanly.q7@khoan.dev |
-| FACILITY_MANAGER (Thủ Đức + Tân Bình) | quanly.td@khoan.dev |
+| FACILITY_MANAGER (Thủ Đức) | quanly.td@khoan.dev |
+| FACILITY_MANAGER (Tân Bình) | quanly.tb@khoan.dev |
 | OPS_MANAGER | vanhanh@khoan.dev |
 | ADMIN | admin@khoan.dev |
 
@@ -119,6 +136,7 @@ This table is prose only. The authoritative, always-current list is `GET /api/do
 | `GET /reservations` · `GET /reservations/:id` | all (customers see own, staff see branch) | |
 | `POST /reservations` | CUSTOMER | txn + `inventoryVersion` bump; `Idempotency-Key` header supported |
 | `POST /reservations/:id/pay-deposit` | CUSTOMER | mock gateway → CONFIRMED, returns `qrPayload` |
+| `POST /reservations/:id/qr` | CUSTOMER | cấp lại mã QR nhận kho cho app mobile; mỗi lần gọi vô hiệu mã đã cấp trước đó |
 | `POST /reservations/:id/cancel` | owner / FM | refund per policy snapshot |
 | `POST /reservations/:id/allocate` · `/unallocate` | FM | CAS on unit + partial unique index |
 | `GET /reservations/lookup?code=` | STAFF, FM | accepts code or `SSM:<code>:<token>` QR payload |
@@ -128,7 +146,11 @@ This table is prose only. The authoritative, always-current list is `GET /api/do
 | `POST /contracts/:id/pay-balance` | CUSTOMER, STAFF, FM | lifts DELINQUENT/LOCKED_OUT |
 | `POST /contracts/:id/lockout` · `/waive-late-fees` | FM · FM, OPS | waiver limited by policy |
 | `POST /contracts/:id/move-out` · `/receive` · `/inspection` | owner/STAFF/FM · STAFF, FM · STAFF, FM | inspection settles deposit and closes contract |
+| `GET /contracts/:id/swap-candidates` · `POST /contracts/:id/swap-unit` | STAFF, FM | đổi sang ô CÙNG loại — giá thuê và cọc giữ nguyên; phí thao tác > 0 chỉ FM được đặt |
 | `GET /inspections?facilityId=` · `GET /payments` | scoped | |
+| `GET /claims` · `GET /claims/:id` | all (customers see own, staff see branch) | trả kèm `liabilityCap` |
+| `POST /claims` | CUSTOMER, STAFF, FM | gửi hồ sơ bồi thường hư hỏng / mất mát — hạn 30 ngày từ sự cố, tối đa 3 hồ sơ đang mở mỗi hợp đồng, mức trách nhiệm tối đa 20.000.000 ₫/sự vụ (`features/claims/claim-rules.ts`) |
+| `POST /claims/:id/review` · `/decide` · `/pay` · `/withdraw` | STAFF, FM · FM · FM · CUSTOMER | tiếp nhận xác minh · duyệt/từ chối kèm số tiền · chi (chuyển khoản / tiền mặt) · khách rút hồ sơ |
 | `GET/POST /tickets` · `POST /tickets/:id/assign|status|messages` | all (scoped) · FM · all | internal notes hidden from customers |
 | `GET /policies` · `GET /policies/effective/:facilityId` · `POST /policies` | OPS/ADMIN/FM · any · OPS | publish = new immutable version |
 | `GET/POST/PATCH /users` | ADMIN | Firebase user + revoke on privilege change |

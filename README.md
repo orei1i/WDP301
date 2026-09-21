@@ -1,24 +1,105 @@
-# KhoAn — Self-Storage Facility Management (WDP301)
+# KhoAn — Quản lý kho tự phục vụ (WDP301)
 
-npm-workspaces monorepo:
+Hệ thống cho thuê kho tự phục vụ nhiều chi nhánh: khách đặt kho và thanh toán trên web/app, nhân viên và quản lý
+vận hành trên web. Monorepo npm workspaces.
 
-| Folder | What | Status |
+| Thư mục | Là gì | Trạng thái |
 |---|---|---|
-| `shared/` | `@ssm/shared` — enums, entity interfaces, state machines (used by every app) | ✅ |
-| `Webapp/` | Next.js 15 + Tailwind v4 — mock UI for all 5 roles, in-memory data | ✅ Step 1 |
-| `BE/` | Express 5 + Mongoose (Atlas) + Firebase Auth API — see `BE/README.md` | ✅ Step 2 |
-| `Mobile/React-Native/` | Expo Router app (customer + on-site staff) | ⏳ Step 3 |
+| `shared/` | `@ssm/shared` — enum, kiểu dữ liệu, state machine, nhãn tiếng Việt, hàm định dạng (dùng chung cho cả 3 app) | ✅ |
+| `BE/` | Express 5 + Mongoose (MongoDB Atlas) + Firebase Auth — chi tiết ở [`BE/README.md`](BE/README.md) | ✅ |
+| `Webapp/` | Next.js 16 + Tailwind v4, gọi API thật — đủ 5 vai trò (khách, nhân viên, quản lý chi nhánh, vận hành, quản trị). Chi tiết ở [`Webapp/README.md`](Webapp/README.md) | ✅ |
+| `Mobile/React-Native/` | Expo Router — **chỉ dành cho khách hàng** (nhân viên dùng Webapp) | 🟡 xem bên dưới |
+
+**Mobile đã có:** đăng nhập / đăng ký / quên mật khẩu, kho đang thuê, mã QR nhận kho, chọn chi nhánh → đặt kho → trả cọc,
+chi tiết hợp đồng (trả công nợ, gia hạn, đăng ký trả kho), phiếu hỗ trợ (nhắn tin, đóng / mở lại) và yêu cầu bồi thường.
+**Chưa có:** đính kèm ảnh cho phiếu hỗ trợ / bồi thường, đăng nhập Google (khách đăng nhập Google trên web thì đặt mật
+khẩu ở trang `/dat-mat-khau` rồi dùng mật khẩu đó trên app). Thanh toán luôn **giả lập** — chưa tích hợp cổng thật (biến `MOCK_PAYMENTS` trong `env.ts` hiện chưa được đọc ở đâu).
+
+## Yêu cầu
+
+- Node ≥ 20.12 (`.nvmrc` ghim Node 22) — BE dùng `process.loadEnvFile`, không cần `dotenv`.
+- Một cluster MongoDB Atlas (M0 là đủ, vì là replica set nên chạy được transaction).
+- Một project Firebase bật Authentication (Email/Password + Google). Các bước lấy khoá xem `BE/README.md` mục 1.
+
+## Chạy thử
+
+Chạy ở thư mục gốc. Các file `.env` đều đã nằm trong `.gitignore` — khoá service account của Firebase là quyền admin
+toàn project, tuyệt đối không commit.
+
+**1. Cài đặt**
+```bash
+npm install          # cài mọi workspace và link @ssm/shared
+```
+
+**2. Tạo file cấu hình** (repo không kèm file mẫu — tạo file mới với nội dung dưới đây)
+
+`BE/.env`
+```bash
+MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/selfstorage?retryWrites=true&w=majority
+FIREBASE_PROJECT_ID=<project_id>
+FIREBASE_CLIENT_EMAIL=<client_email trong service account>
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# tuỳ chọn (giá trị mặc định ghi bên cạnh)
+# PORT=4000
+# CORS_ORIGINS=http://localhost:3000     # nhiều origin cách nhau bằng dấu phẩy — thêm domain web đã deploy
+# SEED_PASSWORD=Demo@12345               # mật khẩu các tài khoản demo do `npm run seed` tạo
+# FIREBASE_WEB_API_KEY=                  # có thì trang /api có ô đăng nhập lấy token
+```
+
+`Webapp/.env.local`
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:4000/api
+NEXT_PUBLIC_FIREBASE_API_KEY=<apiKey>
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
+NEXT_PUBLIC_FIREBASE_APP_ID=<appId>
+# NEXT_PUBLIC_DEMO_PASSWORD=             # = SEED_PASSWORD của BE → nút đăng nhập demo một chạm ở /login
+```
+
+`Mobile/React-Native/.env`
+```bash
+EXPO_PUBLIC_FIREBASE_API_KEY=<apiKey>
+EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
+EXPO_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
+EXPO_PUBLIC_FIREBASE_APP_ID=<appId>
+# EXPO_PUBLIC_API_URL=                   # bỏ trống → app tự suy ra từ địa chỉ máy đang chạy Metro (điện thoại và máy tính cùng Wi-Fi)
+# EXPO_PUBLIC_WEB_URL=                   # trang Điều khoản / Bảo mật mà app mở ra
+```
+Bộ `apiKey / authDomain / projectId / appId` lấy ở *Firebase Console → Project settings → General → Your apps → Web app*
+— dùng chung một bộ cho Webapp và Mobile.
+
+**3. Nạp dữ liệu demo rồi chạy** (mỗi lệnh một cửa sổ terminal)
+```bash
+npm run seed         # ⚠ XOÁ database đang cấu hình, nạp dữ liệu demo + tạo tài khoản đăng nhập demo trên Firebase
+npm run api          # API   → http://localhost:4000/api   (Swagger: /api/docs)
+npm run web          # Web   → http://localhost:3000
+npm run mobile       # Mobile → Expo dev server
+```
+Web và Mobile đều gọi API thật nên phải chạy `npm run api` trước. Tài khoản demo và mật khẩu: `BE/README.md` mục 3.
+
+## Các lệnh ở thư mục gốc
+
+| Lệnh | Việc |
+|---|---|
+| `npm run api` | BE chế độ watch (`tsx watch`) |
+| `npm run start` | BE chế độ thường — lệnh Railway dùng |
+| `npm run web` | Webapp (Next.js dev) |
+| `npm run mobile` | Expo dev server cho Mobile |
+| `npm run seed` | Xoá DB và nạp lại dữ liệu demo |
+| `npm run docs` | Mở Swagger trong trình duyệt (chạy khi `npm run api` đang chạy) |
+| `npm run typecheck --workspace <BE\|Webapp\|@ssm/mobile>` | Kiểm tra kiểu một workspace |
 
 ## Cấu trúc mã nguồn
 
-Cả `BE/` và `Webapp/` đều chia theo **chức năng nghiệp vụ**: mỗi thư mục trong `features/` là một chức năng của
-app, phần dùng chung nằm trong `shared/`.
+Cả ba app đều chia theo **chức năng nghiệp vụ**: mỗi thư mục trong `features/` là một chức năng của app, phần dùng
+chung nằm trong `shared/`. Thêm chức năng mới = thêm một thư mục trong `features/`, không rải file ra nhiều tầng
+`services/`, `models/`.
 
 ```
 BE/src/                            Webapp/src/
   routes.ts   bảng mount router      app/         route Next.js (chia theo vai trò)
   features/                          features/
-    auth/         đăng nhập            auth/          đăng nhập, đặt/quên mật khẩu
+    auth/         đăng nhập            auth/          đặt / quên mật khẩu
     users/        tài khoản, RBAC      facilities/    chi nhánh, ô kho, ước lượng cỡ
     facilities/   chi nhánh, ô kho     reservations/  QR giữ chỗ / check-in
     reservations/ giữ chỗ, check-in    payments/      chọn hình thức thanh toán
@@ -35,39 +116,30 @@ BE/src/                            Webapp/src/
   jobs/ scripts/ types/
 ```
 
-`Mobile/React-Native/` theo đúng quy ước đó. Expo Router bắt buộc file route nằm trong `app/`, nên `app/`
-chỉ còn file một dòng trỏ về màn hình thật:
+**Mobile.** Expo Router bắt buộc file route nằm trong `app/`, nên `app/` chỉ chứa file một dòng trỏ về màn hình thật
+trong `src/features/`; hai file `_layout.tsx` ở lại `app/` vì là layout của router, không phải màn hình.
 
 ```
 app/login.tsx            →  src/features/auth/login-screen.tsx
 app/(tabs)/index.tsx     →  src/features/home/home-screen.tsx
-app/(tabs)/account.tsx   →  src/features/account/account-screen.tsx
 app/(tabs)/explore.tsx   →  src/features/facilities/explore-screen.tsx
 app/(tabs)/support.tsx   →  src/features/tickets/support-screen.tsx
-app/qr/[id].tsx          →  src/features/reservations/qr-screen.tsx
+app/(tabs)/account.tsx   →  src/features/account/account-screen.tsx
+app/facility/[id].tsx    →  src/features/facilities/facility-detail-screen.tsx
 app/booking/[id].tsx     →  src/features/payments/booking-screen.tsx
+app/qr/[id].tsx          →  src/features/reservations/qr-screen.tsx
 app/contract/[id].tsx    →  src/features/contracts/contract-screen.tsx
+app/ticket/new.tsx       →  src/features/tickets/ticket-new-screen.tsx
+app/ticket/[id].tsx      →  src/features/tickets/ticket-detail-screen.tsx
+app/claim/new.tsx        →  src/features/claims/claim-new-screen.tsx
+app/claim/[id].tsx       →  src/features/claims/claim-detail-screen.tsx
 src/shared/              ui/ (component + theme) · api/ (client, firebase, actions) · store/
 ```
 
-`app/_layout.tsx` và `app/(tabs)/_layout.tsx` ở lại `app/` vì chúng là layout của router, không phải màn hình.
+Chi tiết quy ước BE ở `BE/README.md` mục 7.
 
-Thêm chức năng mới = thêm một thư mục trong `features/`, không rải file ra nhiều tầng `services/`, `models/`.
-Chi tiết quy ước ở `BE/README.md` mục 7.
+## Triển khai
 
-## Run the web mock
-
-```bash
-# from the repo root (installs every workspace and links @ssm/shared)
-npm install
-npm run web          # = npm run dev --workspace Webapp → http://localhost:3000
-```
-
-## Run the API
-```bash
-# fill BE/.env first (copy BE/.env.example) — Atlas URI + Firebase service account
-npm run seed         # ⚠ wipes the configured DB and loads demo data + Firebase demo logins
-npm run api          # http://localhost:4000/api
-```
-
-Requires Node 20+.
+`railway.json` cấu hình deploy BE lên Railway: build NIXPACKS, chạy `npm run start --workspace BE`, healthcheck
+`/health`, một replica (các job nền chạy trong tiến trình — xem `BE/README.md` mục 6 trước khi tăng số replica).
+Đặt trên Railway đúng các biến môi trường của `BE/.env`, trong đó `CORS_ORIGINS` phải gồm domain của Webapp.
