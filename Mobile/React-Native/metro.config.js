@@ -27,4 +27,16 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
+// Chạy web (expo start --web): npm hoist react-native-web lên node_modules ở gốc workspace (peer dep của nó
+// lỏng nên không cần lồng), trong khi react của app nằm lồng ở Mobile/React-Native/node_modules (19.2.3;
+// Webapp ở gốc dùng 19.1.0). Để nguyên thì bundle web chứa HAI bản React và hook trong react-native-web
+// báo "Invalid hook call". Ép mọi import react / react-dom — dù từ file nào — về bản của Mobile.
+// Bản native vốn đã chỉ có một React nên đoạn này không đổi gì ở đó.
+const upstreamResolve = config.resolver.resolveRequest;
+config.resolver.resolveRequest = (context, moduleName, platform) => {
+  const pinned = /^react(-dom)?(\/|$)/.test(moduleName);
+  const ctx = pinned ? { ...context, originModulePath: path.join(projectRoot, 'package.json') } : context;
+  return (upstreamResolve ?? ctx.resolveRequest)(ctx, moduleName, platform);
+};
+
 module.exports = config;

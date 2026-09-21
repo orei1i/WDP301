@@ -56,6 +56,11 @@ npm run mobile       # Mobile → Expo dev server
 ```
 Web và Mobile đều gọi API thật nên phải chạy `npm run api` trước. Tài khoản demo và mật khẩu: `BE/README.md` mục 3.
 
+**Debug Mobile ngay trên trình duyệt:** sau `npm run mobile` bấm phím `w` (hoặc mở `http://localhost:8081`). Web của Expo chạy
+ở origin `http://localhost:8081`, nên thêm origin đó vào `CORS_ORIGINS` trong `BE/.env`
+(`CORS_ORIGINS=http://localhost:3000,http://localhost:8081`) rồi khởi động lại `npm run api`, nếu không trình duyệt chặn mọi lời gọi API.
+Web ở đây là app Mobile chạy bằng `react-native-web` — khác với `npm run web` (Webapp Next.js, cổng 3000).
+
 ## Các lệnh ở thư mục gốc
 
 | Lệnh | Việc |
