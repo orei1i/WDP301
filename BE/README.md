@@ -15,15 +15,9 @@ Express 5 · Mongoose 8 (MongoDB Atlas) · Firebase Auth (email/password + Googl
 2. *Project settings → Service accounts → Generate new private key* → take `project_id`, `client_email`, `private_key` from the JSON.
 3. *Project settings → General → Your apps → Web app* → the web config is for Webapp/Mobile (step 3), not for BE.
 
-**Env** — repo không kèm `.env.example`; tạo `BE/.env` (đã nằm trong `.gitignore`) với nội dung sau, biến bắt buộc là 4 dòng đầu:
+**Env** — sao chép file mẫu rồi điền 4 biến bắt buộc (`MONGODB_URI`, `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`):
 ```bash
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/selfstorage?retryWrites=true&w=majority
-FIREBASE_PROJECT_ID=<project_id>
-FIREBASE_CLIENT_EMAIL=<client_email>
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
-...
------END PRIVATE KEY-----
-"
+cp .env.example .env     # chạy trong BE/ ; BE/.env đã nằm trong .gitignore
 ```
 | Biến tuỳ chọn | Mặc định | Ý nghĩa |
 |---|---|---|

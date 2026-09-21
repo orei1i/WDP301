@@ -5,18 +5,10 @@ Next.js (App Router) + Tailwind v4, backed by the real API in `BE/` and Firebase
 ## Setup
 1. BE running with seeded data (`npm run seed`, `npm run api` from the repo root — see `BE/README.md`).
 2. Firebase console → *Project settings → General → Your apps → Add app → Web* → copy the SDK config.
-3. Create `Webapp/.env.local` (git-ignored; the repo ships no example file) and fill:
+3. `cp Webapp/.env.local.example Webapp/.env.local` (git-ignored) and fill:
    - `NEXT_PUBLIC_API_URL` (default `http://localhost:4000/api`)
    - `NEXT_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID`
    - optional `NEXT_PUBLIC_DEMO_PASSWORD` (= `SEED_PASSWORD` in BE) → one-click demo logins on `/login`
-
-   ```bash
-   NEXT_PUBLIC_API_URL=http://localhost:4000/api
-   NEXT_PUBLIC_FIREBASE_API_KEY=<apiKey>
-   NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
-   NEXT_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
-   NEXT_PUBLIC_FIREBASE_APP_ID=<appId>
-   ```
 4. From the repo root: `npm install` then `npm run web` → http://localhost:3000
 
 `localhost` is an authorised domain in Firebase by default; add your deployed domain under *Authentication → Settings → Authorized domains*.

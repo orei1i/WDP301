@@ -23,50 +23,29 @@ khẩu ở trang `/dat-mat-khau` rồi dùng mật khẩu đó trên app). Thanh
 
 ## Chạy thử
 
-Chạy ở thư mục gốc. Các file `.env` đều đã nằm trong `.gitignore` — khoá service account của Firebase là quyền admin
-toàn project, tuyệt đối không commit.
+Chạy ở thư mục gốc.
 
 **1. Cài đặt**
 ```bash
 npm install          # cài mọi workspace và link @ssm/shared
 ```
 
-**2. Tạo file cấu hình** (repo không kèm file mẫu — tạo file mới với nội dung dưới đây)
-
-`BE/.env`
+**2. Tạo file cấu hình** — sao chép file mẫu rồi điền giá trị thật
 ```bash
-MONGODB_URI=mongodb+srv://<user>:<password>@<cluster>/selfstorage?retryWrites=true&w=majority
-FIREBASE_PROJECT_ID=<project_id>
-FIREBASE_CLIENT_EMAIL=<client_email trong service account>
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-# tuỳ chọn (giá trị mặc định ghi bên cạnh)
-# PORT=4000
-# CORS_ORIGINS=http://localhost:3000     # nhiều origin cách nhau bằng dấu phẩy — thêm domain web đã deploy
-# SEED_PASSWORD=Demo@12345               # mật khẩu các tài khoản demo do `npm run seed` tạo
-# FIREBASE_WEB_API_KEY=                  # có thì trang /api có ô đăng nhập lấy token
+cp BE/.env.example BE/.env
+cp Webapp/.env.local.example Webapp/.env.local
+cp Mobile/React-Native/.env.example Mobile/React-Native/.env
 ```
 
-`Webapp/.env.local`
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:4000/api
-NEXT_PUBLIC_FIREBASE_API_KEY=<apiKey>
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
-NEXT_PUBLIC_FIREBASE_APP_ID=<appId>
-# NEXT_PUBLIC_DEMO_PASSWORD=             # = SEED_PASSWORD của BE → nút đăng nhập demo một chạm ở /login
-```
+| File | Phải điền | Ghi chú |
+|---|---|---|
+| `BE/.env` | `MONGODB_URI`, `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` | Bốn giá trị lấy từ Atlas và *Firebase Console → Project settings → Service accounts*. Biến tuỳ chọn: `BE/README.md` mục 1 |
+| `Webapp/.env.local` | `NEXT_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID` | `NEXT_PUBLIC_API_URL` mặc định trỏ `http://localhost:4000/api` |
+| `Mobile/React-Native/.env` | `EXPO_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID` | Bỏ trống `EXPO_PUBLIC_API_URL` thì app tự suy ra từ địa chỉ máy chạy Metro (điện thoại và máy tính cùng Wi-Fi) |
 
-`Mobile/React-Native/.env`
-```bash
-EXPO_PUBLIC_FIREBASE_API_KEY=<apiKey>
-EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
-EXPO_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
-EXPO_PUBLIC_FIREBASE_APP_ID=<appId>
-# EXPO_PUBLIC_API_URL=                   # bỏ trống → app tự suy ra từ địa chỉ máy đang chạy Metro (điện thoại và máy tính cùng Wi-Fi)
-# EXPO_PUBLIC_WEB_URL=                   # trang Điều khoản / Bảo mật mà app mở ra
-```
 Bộ `apiKey / authDomain / projectId / appId` lấy ở *Firebase Console → Project settings → General → Your apps → Web app*
-— dùng chung một bộ cho Webapp và Mobile.
+— dùng chung một bộ cho Webapp và Mobile. Các file `.env` nằm trong `.gitignore`; khoá service account của Firebase
+là quyền admin toàn project, tuyệt đối không commit.
 
 **3. Nạp dữ liệu demo rồi chạy** (mỗi lệnh một cửa sổ terminal)
 ```bash
