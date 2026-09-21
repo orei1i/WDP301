@@ -24,6 +24,14 @@ function resolveApiUrl(): string {
 }
 
 export const API_URL = resolveApiUrl();
+// Log này hiện ở terminal đang chạy `expo start` — cách nhanh nhất để biết điện thoại đang gọi vào đâu.
+console.log(`[SSM] API_URL = ${API_URL}`);
+
+/**
+ * fetch của React Native mặc định KHÔNG có timeout: BE không với tới được (firewall chặn, sai Wi-Fi, sai IP)
+ * thì lời gọi treo cả phút, màn hình chỉ thấy spinner quay mãi mà không có lỗi nào để đọc.
+ */
+const REQUEST_TIMEOUT_MS = 10_000;
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string, readonly details?: unknown) { super(message); }
@@ -33,6 +41,8 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?:
   const current = firebaseConfigured ? firebaseAuth().currentUser : null;
   const token = current ? await current.getIdToken() : null; // SDK tự cache và làm mới mỗi giờ
   let res: Response;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${API_URL}${path}`, {
       method,
@@ -42,9 +52,16 @@ async function request<T>(method: 'GET' | 'POST' | 'PATCH', path: string, body?:
         ...headers,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: ctl.signal,
     });
-  } catch {
-    throw new ApiError(0, 'NETWORK', `Không kết nối được API (${API_URL}). Kiểm tra BE đã chạy và điện thoại cùng mạng Wi-Fi với máy tính.`);
+  } catch (e) {
+    const timedOut = (e as { name?: string })?.name === 'AbortError';
+    console.warn(`[SSM] ${method} ${path} → ${timedOut ? 'quá thời gian chờ' : 'không kết nối được'} (${API_URL})`);
+    throw new ApiError(0, 'NETWORK', timedOut
+      ? `API ${API_URL} không phản hồi sau ${REQUEST_TIMEOUT_MS / 1000}s. Kiểm tra BE đang chạy, điện thoại cùng Wi-Fi với máy tính và firewall không chặn cổng 4000.`
+      : `Không kết nối được API (${API_URL}). Kiểm tra BE đã chạy và điện thoại cùng mạng Wi-Fi với máy tính.`);
+  } finally {
+    clearTimeout(timer);
   }
   const data = res.status === 204 ? null : await res.json().catch(() => null);
   if (!res.ok) {

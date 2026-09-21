@@ -1,10 +1,10 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect } from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from '../src/shared/store/store';
 import { Toasts } from '../src/shared/ui';
+import { BootScreen } from '../src/shared/ui/boot-screen';
 import { C } from '../src/shared/ui/theme';
 
 /**
@@ -26,13 +26,7 @@ function Gate() {
     else if (user && inAuth) router.replace('/');
   }, [user, ready, segments, router]);
 
-  if (!ready) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg }}>
-        <ActivityIndicator color={C.brand700} />
-      </View>
-    );
-  }
+  if (!ready) return <BootScreen />;
 
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: C.bg } }}>
