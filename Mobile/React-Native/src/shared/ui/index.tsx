@@ -118,7 +118,10 @@ export function Chips<T extends string>({ options, value, onChange, columns }: {
             style={[
               st.chip,
               active ? st.chipActive : st.chipInactive,
-              columns ? { flexBasis: `${100 / columns}%` } as ViewStyle : { flexGrow: 0 },
+              // flexBasis theo % + gap của chipsRow cộng lại vượt 100% (basis % không trừ gap ra) nên
+              // chip cuối bị đẩy xuống dòng — chia đều bằng flexGrow/flexBasis:0 thay vì % để Yoga tự
+              // trừ đúng phần gap trước khi chia, không bao giờ tràn dòng.
+              columns ? { flexGrow: 1, flexBasis: 0 } as ViewStyle : { flexGrow: 0 },
             ]}
           >
             <Text style={[st.chipText, active && st.chipTextActive]} numberOfLines={1}>{o.label}</Text>
