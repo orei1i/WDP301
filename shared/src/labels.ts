@@ -1,7 +1,7 @@
 import type {
-  AccessMethod, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
-  ReservationStatus, Role, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus,
-  UserStatus, CancellationReason, InspectionOutcome, DepositStatus,
+  AccessMethod, CheckInShift, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
+  RentalPeriod, ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority,
+  TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus,
 } from './enums';
 
 export type Tone = 'gray' | 'green' | 'blue' | 'amber' | 'red' | 'violet' | 'teal';
@@ -106,10 +106,26 @@ export const TICKET_CATEGORY: Record<TicketCategory, string> = {
 export const TICKET_KIND: Record<TicketKind, string> = { CUSTOMER_ISSUE: 'Yêu cầu khách hàng', OPS_TASK: 'Công việc nội bộ' };
 
 export const UNIT_CATEGORY: Record<UnitCategory, string> = {
-  LOCKER: 'Tủ locker', SMALL: 'Nhỏ', MEDIUM: 'Vừa', LARGE: 'Lớn', XL: 'Rất lớn', VEHICLE: 'Xe máy',
+  LOCKER: 'Tủ locker', SMALL: 'Nhỏ', MEDIUM: 'Vừa', LARGE: 'Lớn', XL: 'Rất lớn',
 };
 
-export const ACCESS_METHOD: Record<AccessMethod, string> = { PHYSICAL_KEY: 'Chìa khóa', PIN: 'Mã PIN', RFID_CARD: 'Thẻ từ' };
+export const ACCESS_METHOD: Record<AccessMethod, string> = { PHYSICAL_KEY: 'Chìa khoá', PIN: 'Mật khẩu', RFID_CARD: 'Thẻ khoá' };
+
+/** Nhãn chu kỳ thuê. RENTAL_PERIOD cho tiêu đề ("Tháng"), PERIOD_UNIT để ghép số ("3 tháng", "5 ngày"). */
+export const RENTAL_PERIOD: Record<RentalPeriod, string> = { DAY: 'Ngày', WEEK: 'Tuần', MONTH: 'Tháng' };
+export const PERIOD_UNIT: Record<RentalPeriod, string> = { DAY: 'ngày', WEEK: 'tuần', MONTH: 'tháng' };
+export const periodLabel = (period: RentalPeriod, n: number) => `${n} ${PERIOD_UNIT[period]}`;
+
+export const SWAP_METHOD: Record<SwapMethod, string> = { SELF: 'Tự chuyển', DELIVERY: 'Thuê người chuyển' };
+
+export const SWAP_REQUEST_STATUS: LabelMap<SwapRequestStatus> = {
+  SUBMITTED: { label: 'Chờ duyệt', tone: 'amber' },
+  APPROVED: { label: 'Đã duyệt · chờ chuyển', tone: 'blue' },
+  REJECTED: { label: 'Từ chối', tone: 'red' },
+  DONE: { label: 'Đã đổi ô', tone: 'green' },
+  EXPIRED: { label: 'Hết hạn chuyển', tone: 'gray' },
+  CANCELLED: { label: 'Khách đã rút', tone: 'gray' },
+};
 
 export const FACILITY_STATUS: LabelMap<FacilityStatus> = {
   ACTIVE: { label: 'Đang hoạt động', tone: 'green' },
@@ -126,6 +142,15 @@ export const USER_STATUS: LabelMap<UserStatus> = {
 export const CANCELLATION_REASON: Record<CancellationReason, string> = {
   CUSTOMER_REQUEST: 'Khách yêu cầu', HOLD_EXPIRED: 'Hết thời gian giữ chỗ', PAYMENT_FAILED: 'Thanh toán thất bại',
   NO_SHOW: 'Không đến nhận kho', FACILITY_UNAVAILABLE: 'Chi nhánh không đáp ứng', ADMIN_OVERRIDE: 'Quản trị hủy',
+};
+
+/** Ca giờ nhận kho khách chọn lúc đặt, cũng dùng làm ca làm việc cố định của nhân viên (STAFF.shift). */
+export const CHECK_IN_SHIFT: LabelMap<CheckInShift> = {
+  SHIFT_1: { label: 'Ca 1 · 09:00–10:30', tone: 'blue' },
+  SHIFT_2: { label: 'Ca 2 · 10:30–12:00', tone: 'blue' },
+  SHIFT_3: { label: 'Ca 3 · 14:00–15:30', tone: 'blue' },
+  SHIFT_4: { label: 'Ca 4 · 15:30–17:00', tone: 'blue' },
+  UNKNOWN: { label: 'Chưa rõ giờ', tone: 'gray' },
 };
 
 export const INSPECTION_OUTCOME: LabelMap<InspectionOutcome> = {

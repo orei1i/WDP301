@@ -1,4 +1,4 @@
-import type { ClaimStatus, ContractStatus, PaymentStatus, ReservationStatus, Role, TicketStatus, UnitStatus } from './enums';
+import type { ClaimStatus, ContractStatus, PaymentStatus, ReservationStatus, Role, SwapRequestStatus, TicketStatus, UnitStatus } from './enums';
 
 /** Who may fire a transition. SYSTEM = webhooks, cron jobs, internal side effects. */
 export type Actor = Role | 'SYSTEM';
@@ -62,6 +62,16 @@ export const CLAIM_MACHINE = {
   PAID:         {},
   WITHDRAWN:    {},
 } as const satisfies StateMachine<ClaimStatus>;
+
+/**
+ * Yêu cầu đổi ô kho của khách. Chỉ Quản lý chi nhánh duyệt/từ chối; nhân viên hoặc quản lý xác nhận
+ * đã chuyển xong; hết hạn 7 ngày tự chuyển thì hệ thống tự hủy (EXPIRED), không cần ai thao tác.
+ */
+export const SWAP_REQUEST_MACHINE = {
+  SUBMITTED: { APPROVED: [FM], REJECTED: [FM], CANCELLED: [CU] },
+  APPROVED:  { DONE: [ST, FM], EXPIRED: [SYS] },
+  REJECTED:  {}, DONE: {}, EXPIRED: {}, CANCELLED: {},
+} as const satisfies StateMachine<SwapRequestStatus>;
 
 export class InvalidTransitionError extends Error {
   readonly code = 'INVALID_STATE_TRANSITION';

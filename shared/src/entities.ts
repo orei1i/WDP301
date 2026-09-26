@@ -1,7 +1,8 @@
 import type {
-  AccessMethod, AuditResult, CancellationReason, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
-  InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, PriceTier,
-  ReservationStatus, Role, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus, UserStatus,
+  AccessMethod, AuditResult, CancellationReason, CheckInShift, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
+  InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, RentalPeriod,
+  ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
+  UnitStatus, UserStatus,
 } from './enums';
 
 /**
@@ -60,6 +61,8 @@ export interface User<I = ID, D = string> extends BaseEntity<I, D>, SoftDeletabl
     address?: string;
     emergencyContact?: { name: string; phone: string };
   } | null;
+  /** Ca làm việc cố định — bắt buộc với STAFF (một trong STAFF_SHIFTS), null/không có với vai trò khác. */
+  shift?: CheckInShift | null;
 }
 
 // ---------- Facility ----------
@@ -89,10 +92,17 @@ export interface UnitType<I = ID, D = string> extends BaseEntity<I, D>, SoftDele
   description?: string;
   dimensions: { widthM: number; depthM: number; heightM: number };
   areaM2: number;                         // derived
-  features: { climateControlled: boolean; driveUp: boolean; indoor: boolean; powerOutlet: boolean };
-  pricing: { baseMonthlyRate: number; tierMultipliers: Record<PriceTier, number> };
+  features: { climateControlled: boolean; indoor: boolean };
+  /**
+   * Giá cho MỖI chu kỳ khách có thể chọn lúc đặt (khách tự chọn ngày/tuần/tháng, không cố định
+   * theo loại kho) — Quản lý vận hành niêm yết sẵn cả 3 mức.
+   */
+  rates: Record<RentalPeriod, number>;
+  /** Hình thức khoá: mọi ô kho thuộc loại này dùng chung — chìa khoá / thẻ khoá / mật khẩu. */
+  accessMethod: AccessMethod;
   depositOverride?: number | null;
-  minRentalMonths: number;
+  /** Số chu kỳ tối thiểu phải thuê. */
+  minPeriods: number;
   imageUrls: string[];
   isActive: boolean;
   /** Concurrency token. Every reservation/allocation txn for this type increments it -> concurrent txns write-conflict. */
@@ -108,21 +118,20 @@ export interface StorageUnit<I = ID, D = string> extends BaseEntity<I, D>, SoftD
   status: UnitStatus;
   statusChangedAt: D;
   statusReason?: string | null;
-  priceTier: PriceTier;
-  monthlyRateOverride?: number | null;
   currentReservationId?: I | null;
   currentContractId?: I | null;
+  /** Giữ ô trong lúc chờ khách chuyển đồ sau khi yêu cầu đổi ô được duyệt (xem UnitSwapRequest). */
+  currentSwapRequestId?: I | null;
   /** Lockout is an overlay on OCCUPIED, not a separate unit status. */
   overlockActive: boolean;
-  lock: { type: 'PADLOCK' | 'SMART_LOCK'; deviceId?: string | null };
   notes?: string;
 }
 
 // ---------- Reservation ----------
 export interface PriceQuote<I = ID> {
   currency: CurrencyCode;
-  priceTier: PriceTier;
-  monthlyRate: number;
+  rentalPeriod: RentalPeriod;
+  rate: number;
   depositAmount: number;
   discountAmount: number;
   surchargeAmount: number;
@@ -138,11 +147,13 @@ export interface Reservation<I = ID, D = string> extends BaseEntity<I, D> {
   facilityId: I;
   customerId: I;
   unitTypeId: I;
-  unitId?: I | null;                      // set on ALLOCATED
+  unitId?: I | null;                      // khách chọn ô cụ thể trên sơ đồ ngay lúc đặt — set từ PENDING
   status: ReservationStatus;
   startDate: D;                           // date-only: facility-local calendar day stored as 00:00Z
-  durationMonths: number;
-  endDate: D;                             // derived: startDate + durationMonths
+  periods: number;                        // số chu kỳ thuê (theo rentalPeriod của loại kho)
+  endDate: D;                             // derived: startDate + periods × rentalPeriod
+  /** Ca giờ khách dự kiến đến nhận kho — chọn ngay lúc đặt; UNKNOWN = "Chưa rõ giờ" (mặc định). */
+  preferredCheckInShift: CheckInShift;
   quote: PriceQuote<I>;                   // frozen at booking -> later price/policy changes don't affect it
   holdExpiresAt?: D | null;               // PENDING only
   depositPaymentId?: I | null;
@@ -178,7 +189,7 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   startDate: D;
   endDate: D;                             // current term end (moves on renewal)
   autoRenew: boolean;
-  billing: { currency: CurrencyCode; monthlyRate: number; billingDay: number; nextBillingDate: D; paidThrough: D };
+  billing: { currency: CurrencyCode; rentalPeriod: RentalPeriod; rate: number; nextBillingDate: D; paidThrough: D };
   deposit: { amount: number; status: DepositStatus; paymentId?: I | null; refundedAmount: number };
   balance: { outstanding: number; lastPaymentAt?: D | null };
   delinquency?: { since: D; daysOverdue: number; lateFeesAccrued: number; lockedOutAt?: D | null } | null;
@@ -190,7 +201,7 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
     suspendedAt?: D | null; revokedAt?: D | null;
   };
   terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string };
-  renewals: { previousEndDate: D; newEndDate: D; months: number; paymentId?: I | null; at: D }[];
+  renewals: { previousEndDate: D; newEndDate: D; periods: number; paymentId?: I | null; at: D }[];
   /**
    * Lịch sử đổi ô kho (A1). Chỉ đổi được sang ô CÙNG loại (unitTypeId không đổi), nên
    * billing.monthlyRate và deposit giữ nguyên theo hợp đồng đã ký — đổi ô không phải là định giá lại.
@@ -200,6 +211,32 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   moveOut?: { requestedAt: D; scheduledFor?: D | null; completedAt?: D | null; inspectionId?: I | null } | null;
   closedAt?: D | null;
   statusHistory: StatusChange<ContractStatus, I, D>[];
+}
+
+// ---------- UnitSwapRequest (đổi ô kho theo yêu cầu — A1b) ----------
+export interface UnitSwapRequest<I = ID, D = string> extends BaseEntity<I, D> {
+  requestNumber: string;                  // "SWP-260930-7K2Q9M"
+  facilityId: I;
+  customerId: I;
+  contractId: I;
+  unitTypeId: I;                          // cùng loại cả hai ô — giá thuê/cọc không đổi
+  fromUnitId: I;
+  toUnitId: I;                            // khách chọn trên sơ đồ lúc gửi yêu cầu
+  method: SwapMethod;
+  reason: string;                         // khách tự khai lý do muốn đổi
+  status: SwapRequestStatus;
+  /** Chốt lúc FM duyệt: 0 nếu facilityFault hoặc là lần đổi đầu của hợp đồng; ngược lại theo chính sách. */
+  fee: number;
+  /** FM đánh dấu lúc duyệt — có phải lỗi từ chi nhánh không (quyết định miễn phí). null khi chưa duyệt. */
+  facilityFault?: boolean | null;
+  scheduledFor?: D | null;                // hẹn ngày chi nhánh cử người chuyển (method DELIVERY)
+  moveDeadline?: D | null;                // hạn 7 ngày tự chuyển (method SELF), tính từ lúc duyệt
+  decidedBy?: I | null;
+  decidedAt?: D | null;
+  rejectReason?: string | null;
+  completedAt?: D | null;
+  paymentId?: I | null;                   // khoản phí (nếu > 0), tạo lúc hoàn tất
+  statusHistory: StatusChange<SwapRequestStatus, I, D>[];
 }
 
 // ---------- PaymentTransaction ----------
@@ -314,7 +351,8 @@ export interface BusinessPolicy<I = ID, D = string> extends BaseEntity<I, D> {
   version: number;
   isActive: boolean;
   effectiveFrom: D;
-  deposit: { mode: 'MONTHS_OF_RENT' | 'FIXED'; value: number };
+  /** mode PERIODS_OF_RENT: cọc = value × tiền thuê một chu kỳ (mặc định value = 1). */
+  deposit: { mode: 'PERIODS_OF_RENT' | 'FIXED'; value: number };
   reservationHoldMinutes: number;
   allocationLeadDays: number;
   noShowAfterHours: number;
@@ -322,10 +360,10 @@ export interface BusinessPolicy<I = ID, D = string> extends BaseEntity<I, D> {
   lockoutAfterDays: number;
   lateFees: { afterDays: number; kind: 'FIXED' | 'PERCENT_OF_RENT'; value: number; recurringEveryDays?: number | null }[];
   cancellation: { minHoursBeforeStart: number; depositRefundPct: number }[];
-  minRentalMonths: number;
-  maxRentalMonths: number;
+  minPeriods: number;
+  maxPeriods: number;
   surcharges: { code: string; label: string; kind: 'FIXED' | 'PERCENT'; value: number; categories: UnitCategory[] }[];
-  discounts: { code: string; kind: 'FIXED' | 'PERCENT'; value: number; minMonths: number; validFrom?: D | null; validTo?: D | null; requiresApprovalRole?: Role | null }[];
+  discounts: { code: string; kind: 'FIXED' | 'PERCENT'; value: number; minPeriods: number; validFrom?: D | null; validTo?: D | null; requiresApprovalRole?: Role | null }[];
   waiverLimits: { role: Role; maxAmount: number }[];
 }
 

@@ -23,6 +23,10 @@ export function addMonths(iso: string, months: number): string {
   r.setUTCDate(Math.min(d.getUTCDate(), last));
   return r.toISOString();
 }
+/** Cộng n chu kỳ thuê vào một ngày ISO. NGÀY = +n ngày, TUẦN = +7n ngày, THÁNG = +n tháng. */
+export const addPeriods = (iso: string, period: 'DAY' | 'WEEK' | 'MONTH', n: number) =>
+  period === 'MONTH' ? addMonths(iso, n) : addDays(iso, period === 'WEEK' ? 7 * n : n);
+
 export const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY);
 export const monthKey = (iso: string) => iso.slice(0, 7);
 

@@ -11,11 +11,15 @@ export type UserStatus = (typeof UserStatus)[keyof typeof UserStatus];
 export const FacilityStatus = { ACTIVE: 'ACTIVE', INACTIVE: 'INACTIVE', UNDER_CONSTRUCTION: 'UNDER_CONSTRUCTION' } as const;
 export type FacilityStatus = (typeof FacilityStatus)[keyof typeof FacilityStatus];
 
-export const UnitCategory = { LOCKER: 'LOCKER', SMALL: 'SMALL', MEDIUM: 'MEDIUM', LARGE: 'LARGE', XL: 'XL', VEHICLE: 'VEHICLE' } as const;
+export const UnitCategory = { LOCKER: 'LOCKER', SMALL: 'SMALL', MEDIUM: 'MEDIUM', LARGE: 'LARGE', XL: 'XL' } as const;
 export type UnitCategory = (typeof UnitCategory)[keyof typeof UnitCategory];
 
-export const PriceTier = { ECONOMY: 'ECONOMY', STANDARD: 'STANDARD', PREMIUM: 'PREMIUM' } as const;
-export type PriceTier = (typeof PriceTier)[keyof typeof PriceTier];
+/**
+ * Chu kỳ thuê: khách TỰ CHỌN lúc đặt (ngày / tuần / tháng), không gắn cứng theo loại kho.
+ * Mỗi loại kho niêm yết sẵn 3 giá (UnitType.rates), khách chọn chu kỳ nào thì tính theo giá đó.
+ */
+export const RentalPeriod = { DAY: 'DAY', WEEK: 'WEEK', MONTH: 'MONTH' } as const;
+export type RentalPeriod = (typeof RentalPeriod)[keyof typeof RentalPeriod];
 
 export const UnitStatus = { AVAILABLE: 'AVAILABLE', RESERVED: 'RESERVED', OCCUPIED: 'OCCUPIED', MAINTENANCE: 'MAINTENANCE', PENDING_INSPECTION: 'PENDING_INSPECTION' } as const;
 export type UnitStatus = (typeof UnitStatus)[keyof typeof UnitStatus];
@@ -35,6 +39,32 @@ export type DepositStatus = (typeof DepositStatus)[keyof typeof DepositStatus];
 
 export const AccessMethod = { PHYSICAL_KEY: 'PHYSICAL_KEY', PIN: 'PIN', RFID_CARD: 'RFID_CARD' } as const;
 export type AccessMethod = (typeof AccessMethod)[keyof typeof AccessMethod];
+
+/**
+ * Ca giờ nhận kho khách chọn LÚC ĐẶT (không phải giờ hoạt động của chi nhánh) — cùng bộ ca cũng
+ * dùng để gắn nhãn ca làm việc cố định cho nhân viên (STAFF.shift, xem STAFF_SHIFTS) để hàng đợi
+ * nhận kho lọc đúng ca. UNKNOWN = khách chưa chắc giờ, chỉ hợp lệ cho khách — nhân viên bắt buộc
+ * chọn 1 trong 4 ca cụ thể.
+ */
+export const CheckInShift = { SHIFT_1: 'SHIFT_1', SHIFT_2: 'SHIFT_2', SHIFT_3: 'SHIFT_3', SHIFT_4: 'SHIFT_4', UNKNOWN: 'UNKNOWN' } as const;
+export type CheckInShift = (typeof CheckInShift)[keyof typeof CheckInShift];
+export const STAFF_SHIFTS: readonly CheckInShift[] = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4'];
+
+// ---------- Đổi ô kho theo yêu cầu (A1b): khách gửi yêu cầu, Quản lý chi nhánh xét duyệt ----------
+/** Khách tự chuyển đồ trong hạn 7 ngày, hoặc thuê nhân viên chi nhánh chuyển hộ (chi nhánh xếp lịch). */
+export const SwapMethod = { SELF: 'SELF', DELIVERY: 'DELIVERY' } as const;
+export type SwapMethod = (typeof SwapMethod)[keyof typeof SwapMethod];
+
+export const SwapRequestStatus = {
+  SUBMITTED: 'SUBMITTED',   // khách vừa gửi, ô mới CHƯA bị giữ
+  APPROVED: 'APPROVED',     // FM duyệt, đã chốt phí — ô mới bị giữ (RESERVED) chờ chuyển
+  REJECTED: 'REJECTED',     // FM từ chối
+  DONE: 'DONE',             // đã xác nhận chuyển xong, hợp đồng đã sang ô mới
+  EXPIRED: 'EXPIRED',       // tự chuyển nhưng quá 7 ngày chưa chuyển — hủy, nhả ô mới
+  CANCELLED: 'CANCELLED',   // khách tự rút trước khi FM duyệt
+} as const;
+export type SwapRequestStatus = (typeof SwapRequestStatus)[keyof typeof SwapRequestStatus];
+export const OPEN_SWAP_STATUSES: readonly SwapRequestStatus[] = ['SUBMITTED', 'APPROVED'];
 
 export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION' } as const;
 export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
