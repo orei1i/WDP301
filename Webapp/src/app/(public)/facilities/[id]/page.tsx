@@ -26,7 +26,21 @@ interface CartLine { key: string; typeId: string; typeName: string; unitId: stri
 const PERIODS: RentalPeriod[] = ['DAY', 'WEEK', 'MONTH'];
 /** Ca giờ nhận kho — chọn ngay lúc đặt, cộng thêm "Chưa rõ giờ" cho khách chưa chắc lịch. */
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const].map((s) => ({ value: s, label: CHECK_IN_SHIFT[s].label }));
-const AC_FILTERS: { value: 'ALL' | 'NO' | 'YES'; label: string }[] = [{ value: 'ALL', label: 'Tất cả' }, { value: 'NO', label: 'Không điều hòa' }, { value: 'YES', label: 'Có điều hòa' }];
+
+/** Công tắc bật/tắt — dùng cho bộ lọc "Có điều hòa" (dễ nhìn hơn 3 nút bấm cạnh nhau). */
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <label className="inline-flex cursor-pointer items-center gap-2.5 select-none">
+      <button
+        type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)}
+        className={cx('relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors', checked ? 'bg-brand-600' : 'bg-stone-300')}
+      >
+        <span className={cx('inline-block size-4 transform rounded-full bg-white shadow transition-transform', checked ? 'translate-x-6' : 'translate-x-1')} />
+      </button>
+      <span className="text-sm font-medium text-stone-700">{label}</span>
+    </label>
+  );
+}
 
 export default function FacilityDetail() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +50,7 @@ export default function FacilityDetail() {
   const [period, setPeriod] = useState<RentalPeriod>('MONTH');
   const [periods, setPeriods] = useState(3);
   const [checkInShift, setCheckInShift] = useState<CheckInShift>('UNKNOWN');
-  const [acFilter, setAcFilter] = useState<'ALL' | 'NO' | 'YES'>('ALL');
+  const [acOnly, setAcOnly] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
@@ -73,8 +87,8 @@ export default function FacilityDetail() {
 
   const { facility: f, unitTypes: types, policy } = detail;
   // Có/không điều hòa là một biến thể loại kho riêng (giá gốc bằng nhau, biến thể có điều hòa cộng
-  // thêm phụ phí điều hòa của chính sách giá) — bộ lọc này chỉ để khách dễ so sánh trong danh sách.
-  const visibleTypes = types.filter((t) => acFilter === 'ALL' || (acFilter === 'YES') === t.features.climateControlled);
+  // thêm phụ phí điều hòa của chính sách giá) — công tắc chỉ để khách dễ so sánh trong danh sách.
+  const visibleTypes = types.filter((t) => t.features.climateControlled === acOnly);
   const ut = types.find((t) => t._id === typeId);
   const q = ut?.quote;
   const discountPct = q && q.discountAmount ? Math.round((q.discountAmount / (q.rate + q.surchargeAmount)) * 100) : 0;
@@ -122,55 +136,12 @@ export default function FacilityDetail() {
         <div className="flex flex-wrap gap-2">{f.amenities.map((a) => <Badge key={a}>{a}</Badge>)}</div>
       </div>
 
-      <Card className="mt-6 p-5">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Ngày bắt đầu">
-            <input type="date" className={inputCls} min={todayISO().slice(0, 10)} max={addDays(todayISO(), 60).slice(0, 10)} value={start} onChange={(e) => setStart(e.target.value)} />
-          </Field>
-          <Field label="Chu kỳ thuê">
-            <div className="grid grid-cols-3 gap-2">
-              {PERIODS.map((p) => (
-                <button key={p} type="button" onClick={() => setPeriod(p)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', period === p ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{RENTAL_PERIOD[p]}</button>
-              ))}
-            </div>
-          </Field>
-          <Field label="Số chu kỳ">
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 3, 6, 12].map((m) => (
-                <button key={m} type="button" onClick={() => setPeriods(m)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', periods === m ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{periodLabel(period, m)}</button>
-              ))}
-            </div>
-            {/* Tự nhập ngày/tháng tuỳ ý thay vì chỉ chọn trong 4 mốc dựng sẵn. */}
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                type="number" min={1} max={365} value={periods}
-                onChange={(e) => setPeriods(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
-                className={cx(inputCls, 'w-24')}
-              />
-              <span className="text-xs text-stone-500">{PERIOD_UNIT[period]} — tự nhập số bất kỳ</span>
-            </div>
-          </Field>
-        </div>
-        <div className="mt-4 border-t border-dashed border-stone-200 pt-4">
-          <Field label="Ca giờ dự kiến đến nhận kho" hint="Giúp chi nhánh xếp đúng nhân viên trực ca đón bạn — chọn 'Chưa rõ giờ' nếu chưa chắc lịch.">
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-              {CHECK_IN_SHIFTS.map((s) => (
-                <button key={s.value} type="button" onClick={() => setCheckInShift(s.value)} className={cx('rounded-lg py-2 text-xs font-medium ring-1 ring-inset', checkInShift === s.value ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{s.label}</button>
-              ))}
-            </div>
-          </Field>
-        </div>
-      </Card>
-
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Loại kho" description={`Giá tính theo ${periodLabel(period, periods)}, bắt đầu ${fmtDate(`${start}T00:00:00.000Z`)}`} />
-            <div className="flex flex-wrap gap-2 px-5 pb-3">
-              {AC_FILTERS.map((o) => (
-                <button key={o.value} type="button" onClick={() => setAcFilter(o.value)} className={cx('rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset', acFilter === o.value ? 'bg-brand-600 text-white ring-brand-600' : 'ring-stone-300 text-stone-600 hover:bg-stone-50')}>{o.label}</button>
-              ))}
-            </div>
+            <CardHeader title="Loại kho" description={`Giá tính theo ${periodLabel(period, periods)}, bắt đầu ${fmtDate(`${start}T00:00:00.000Z`)}`}
+              actions={<Switch checked={acOnly} onChange={setAcOnly} label={acOnly ? 'Có điều hòa' : 'Không điều hòa'} />}
+            />
             <ul className="divide-y divide-stone-100">
               {visibleTypes.length === 0 && <li className="px-5 py-6 text-sm text-stone-500">Không có loại kho phù hợp bộ lọc.</li>}
               {visibleTypes.map((t) => {
@@ -217,6 +188,45 @@ export default function FacilityDetail() {
         </div>
 
         <div className="lg:sticky lg:top-24 lg:self-start space-y-4">
+          <Card className="p-5">
+            <h2 className="font-semibold">Thông tin đặt kho</h2>
+            <div className="mt-4 grid gap-4">
+              <Field label="Ngày bắt đầu">
+                <input type="date" className={inputCls} min={todayISO().slice(0, 10)} max={addDays(todayISO(), 60).slice(0, 10)} value={start} onChange={(e) => setStart(e.target.value)} />
+              </Field>
+              <Field label="Chu kỳ thuê">
+                <div className="grid grid-cols-3 gap-2">
+                  {PERIODS.map((p) => (
+                    <button key={p} type="button" onClick={() => setPeriod(p)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', period === p ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{RENTAL_PERIOD[p]}</button>
+                  ))}
+                </div>
+              </Field>
+              <Field label="Số chu kỳ">
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 3, 6, 12].map((m) => (
+                    <button key={m} type="button" onClick={() => setPeriods(m)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', periods === m ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{m}</button>
+                  ))}
+                </div>
+                {/* Tự nhập ngày/tháng tuỳ ý thay vì chỉ chọn trong 4 mốc dựng sẵn. */}
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="number" min={1} max={365} value={periods}
+                    onChange={(e) => setPeriods(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
+                    className={cx(inputCls, 'w-20')}
+                  />
+                  <span className="text-xs text-stone-500">{PERIOD_UNIT[period]} — tự nhập số bất kỳ</span>
+                </div>
+              </Field>
+              <Field label="Ca giờ dự kiến đến nhận kho" hint="Giúp chi nhánh xếp đúng nhân viên trực ca đón bạn — chọn 'Chưa rõ giờ' nếu chưa chắc lịch.">
+                <div className="grid grid-cols-2 gap-2">
+                  {CHECK_IN_SHIFTS.map((s) => (
+                    <button key={s.value} type="button" onClick={() => setCheckInShift(s.value)} className={cx('rounded-lg py-2 text-xs font-medium ring-1 ring-inset', checkInShift === s.value ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{s.label}</button>
+                  ))}
+                </div>
+              </Field>
+            </div>
+          </Card>
+
           <Card className="p-5">
             <h2 className="flex items-center gap-2 font-semibold"><ShoppingCart className="size-4" />Giỏ đặt kho {cart.length > 0 && `(${cart.length})`}</h2>
             {cart.length === 0 ? (

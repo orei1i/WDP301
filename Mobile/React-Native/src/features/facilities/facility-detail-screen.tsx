@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
@@ -22,12 +22,10 @@ interface Detail {
   policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods'>;
 }
 
-const PERIODS: { value: '1' | '3' | '6' | '12'; label: string }[] = [
-  { value: '1', label: '1' }, { value: '3', label: '3' }, { value: '6', label: '6' }, { value: '12', label: '12' },
-];
 const RENTAL_PERIODS: { value: RentalPeriod; label: string }[] = (['DAY', 'WEEK', 'MONTH'] as const).map((p) => ({ value: p, label: RENTAL_PERIOD[p] }));
-const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const].map((s) => ({ value: s, label: CHECK_IN_SHIFT[s].label }));
-const AC_FILTERS: { value: 'ALL' | 'NO' | 'YES'; label: string }[] = [{ value: 'ALL', label: 'Tất cả' }, { value: 'NO', label: 'Không AC' }, { value: 'YES', label: 'Có AC' }];
+// Nhãn ngắn trên chip ("Ca 1"), thời gian đầy đủ chỉ hiện ở dòng chú thích bên dưới khi đã chọn — đỡ rối mắt.
+const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const]
+  .map((s) => ({ value: s, label: s === 'UNKNOWN' ? 'Chưa rõ' : `Ca ${s.slice(-1)}` }));
 
 /** Bảng tóm tắt giá — tách hàm để không phải nhồi logic điều kiện vào JSX. */
 function priceItems(q: PriceQuote, typeName: string, periods: number): [string, ReactNode][] {
@@ -49,7 +47,7 @@ export default function FacilityDetailScreen() {
   const [period, setPeriod] = useState<RentalPeriod>('MONTH');
   const [periods, setPeriods] = useState('3');
   const [checkInShift, setCheckInShift] = useState<CheckInShift>('UNKNOWN');
-  const [acFilter, setAcFilter] = useState<'ALL' | 'NO' | 'YES'>('ALL');
+  const [acOnly, setAcOnly] = useState(false);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
@@ -109,10 +107,11 @@ export default function FacilityDetailScreen() {
 
   const { facility: f, unitTypes: types } = detail;
   // Có/không điều hòa là một biến thể loại kho riêng (giá gốc như nhau, biến thể có điều hòa cộng
-  // thêm phụ phí điều hòa của chính sách giá) — bộ lọc này chỉ để khách dễ so sánh trong danh sách.
-  const visibleTypes = types.filter((t) => acFilter === 'ALL' || (acFilter === 'YES') === t.features.climateControlled);
+  // thêm phụ phí điều hòa của chính sách giá) — công tắc chỉ để khách dễ so sánh trong danh sách.
+  const visibleTypes = types.filter((t) => t.features.climateControlled === acOnly);
   const ut = types.find((t) => t._id === typeId);
   const periodsNum = Math.max(1, Math.min(365, Number(periods) || 1));
+  const step = (delta: number) => setPeriods(String(Math.max(1, Math.min(365, (Number(periods) || 1) + delta))));
   const canBook = !!ut && !!unitId && ut.availability.available > 0 && agreeTerms && agreePrivacy;
 
   return (
@@ -121,31 +120,38 @@ export default function FacilityDetailScreen() {
 
       <Card>
         <DateStepper label="Ngày bắt đầu" value={start} onChange={setStart} min={todayISO()} max={addDays(todayISO(), 60)} presets={[0, 3, 7, 14]} />
-        <View style={{ marginTop: S.md }}>
-          <Muted>Chu kỳ thuê</Muted>
-          <View style={{ marginTop: S.sm }}><Chips options={RENTAL_PERIODS} value={period} onChange={setPeriod} columns={3} /></View>
+
+        <View style={{ marginTop: S.md, flexDirection: 'row', gap: S.md }}>
+          <View style={{ flex: 1 }}>
+            <Muted>Chu kỳ thuê</Muted>
+            <View style={{ marginTop: S.sm }}><Chips options={RENTAL_PERIODS} value={period} onChange={setPeriod} columns={3} /></View>
+          </View>
         </View>
+
         <View style={{ marginTop: S.md }}>
           <Muted>Số chu kỳ ({PERIOD_UNIT[period]})</Muted>
-          <View style={{ marginTop: S.sm }}><Chips options={PERIODS} value={periods} onChange={setPeriods} columns={4} /></View>
-          <Input
-            style={{ marginTop: S.sm, width: 100 }}
-            keyboardType="number-pad"
-            value={periods}
-            onChangeText={setPeriods}
-            placeholder="Tự nhập số"
-          />
+          <View style={{ marginTop: S.sm, flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+            <Pressable onPress={() => step(-1)} style={st.stepBtn} hitSlop={8}><Ionicons name="remove" size={18} color={C.ink} /></Pressable>
+            <Input style={st.stepInput} keyboardType="number-pad" value={periods} onChangeText={setPeriods} />
+            <Pressable onPress={() => step(1)} style={st.stepBtn} hitSlop={8}><Ionicons name="add" size={18} color={C.ink} /></Pressable>
+            <Muted>{PERIOD_UNIT[period]} — chạm số để tự nhập</Muted>
+          </View>
         </View>
+
         <View style={{ marginTop: S.md }}>
           <Muted>Ca giờ dự kiến đến nhận kho</Muted>
-          <View style={{ marginTop: S.sm }}><Chips options={CHECK_IN_SHIFTS} value={checkInShift} onChange={setCheckInShift} columns={2} /></View>
+          <View style={{ marginTop: S.sm }}><Chips options={CHECK_IN_SHIFTS} value={checkInShift} onChange={setCheckInShift} columns={5} /></View>
+          {checkInShift !== 'UNKNOWN' && <Muted style={{ marginTop: 4 } as never}>{CHECK_IN_SHIFT[checkInShift].label} — giúp chi nhánh xếp đúng ca trực đón bạn</Muted>}
         </View>
       </Card>
 
       <View style={{ marginTop: S.lg, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text style={[st.section, { marginTop: 0 }]}>Loại kho & chỗ trống</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.xs }}>
+          <Muted>Có điều hòa</Muted>
+          <Switch value={acOnly} onValueChange={setAcOnly} trackColor={{ false: C.line, true: C.brand600 }} thumbColor={C.card} />
+        </View>
       </View>
-      <View style={{ marginBottom: S.sm }}><Chips options={AC_FILTERS} value={acFilter} onChange={setAcFilter} columns={3} /></View>
       {visibleTypes.length === 0 && <Muted>Không có loại kho phù hợp bộ lọc.</Muted>}
       <View style={{ gap: S.sm }}>
         {visibleTypes.map((t) => {
@@ -228,6 +234,8 @@ export default function FacilityDetailScreen() {
 
 const st = StyleSheet.create({
   section: { fontSize: 12, fontWeight: '700', color: C.faint, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: S.lg, marginBottom: S.sm },
+  stepBtn: { width: 36, height: 36, borderRadius: 10, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
+  stepInput: { width: 56, textAlign: 'center', paddingHorizontal: 0 },
   rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: S.md },
   typeCard: { borderWidth: 1.5 },
   typeCardSelected: { borderColor: C.brand600, backgroundColor: C.brand50 },
