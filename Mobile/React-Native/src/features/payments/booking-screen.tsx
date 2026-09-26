@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
-import { PAYMENT_METHOD, RESERVATION_STATUS, fmtDate, minutesLeft, vnd } from '@ssm/shared';
+import { PAYMENT_METHOD, RESERVATION_STATUS, fmtDate, minutesLeft, periodLabel, vnd } from '@ssm/shared';
 import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
 import { Button, Card, Chips, EmptyState, KV, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
@@ -44,7 +44,7 @@ export default function BookingScreen() {
           ['Chi nhánh', facilityName(db, r.facilityId)],
           ['Loại kho', typeName(db, r.unitTypeId)],
           ['Ngày nhận', fmtDate(r.startDate)],
-          ['Thời hạn', `${r.durationMonths} tháng (đến ${fmtDate(r.endDate)})`],
+          ['Thời hạn', `${periodLabel(r.quote.rentalPeriod, r.periods)} (đến ${fmtDate(r.endDate)})`],
           ['Tiền thuê / tháng', vnd(r.quote.firstPeriodRent)],
           ['Tiền cọc', vnd(r.quote.depositAmount)],
         ]} />

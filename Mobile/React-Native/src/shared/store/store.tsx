@@ -5,7 +5,7 @@ import {
 } from 'firebase/auth';
 import type {
   BusinessPolicy, DamageClaim, Facility, PaymentTransaction, RentalContract, Reservation,
-  StorageUnit, SupportTicket, UnitCategory, UnitType, User,
+  StorageUnit, SupportTicket, UnitCategory, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
 import { api, ApiError } from '../api/client';
@@ -28,12 +28,13 @@ export interface DB {
   payments: PaymentTransaction[];
   tickets: SupportTicket[];
   claims: DamageClaim[];
+  swapRequests: UnitSwapRequest[];
   policies: BusinessPolicy[];
 }
 
 const EMPTY_DB: DB = {
   users: [], facilities: [], unitTypes: [], units: [], reservations: [],
-  contracts: [], payments: [], tickets: [], claims: [], policies: [],
+  contracts: [], payments: [], tickets: [], claims: [], swapRequests: [], policies: [],
 };
 
 export interface PublicFacility extends Facility {

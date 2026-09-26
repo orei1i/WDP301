@@ -3,7 +3,8 @@ import { StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
-  ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, PAYMENT_METHOD, addDays, addMonths, fmtDate, todayISO, vnd,
+  ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
+  addDays, addPeriods, fmtDate, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, DateStepper, EmptyState, KV, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
@@ -11,7 +12,7 @@ import { C, S } from '../../shared/ui/theme';
 
 const METHODS: { value: PaymentMethod; label: string }[] = (['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'] as PaymentMethod[])
   .map((v) => ({ value: v, label: PAYMENT_METHOD[v] }));
-const MONTHS: { value: '1' | '3' | '6' | '12'; label: string }[] = [
+const PERIODS: { value: '1' | '3' | '6' | '12'; label: string }[] = [
   { value: '1', label: '1 tháng' }, { value: '3', label: '3 tháng' }, { value: '6', label: '6 tháng' }, { value: '12', label: '12 tháng' },
 ];
 
@@ -21,7 +22,7 @@ export default function ContractScreen() {
   const router = useRouter();
   const [payMethod, setPayMethod] = useState<PaymentMethod>('VNPAY');
   const [extendMethod, setExtendMethod] = useState<PaymentMethod>('VNPAY');
-  const [months, setMonths] = useState<'1' | '3' | '6' | '12'>('3');
+  const [periods, setPeriods] = useState<'1' | '3' | '6' | '12'>('3');
   const [moveOutDate, setMoveOutDate] = useState(addDays(todayISO(), 3));
 
   const c = byId(db.contracts, id);
@@ -37,7 +38,8 @@ export default function ContractScreen() {
     );
   }
 
-  const monthsNum = Number(months);
+  const periodsNum = Number(periods);
+  const openSwap = db.swapRequests.find((s) => s.contractId === c._id && (OPEN_SWAP_STATUSES as readonly string[]).includes(s.status));
 
   return (
     <Screen>
@@ -48,7 +50,7 @@ export default function ContractScreen() {
           ['Kho', `${unitLabel(db, c.unitId)} · ${typeName(db, c.unitTypeId)}`],
           ['Chi nhánh', facilityName(db, c.facilityId)],
           ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`],
-          ['Tiền thuê', `${vnd(c.billing.monthlyRate)}/tháng`],
+          ['Tiền thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
           ['Kỳ thanh toán tới', fmtDate(c.billing.nextBillingDate)],
           ['Phương thức truy cập', ACCESS_METHOD[c.access.method]],
           ['Tiền cọc', `${vnd(c.deposit.amount)} · ${DEPOSIT_STATUS[c.deposit.status].label}`],
@@ -74,18 +76,18 @@ export default function ContractScreen() {
       {c.status === 'ACTIVE' && (
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Gia hạn hợp đồng</Text>
-          <Chips options={MONTHS} value={months} onChange={setMonths} columns={4} />
+          <Chips options={PERIODS} value={periods} onChange={setPeriods} columns={4} />
           <Chips options={METHODS} value={extendMethod} onChange={setExtendMethod} columns={2} />
           <Text style={st.hint}>
-            Hạn mới: {fmtDate(addMonths(c.endDate, monthsNum))} · Số tiền: {vnd(c.billing.monthlyRate * monthsNum)}
+            Hạn mới: {fmtDate(addPeriods(c.endDate, c.billing.rentalPeriod, periodsNum))} · Số tiền: {vnd(c.billing.rate * periodsNum)}
           </Text>
           <Button
             title="Gia hạn & thanh toán"
             style={{ marginTop: S.md }}
             onPress={() => void run(
               'extendContract',
-              { contractId: c._id, months: monthsNum, method: extendMethod },
-              (v) => `Đã gia hạn ${monthsNum} tháng — thanh toán ${vnd(v)}`,
+              { contractId: c._id, periods: periodsNum, method: extendMethod },
+              (v) => `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — thanh toán ${vnd(v)}`,
             )}
           />
         </Card>
@@ -107,6 +109,31 @@ export default function ContractScreen() {
 
       {c.status === 'MOVE_OUT_PENDING' && (
         <Badge tone="violet">Hẹn trả kho {fmtDate(c.moveOut?.scheduledFor)}</Badge>
+      )}
+
+      {openSwap ? (
+        <Card style={{ marginTop: S.md }}>
+          <Text style={st.sectionTitle}>Yêu cầu đổi ô {openSwap.requestNumber}</Text>
+          <StatusBadge map={SWAP_REQUEST_STATUS} value={openSwap.status} />
+          {openSwap.status === 'APPROVED' && openSwap.method === 'SELF' && openSwap.moveDeadline && (
+            <Text style={st.hint}>Hạn tự chuyển: {fmtDate(openSwap.moveDeadline)}</Text>
+          )}
+          {openSwap.status === 'SUBMITTED' && (
+            <Button
+              title="Rút yêu cầu" variant="ghost" style={{ marginTop: S.sm }}
+              onPress={() => void run('cancelSwapRequest', { swapRequestId: openSwap._id }, 'Đã rút yêu cầu đổi ô')}
+            />
+          )}
+        </Card>
+      ) : c.status === 'ACTIVE' && (
+        <Card style={{ marginTop: S.md }}>
+          <Button
+            title="Yêu cầu đổi ô kho"
+            variant="secondary"
+            icon="swap-horizontal-outline"
+            onPress={() => router.push(`/contract/swap?contract=${c._id}`)}
+          />
+        </Card>
       )}
 
       {c.status !== 'CLOSED' && (

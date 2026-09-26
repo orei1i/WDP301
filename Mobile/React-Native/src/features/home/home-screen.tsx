@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CONTRACT_STATUS, RESERVATION_STATUS, daysBetween, fmtDate, relativeDay, todayISO, vnd } from '@ssm/shared';
+import { CONTRACT_STATUS, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, fmtDate, relativeDay, todayISO, vnd } from '@ssm/shared';
 import { facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, EmptyState, H1, KV, Muted, Skeleton, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
@@ -149,7 +149,7 @@ export default function HomeScreen() {
 
                 <View style={{ marginTop: S.lg }}>
                   <KV items={[
-                    ['Tiền thuê', `${vnd(c.billing.monthlyRate)}/tháng`],
+                    ['Tiền thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
                     ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)}${toBill <= SOON_DAYS ? ` · ${relativeDay(c.billing.nextBillingDate)}` : ''}`],
                     ['Hết hạn hợp đồng', `${fmtDate(c.endDate)}${toEnd <= 30 ? ` · ${relativeDay(c.endDate)}` : ''}`],
                     ['Công nợ', c.balance.outstanding > 0

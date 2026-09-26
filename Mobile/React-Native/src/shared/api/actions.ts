@@ -1,6 +1,6 @@
 import type {
-  ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, Reservation, StorageUnit,
-  SupportTicket, TicketCategory, TicketPriority, TicketStatus,
+  CheckInShift, ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, RentalPeriod, Reservation, StorageUnit,
+  SupportTicket, SwapMethod, TicketCategory, TicketPriority, TicketStatus, UnitSwapRequest,
 } from '@ssm/shared';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
 import { api } from './client';
@@ -16,12 +16,15 @@ const day = (iso: string) => iso.slice(0, 10);
 const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 
 export const actions = {
-  // ---- đặt kho
-  createReservation: async (p: { unitTypeId: string; startDate: string; months: number }) =>
+  // ---- đặt kho (bắt buộc chọn ô cụ thể trên sơ đồ + chu kỳ thuê tự chọn)
+  createReservation: async (p: { unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number; preferredCheckInShift: CheckInShift }) =>
     api.post<Reservation>('/reservations', {
       unitTypeId: p.unitTypeId,
+      unitId: p.unitId,
       startDate: day(p.startDate),
-      months: p.months,
+      rentalPeriod: p.rentalPeriod,
+      periods: p.periods,
+      preferredCheckInShift: p.preferredCheckInShift,
       source: 'MOBILE',
       consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION },
     }, { 'idempotency-key': newKey() }),
@@ -43,8 +46,8 @@ export const actions = {
   payBalance: async (p: { contractId: string; method: PaymentMethod }) =>
     (await api.post<{ amount: number }>(`/contracts/${p.contractId}/pay-balance`, { method: p.method })).amount,
 
-  extendContract: async (p: { contractId: string; months: number; method: PaymentMethod }) =>
-    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { months: p.months, method: p.method })).amount,
+  extendContract: async (p: { contractId: string; periods: number; method: PaymentMethod }) =>
+    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { periods: p.periods, method: p.method })).amount,
 
   requestMoveOut: async (p: { contractId: string; date: string }) => {
     await api.post(`/contracts/${p.contractId}/move-out`, { date: day(p.date) });
@@ -68,6 +71,14 @@ export const actions = {
 
   withdrawClaim: async (p: { claimId: string }) => {
     await api.post(`/claims/${p.claimId}/withdraw`, {});
+  },
+
+  // ---- yêu cầu đổi ô kho (A1b): gửi yêu cầu, chi nhánh xét duyệt
+  requestUnitSwap: async (p: { contractId: string; toUnitId: string; method: SwapMethod; reason: string }) =>
+    api.post<UnitSwapRequest>(`/contracts/${p.contractId}/swap-requests`, { toUnitId: p.toUnitId, method: p.method, reason: p.reason }),
+
+  cancelSwapRequest: async (p: { swapRequestId: string }) => {
+    await api.post(`/swap-requests/${p.swapRequestId}/cancel`);
   },
 };
 
