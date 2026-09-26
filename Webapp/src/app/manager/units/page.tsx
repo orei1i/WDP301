@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
-import type { PriceTier } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { UNIT_CATEGORY } from '@/shared/lib/labels';
 import { availability, unitRate } from '@/shared/lib/domain';
@@ -17,7 +16,7 @@ export default function ManagerUnits() {
   const fid = scope.facilityId;
   const types = db.unitTypes.filter((t) => t.facilityId === fid);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ unitTypeId: '', unitNumber: '', floor: 1, priceTier: 'STANDARD' as PriceTier });
+  const [form, setForm] = useState({ unitTypeId: '', unitNumber: '', floor: 1 });
 
   const rows = types.map((t) => {
     const us = db.units.filter((u) => u.unitTypeId === t._id && !u.isDeleted);
@@ -27,12 +26,12 @@ export default function ManagerUnits() {
 
   return (
     <>
-      <PageHeader title="Quản lý kho" description="Tồn kho theo loại và sơ đồ từng kho. Giá cơ sở do Quản lý vận hành thiết lập." actions={<><FacilityPicker scope={scope} /><Button onClick={() => { setForm({ unitTypeId: types[0]?._id ?? '', unitNumber: '', floor: 1, priceTier: 'STANDARD' }); setOpen(true); }}><Plus className="size-4" />Thêm kho</Button></>} />
+      <PageHeader title="Quản lý kho" description="Tồn kho theo loại và sơ đồ từng kho. Giá cơ sở do Quản lý vận hành thiết lập." actions={<><FacilityPicker scope={scope} /><Button onClick={() => { setForm({ unitTypeId: types[0]?._id ?? '', unitNumber: '', floor: 1 }); setOpen(true); }}><Plus className="size-4" />Thêm kho</Button></>} />
       <Card>
         <CardHeader title="Tồn kho theo loại" description="“Có thể bán” = trống trừ các lượt giữ chỗ chưa phân kho" />
         <Table rows={rows} rowKey={(r) => r.t._id} columns={[
           { key: 'n', header: 'Loại kho', cell: (r) => <div><p className="font-medium">{r.t.name}</p><p className="text-xs text-stone-500">{UNIT_CATEGORY[r.t.category]} · {r.t.dimensions.widthM}×{r.t.dimensions.depthM} m</p></div> },
-          { key: 'p', header: 'Giá / tháng', className: 'tabular-nums', cell: (r) => vnd(unitRate(r.t)) },
+          { key: 'p', header: 'Giá / tháng', className: 'tabular-nums', cell: (r) => vnd(unitRate(r.t, 'MONTH')) },
           { key: 'tot', header: 'Tổng', className: 'text-right tabular-nums', cell: (r) => r.total },
           { key: 'a', header: 'Trống', className: 'text-right tabular-nums text-emerald-700', cell: (r) => r.available },
           { key: 'rs', header: 'Đã giữ', className: 'text-right tabular-nums', cell: (r) => r.reserved },

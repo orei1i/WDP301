@@ -10,7 +10,7 @@ import { Card, EmptyState, PageHeader, StatusBadge, Table, Tabs } from '@/shared
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 import { TicketModal } from '@/features/tickets/ticket-thread';
 
-type Tab = 'mine' | 'open' | 'done';
+type Tab = 'mine' | 'overview' | 'done';
 
 export default function StaffTasks() {
   const { db, user } = useStore();
@@ -21,13 +21,13 @@ export default function StaffTasks() {
   const all = db.tickets.filter((t) => scope.facilityIds.includes(t.facilityId) && !t.isDeleted);
   const groups: Record<Tab, SupportTicket[]> = {
     mine: all.filter((t) => t.assigneeId === user._id && t.status !== 'CLOSED' && t.status !== 'RESOLVED'),
-    open: all.filter((t) => t.status === 'OPEN'),
+    overview: all,
     done: all.filter((t) => t.status === 'RESOLVED' || t.status === 'CLOSED'),
   };
   return (
     <>
       <PageHeader title="Công việc của tôi" actions={<FacilityPicker scope={scope} />} />
-      <Tabs tabs={[{ key: 'mine', label: 'Được giao cho tôi', count: groups.mine.length }, { key: 'open', label: 'Chưa giao', count: groups.open.length }, { key: 'done', label: 'Đã xong', count: groups.done.length }]} value={tab} onChange={setTab} />
+      <Tabs tabs={[{ key: 'mine', label: 'Được giao cho tôi', count: groups.mine.length }, { key: 'overview', label: 'Tổng quan', count: groups.overview.length }, { key: 'done', label: 'Đã xong', count: groups.done.length }]} value={tab} onChange={setTab} />
       <Card className="mt-4">
         <Table rows={groups[tab]} rowKey={(t) => t._id} onRowClick={setView} empty={<EmptyState title="Không có mục nào" />} columns={[
           { key: 's', header: 'Nội dung', cell: (t) => <div><p className="font-medium">{t.subject}</p><p className="text-xs text-stone-500">{TICKET_KIND[t.kind]} · {TICKET_CATEGORY[t.category]} · kho {unitLabel(db, t.unitId)}</p></div> },

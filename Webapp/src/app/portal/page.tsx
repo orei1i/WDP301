@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { CalendarCheck, CreditCard, QrCode, TriangleAlert, Warehouse } from 'lucide-react';
 import { useStore } from '@/shared/store/store';
+import { PERIOD_UNIT } from '@ssm/shared';
 import { CONTRACT_STATUS, RESERVATION_STATUS } from '@/shared/lib/labels';
 import { facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { fmtDate, relativeDay, vnd } from '@/shared/lib/format';
@@ -32,7 +33,7 @@ export default function PortalHome() {
         <Stat label="Kho đang thuê" value={contracts.length} icon={<Warehouse className="size-4" />} />
         <Stat label="Đặt chỗ sắp tới" value={upcoming.length} icon={<CalendarCheck className="size-4" />} tone="blue" />
         <Stat label="Công nợ" value={vnd(debt)} icon={<CreditCard className="size-4" />} tone={debt ? 'amber' : 'green'} />
-        <Stat label="Kỳ thanh toán tới" value={nextBill ? fmtDate(nextBill.billing.nextBillingDate) : '—'} sub={nextBill ? vnd(nextBill.billing.monthlyRate) : undefined} tone="violet" icon={<CreditCard className="size-4" />} />
+        <Stat label="Kỳ thanh toán tới" value={nextBill ? fmtDate(nextBill.billing.nextBillingDate) : '—'} sub={nextBill ? vnd(nextBill.billing.rate) : undefined} tone="violet" icon={<CreditCard className="size-4" />} />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
@@ -65,7 +66,7 @@ export default function PortalHome() {
                   <span className="grid size-10 place-items-center rounded-lg bg-ink text-xs font-semibold text-white">{unitLabel(db, c.unitId)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{typeName(db, c.unitTypeId)} · {facilityName(db, c.facilityId)}</p>
-                    <p className="text-xs text-stone-500">Hết hạn {fmtDate(c.endDate)} · {vnd(c.billing.monthlyRate)}/tháng</p>
+                    <p className="text-xs text-stone-500">Hết hạn {fmtDate(c.endDate)} · {vnd(c.billing.rate)}/{PERIOD_UNIT[c.billing.rentalPeriod]}</p>
                   </div>
                   <StatusBadge map={CONTRACT_STATUS} value={c.status} />
                 </li>

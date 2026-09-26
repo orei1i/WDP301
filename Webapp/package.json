@@ -12,6 +12,7 @@
   "dependencies": {
     "@ssm/shared": "*",
     "firebase": "^11.0.0",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.460.0",
     "next": "^16.3.4",
     "react": "19.1.0",

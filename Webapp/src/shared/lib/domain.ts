@@ -1,4 +1,4 @@
-import type { BusinessPolicy, Facility, PriceQuote, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
+import type { BusinessPolicy, Facility, PriceQuote, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
@@ -28,39 +28,40 @@ export function effectivePolicy(db: DB, facilityId: string): BusinessPolicy {
   return own ?? db.policies.find((p) => p.scope === 'GLOBAL' && p.isActive)!;
 }
 
-export function unitRate(ut: UnitType, u?: Pick<StorageUnit, 'priceTier' | 'monthlyRateOverride'>) {
-  if (u?.monthlyRateOverride) return u.monthlyRateOverride;
-  return Math.round((ut.pricing.baseMonthlyRate * ut.pricing.tierMultipliers[u?.priceTier ?? 'STANDARD']) / 1000) * 1000;
+/** Giá một chu kỳ của loại kho, theo chu kỳ KHÁCH CHỌN (không cố định theo loại kho). */
+export function unitRate(ut: UnitType, period: RentalPeriod) {
+  return ut.rates[period];
 }
 
-export function quote(db: DB, ut: UnitType, months: number): PriceQuote & { discountPct: number; months: number } {
+/** `period`/`periods` = chu kỳ và số chu kỳ khách chọn lúc đặt. Cùng công thức với BE để báo giá khớp. */
+export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: number): PriceQuote & { discountPct: number; periods: number } {
   const policy = effectivePolicy(db, ut.facilityId);
-  const monthlyRate = unitRate(ut);
+  const rate = unitRate(ut, period);
   const surcharge = policy.surcharges
     .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || ut.features.climateControlled))
-    .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((monthlyRate * s.value) / 100) : s.value), 0);
-  const eligible = policy.discounts.filter((d) => months >= d.minMonths).sort((a, b) => b.minMonths - a.minMonths)[0];
-  const gross = monthlyRate + surcharge;
+    .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((rate * s.value) / 100) : s.value), 0);
+  const eligible = policy.discounts.filter((d) => periods >= d.minPeriods).sort((a, b) => b.minPeriods - a.minPeriods)[0];
+  const gross = rate + surcharge;
   const discountAmount = eligible ? (eligible.kind === 'PERCENT' ? Math.round((gross * eligible.value) / 100) : eligible.value) : 0;
   const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value : Math.round(gross * policy.deposit.value));
   return {
-    currency: 'VND', priceTier: 'STANDARD', monthlyRate, depositAmount, discountAmount, surchargeAmount: surcharge,
+    currency: 'VND', rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount: surcharge,
     appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(eligible ? [eligible.code] : [])],
     firstPeriodRent: gross - discountAmount, totalDueAtBooking: depositAmount,
     policyId: policy._id, policyVersion: policy.version,
-    discountPct: eligible?.kind === 'PERCENT' ? eligible.value : 0, months,
+    discountPct: eligible?.kind === 'PERCENT' ? eligible.value : 0, periods,
   };
 }
 
-const overlaps = (r: Reservation, start: string, end: string) => r.startDate < end && r.endDate > start;
-
-/** Mirrors the server capacity rule: free units minus un-allocated live holds that overlap the requested window. */
-export function availability(db: DB, facilityId: string, unitTypeId: string, start = todayISO(), months = 1) {
-  const end = addMonths(start, months);
+/**
+ * Mỗi ô kho là một vật lý duy nhất và khách bắt buộc chọn đúng ô đó trên sơ đồ lúc đặt — ô chuyển
+ * sang RESERVED ngay lúc đặt, nên "còn trống" chỉ đơn giản đếm theo `status` hiện tại (không cần
+ * tính chồng lấn theo khoảng ngày như thiết kế cũ). Cùng cách đơn giản hoá với BE/availability.ts.
+ */
+export function availability(db: DB, facilityId: string, unitTypeId: string) {
   const typeUnits = db.units.filter((u) => u.facilityId === facilityId && u.unitTypeId === unitTypeId && !u.isDeleted);
   const free = typeUnits.filter((u) => u.status === 'AVAILABLE').length;
-  const holds = db.reservations.filter((r) => r.facilityId === facilityId && r.unitTypeId === unitTypeId && (r.status === 'PENDING' || r.status === 'CONFIRMED') && overlaps(r, start, end)).length;
-  return { total: typeUnits.length, free, holds, available: Math.max(0, free - holds) };
+  return { total: typeUnits.length, free, available: free };
 }
 
 export function cancellationRefund(db: DB, r: Reservation, nowIso = new Date().toISOString()): { pct: number; amount: number } {
@@ -78,7 +79,7 @@ export function facilityStats(db: DB, facilityId: string) {
   const rentable = units.length - count('MAINTENANCE');
   const occupied = count('OCCUPIED') + count('PENDING_INSPECTION');
   const contracts = db.contracts.filter((c) => c.facilityId === facilityId && c.status !== 'CLOSED');
-  const mrr = contracts.reduce((s, c) => s + c.billing.monthlyRate, 0);
+  const mrr = contracts.reduce((s, c) => s + c.billing.rate, 0);
   const overdue = contracts.reduce((s, c) => s + c.balance.outstanding, 0);
   const area = units.reduce((s, u) => s + (byId(db.unitTypes, u.unitTypeId)?.areaM2 ?? 0), 0);
   const occArea = units.filter((u) => u.status === 'OCCUPIED' || u.status === 'PENDING_INSPECTION').reduce((s, u) => s + (byId(db.unitTypes, u.unitTypeId)?.areaM2 ?? 0), 0);

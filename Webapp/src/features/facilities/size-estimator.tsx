@@ -68,7 +68,6 @@ const ALL = ITEMS.flatMap((g) => g.items);
 export function SizeEstimator() {
   const { catalog } = useStore();
   const [qty, setQty] = useState<Record<string, number>>({});
-  const [moto, setMoto] = useState(0);
 
   const unitTypes = catalog?.unitTypes ?? [];
 
@@ -82,7 +81,7 @@ export function SizeEstimator() {
   const byCategory = useMemo(() => {
     const map = new Map<UnitCategory, { type: UnitType; from: number }>();
     for (const t of unitTypes) {
-      const rate = unitRate(t);
+      const rate = unitRate(t, 'MONTH');
       const cur = map.get(t.category);
       if (!cur || t.areaM2 < cur.type.areaM2 || (t.areaM2 === cur.type.areaM2 && rate < cur.from)) {
         map.set(t.category, { type: t, from: Math.min(rate, cur?.from ?? rate) });
@@ -92,18 +91,17 @@ export function SizeEstimator() {
   }, [unitTypes]);
 
   const storageTypes = useMemo(
-    () => [...byCategory.values()].filter((x) => x.type.category !== 'VEHICLE').sort((a, b) => a.type.areaM2 - b.type.areaM2),
+    () => [...byCategory.values()].sort((a, b) => a.type.areaM2 - b.type.areaM2),
     [byCategory],
   );
 
   const pick = storageTypes.find((x) => x.type.areaM2 >= areaNeeded) ?? null;
   const biggest = storageTypes[storageTypes.length - 1] ?? null;
   const overflow = areaNeeded > 0 && !pick && biggest ? Math.ceil(areaNeeded / biggest.type.areaM2) : 0;
-  const vehicle = byCategory.get('VEHICLE') ?? null;
 
   const bump = (id: string, d: number) => setQty((q) => ({ ...q, [id]: Math.max(0, Math.min(99, (q[id] ?? 0) + d)) }));
-  const reset = () => { setQty({}); setMoto(0); };
-  const chosenCount = ALL.reduce((n, it) => n + (qty[it.id] ?? 0), 0) + moto;
+  const reset = () => setQty({});
+  const chosenCount = ALL.reduce((n, it) => n + (qty[it.id] ?? 0), 0);
 
   return (
     <Card className="overflow-hidden">
@@ -140,22 +138,6 @@ export function SizeEstimator() {
             </div>
           ))}
 
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">Xe máy</p>
-            <div className={cx('mt-3 flex items-center gap-3 rounded-lg px-3 py-2 ring-1 transition sm:w-1/2', moto > 0 ? 'bg-brand-50 ring-brand-300' : 'ring-stone-200')}>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">Xe máy gửi dài hạn</p>
-                <p className="text-xs text-stone-500">Tính riêng, có chỗ dành cho xe</p>
-              </div>
-              <div className="flex items-center gap-1">
-                <button type="button" aria-label="Bớt xe máy" onClick={() => setMoto((m) => Math.max(0, m - 1))} disabled={moto === 0}
-                  className="grid size-7 place-items-center rounded-md ring-1 ring-stone-300 disabled:opacity-30"><Minus className="size-3.5" /></button>
-                <span className="w-6 text-center text-sm tabular-nums">{moto}</span>
-                <button type="button" aria-label="Thêm xe máy" onClick={() => setMoto((m) => Math.min(9, m + 1))}
-                  className="grid size-7 place-items-center rounded-md ring-1 ring-stone-300"><Plus className="size-3.5" /></button>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* ---- kết quả ---- */}
@@ -176,8 +158,7 @@ export function SizeEstimator() {
               <>
                 <p className="text-xs uppercase tracking-wider text-stone-400">Ước tính</p>
                 <p className="mt-1 text-sm text-stone-300">
-                  {volume > 0 && <>Tổng đồ khoảng <b className="text-white">{volume.toFixed(1)} m³</b> → cần sàn <b className="text-white">~{areaNeeded.toFixed(1)} m²</b></>}
-                  {volume === 0 && <>Chỉ gửi xe máy</>}
+                  Tổng đồ khoảng <b className="text-white">{volume.toFixed(1)} m³</b> → cần sàn <b className="text-white">~{areaNeeded.toFixed(1)} m²</b>
                 </p>
 
                 {pick && (
@@ -193,14 +174,6 @@ export function SizeEstimator() {
                   <div className="mt-4 rounded-lg bg-amber-400/15 p-4 text-sm ring-1 ring-amber-300/30">
                     <p className="font-medium text-amber-200">Vượt kho lớn nhất</p>
                     <p className="mt-1 text-stone-300">Cần khoảng <b className="text-white">{overflow} kho {biggest.type.name}</b>. Liên hệ chi nhánh để được xếp kho liền nhau.</p>
-                  </div>
-                )}
-
-                {vehicle && moto > 0 && (
-                  <div className="mt-3 rounded-lg bg-white/10 p-4">
-                    <p className="text-xs uppercase tracking-wider text-brand-200">Thêm</p>
-                    <p className="mt-1 font-semibold">{moto} × {vehicle.type.name}</p>
-                    <p className="mt-1 text-sm">từ <b>{vnd(vehicle.from * moto)}</b>/tháng</p>
                   </div>
                 )}
 

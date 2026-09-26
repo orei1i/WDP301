@@ -25,12 +25,12 @@ export default function Policies() {
     facilityId,
     patch: {
       gracePeriodDays: draft.grace, lockoutAfterDays: draft.lockout, reservationHoldMinutes: draft.hold,
-      deposit: { mode: 'MONTHS_OF_RENT', value: draft.depositMonths },
+      deposit: { mode: 'PERIODS_OF_RENT', value: draft.depositPeriods },
       lateFees: [{ afterDays: draft.grace, kind: 'PERCENT_OF_RENT', value: draft.latePct, recurringEveryDays: null }, { afterDays: draft.lockout, kind: 'FIXED', value: draft.lateFixed, recurringEveryDays: 30 }],
       cancellation: [{ minHoursBeforeStart: 72, depositRefundPct: draft.refund72 }, { minHoursBeforeStart: 24, depositRefundPct: draft.refund24 }, { minHoursBeforeStart: 0, depositRefundPct: 0 }],
       discounts: [
-        { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minMonths: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
-        { code: 'DAI_HAN_12', kind: 'PERCENT', value: draft.disc12, minMonths: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
+        { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
+        { code: 'DAI_HAN_12', kind: 'PERCENT', value: draft.disc12, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
       ],
     },
   }, (p) => `Đã phát hành chính sách v${p.version} — áp dụng cho đặt chỗ mới`);
@@ -62,7 +62,7 @@ export default function Policies() {
               <h4 className="mb-3 text-sm font-semibold">Đặt chỗ & tiền cọc</h4>
               <div className="grid gap-4 sm:grid-cols-3">
                 {num('hold', 'Thời gian giữ chỗ', 'Chờ thanh toán cọc', 'phút')}
-                {num('depositMonths', 'Tiền cọc', 'Tính theo số tháng tiền thuê', 'tháng')}
+                {num('depositPeriods', 'Tiền cọc', 'Tính theo số chu kỳ tiền thuê', 'chu kỳ')}
               </div>
             </section>
             <section>
@@ -110,10 +110,10 @@ function toDraft(p: BusinessPolicy) {
   const pctFee = p.lateFees.find((f) => f.kind === 'PERCENT_OF_RENT');
   const fixed = p.lateFees.find((f) => f.kind === 'FIXED');
   return {
-    hold: p.reservationHoldMinutes, depositMonths: p.deposit.value, grace: p.gracePeriodDays, lockout: p.lockoutAfterDays,
+    hold: p.reservationHoldMinutes, depositPeriods: p.deposit.value, grace: p.gracePeriodDays, lockout: p.lockoutAfterDays,
     latePct: pctFee?.value ?? 0, lateFixed: fixed?.value ?? 0,
     refund72: p.cancellation.find((c) => c.minHoursBeforeStart === 72)?.depositRefundPct ?? 100,
     refund24: p.cancellation.find((c) => c.minHoursBeforeStart === 24)?.depositRefundPct ?? 50,
-    disc6: p.discounts.find((d) => d.minMonths === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minMonths === 12)?.value ?? 0,
+    disc6: p.discounts.find((d) => d.minPeriods === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minPeriods === 12)?.value ?? 0,
   };
 }

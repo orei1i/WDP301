@@ -2,14 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { Plus, Search } from 'lucide-react';
-import type { Role, User, UserStatus } from '@ssm/shared';
+import type { CheckInShift, Role, User, UserStatus } from '@ssm/shared';
+import { STAFF_SHIFTS } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { ROLE, USER_STATUS } from '@/shared/lib/labels';
+import { CHECK_IN_SHIFT, ROLE, USER_STATUS } from '@/shared/lib/labels';
 import { facilityName } from '@/shared/lib/domain';
 import { fmtDateTime, initials } from '@/shared/lib/format';
 import { Badge, Button, Card, Field, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/shared/ui';
 
-type Form = { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: UserStatus };
+type Form = { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: UserStatus; shift: CheckInShift | null };
 const ROLES = Object.keys(ROLE) as Role[];
 
 export default function Users() {
@@ -20,14 +21,16 @@ export default function Users() {
   const facilities = db.facilities.filter((f) => !f.isDeleted);
 
   const rows = useMemo(() => db.users.filter((u) => !u.isDeleted && (role === 'ALL' || u.role === role) && (!q || `${u.fullName} ${u.email}`.toLowerCase().includes(q.toLowerCase()))), [db.users, role, q]);
-  const edit = (u: User) => setForm({ _id: u._id, fullName: u.fullName, email: u.email, role: u.role, facilityIds: [...u.facilityIds], status: u.status });
+  const edit = (u: User) => setForm({ _id: u._id, fullName: u.fullName, email: u.email, role: u.role, facilityIds: [...u.facilityIds], status: u.status, shift: u.shift ?? null });
   const scoped = form && (form.role === 'STAFF' || form.role === 'FACILITY_MANAGER');
   // Quản lý chi nhánh phụ trách đúng 1 kho → chọn một, không phải tick nhiều.
   const single = form?.role === 'FACILITY_MANAGER';
+  // Nhân viên chia theo ca cố định — hàng đợi nhận kho lọc theo ca để đúng người trực xử lý.
+  const needsShift = form?.role === 'STAFF';
 
   return (
     <>
-      <PageHeader title="Người dùng & phân quyền" description="Nhân viên kho và Quản lý chi nhánh chỉ truy cập dữ liệu thuộc chi nhánh được gán." actions={<Button onClick={() => setForm({ fullName: '', email: '', role: 'STAFF', facilityIds: [], status: 'PENDING_VERIFICATION' })}><Plus className="size-4" />Tạo tài khoản</Button>} />
+      <PageHeader title="Người dùng & phân quyền" description="Nhân viên kho và Quản lý chi nhánh chỉ truy cập dữ liệu thuộc chi nhánh được gán." actions={<Button onClick={() => setForm({ fullName: '', email: '', role: 'STAFF', facilityIds: [], status: 'PENDING_VERIFICATION', shift: 'SHIFT_1' })}><Plus className="size-4" />Tạo tài khoản</Button>} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Tabs tabs={[{ key: 'ALL' as const, label: 'Tất cả', count: db.users.length }, ...ROLES.map((r) => ({ key: r, label: ROLE[r].label, count: db.users.filter((u) => u.role === r).length }))]} value={role} onChange={setRole} />
         <div className="relative w-full sm:w-64">
@@ -46,7 +49,7 @@ export default function Users() {
       </Card>
 
       <Modal open={!!form} onClose={() => setForm(null)} title={form?._id ? 'Sửa tài khoản' : 'Tạo tài khoản'} description="Đổi vai trò, phạm vi chi nhánh hoặc trạng thái sẽ thu hồi mọi phiên đăng nhập hiện tại — người dùng phải đăng nhập lại."
-        footer={<Button onClick={() => form && void run('saveUser', form, (v) => (v.resetLink ? 'Đã tạo tài khoản — link đặt mật khẩu đã sao chép vào clipboard' : 'Đã lưu tài khoản'), (v) => { if (v.resetLink) void navigator.clipboard?.writeText(v.resetLink); setForm(null); })}>Lưu</Button>}>
+        footer={<Button disabled={needsShift && !form?.shift} onClick={() => form && void run('saveUser', form, (v) => (v.resetLink ? 'Đã tạo tài khoản — link đặt mật khẩu đã sao chép vào clipboard' : 'Đã lưu tài khoản'), (v) => { if (v.resetLink) void navigator.clipboard?.writeText(v.resetLink); setForm(null); })}>Lưu</Button>}>
         {form && (
           <div className="grid gap-4">
             {(() => {
@@ -57,9 +60,16 @@ export default function Users() {
             <Field label="Họ tên"><input className={inputCls} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} /></Field>
             <Field label="Email"><input className={inputCls} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Vai trò"><select className={inputCls} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role })}>{ROLES.map((r) => <option key={r} value={r}>{ROLE[r].label}</option>)}</select></Field>
+              <Field label="Vai trò"><select className={inputCls} value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Role, shift: e.target.value === 'STAFF' ? (form.shift ?? 'SHIFT_1') : null })}>{ROLES.map((r) => <option key={r} value={r}>{ROLE[r].label}</option>)}</select></Field>
               <Field label="Trạng thái"><select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as UserStatus })}>{Object.entries(USER_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></Field>
             </div>
+            {needsShift && (
+              <Field label="Ca làm việc" hint="Hàng đợi nhận kho ở quầy lọc theo đúng ca của nhân viên.">
+                <select className={inputCls} value={form.shift ?? ''} onChange={(e) => setForm({ ...form, shift: e.target.value as CheckInShift })}>
+                  {STAFF_SHIFTS.map((s) => <option key={s} value={s}>{CHECK_IN_SHIFT[s].label}</option>)}
+                </select>
+              </Field>
+            )}
             <Field label="Phạm vi chi nhánh" hint={scoped ? 'Bắt buộc ít nhất 1 chi nhánh cho vai trò này.' : 'Vai trò này không bị giới hạn theo chi nhánh.'}>
               <div className="grid gap-2 sm:grid-cols-2">
                 {facilities.map((f) => (

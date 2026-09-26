@@ -1,7 +1,7 @@
 import type { Role } from '@ssm/shared';
 import {
   Building2, CalendarCheck, ClipboardList, CreditCard, FileText, HandCoins, LayoutDashboard, LayoutGrid, LifeBuoy,
-  ListTodo, PackageOpen, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
+  ListTodo, PackageOpen, Repeat, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
 } from 'lucide-react';
 
 export type Area = 'portal' | 'staff' | 'manager' | 'ops' | 'admin';
@@ -26,6 +26,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/staff/check-in', label: 'Nhận kho (check-in)', icon: ScanLine },
       { href: '/staff/move-out', label: 'Trả kho & kiểm tra', icon: PackageOpen },
       { href: '/staff/units', label: 'Sơ đồ kho', icon: LayoutGrid },
+      { href: '/staff/swaps', label: 'Yêu cầu đổi ô', icon: Repeat },
       { href: '/staff/tasks', label: 'Công việc của tôi', icon: ListTodo },
     ],
   },

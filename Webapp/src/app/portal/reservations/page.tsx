@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { Reservation } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
+import { periodLabel } from '@ssm/shared';
 import { CANCELLATION_REASON, RESERVATION_STATUS } from '@/shared/lib/labels';
 import { cancellationRefund, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { fmtDate, vnd } from '@/shared/lib/format';
@@ -28,7 +29,7 @@ export default function MyReservations() {
         <Table rows={rows} rowKey={(r) => r._id} empty={<EmptyState title="Không có đặt chỗ" />} columns={[
           { key: 'code', header: 'Mã', cell: (r) => <span className="font-mono text-xs">{r.code}</span> },
           { key: 'what', header: 'Kho', cell: (r) => <div><p className="font-medium">{typeName(db, r.unitTypeId)}</p><p className="text-xs text-stone-500">{facilityName(db, r.facilityId)} · {unitLabel(db, r.unitId)}</p></div> },
-          { key: 'date', header: 'Ngày nhận', cell: (r) => <div><p>{fmtDate(r.startDate)}</p><p className="text-xs text-stone-500">{r.durationMonths} tháng</p></div> },
+          { key: 'date', header: 'Ngày nhận', cell: (r) => <div><p>{fmtDate(r.startDate)}</p><p className="text-xs text-stone-500">{periodLabel(r.quote.rentalPeriod, r.periods)}</p></div> },
           { key: 'deposit', header: 'Cọc', cell: (r) => vnd(r.quote.depositAmount), className: 'tabular-nums' },
           { key: 'status', header: 'Trạng thái', cell: (r) => <div><StatusBadge map={RESERVATION_STATUS} value={r.status} />{r.cancellation && <p className="mt-1 text-xs text-stone-500">{CANCELLATION_REASON[r.cancellation.reason]}</p>}</div> },
           { key: 'act', header: '', className: 'text-right', cell: (r) => (

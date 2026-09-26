@@ -12,7 +12,7 @@ import { vnd } from '@/shared/lib/format';
 import { Button, Card, Field, Skeleton, inputCls } from '@/shared/ui';
 import { SizeEstimator } from '@/features/facilities/size-estimator';
 
-const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL', 'VEHICLE'];
+const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL'];
 
 export default function Home() {
   const { catalog } = useStore();
@@ -26,7 +26,7 @@ export default function Home() {
   const sizes = useMemo(() => CATS.map((c) => {
     const types = unitTypes.filter((t) => t.category === c && facilities.some((f) => f._id === t.facilityId));
     const t = types[0];
-    return { c, t, from: Math.min(...types.map((x) => unitRate(x))) };
+    return { c, t, from: Math.min(...types.map((x) => unitRate(x, 'MONTH'))) };
   }), [unitTypes, facilities]);
 
   const totalUnits = facilities.reduce((n, f) => n + f.availability.reduce((m, a) => m + a.total, 0), 0);

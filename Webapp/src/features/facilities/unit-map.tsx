@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Lock } from 'lucide-react';
 import type { StorageUnit, UnitStatus } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { CONTRACT_STATUS, RESERVATION_STATUS, UNIT_STATUS } from '@/shared/lib/labels';
+import { ACCESS_METHOD, CONTRACT_STATUS, RESERVATION_STATUS, UNIT_STATUS } from '@/shared/lib/labels';
 import { byId, typeName, unitRate, userName } from '@/shared/lib/domain';
 import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
 import { Badge, Button, Field, KV, Modal, StatusBadge, TONE_DOT, cx, inputCls } from '@/shared/ui';
@@ -81,9 +81,10 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
             </div>
             <KV items={[
               // Cố ý không truyền `u`: báo giá cho khách tính theo loại kho, hiển thị ở đây phải khớp.
-              ['Giá niêm yết', `${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!))}/tháng`],
+              // Khách tự chọn chu kỳ lúc đặt nên hiện đủ cả 3 giá thay vì chỉ một mức cố định.
+              ['Giá theo chu kỳ', `${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'DAY'))}/ngày · ${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'WEEK'))}/tuần · ${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'MONTH'))}/tháng`],
               ['Đổi trạng thái lúc', fmtDateTime(u.statusChangedAt)],
-              ['Loại khóa', u.lock.type === 'SMART_LOCK' ? 'Khóa thông minh' : 'Ổ khóa cơ'],
+              ['Hình thức khoá', ACCESS_METHOD[byId(db.unitTypes, u.unitTypeId)!.accessMethod]],
               ['Ghi chú', u.statusReason ?? '—'],
             ]} />
             {contract && (

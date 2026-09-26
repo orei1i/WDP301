@@ -1,9 +1,9 @@
 import type {
   AccessMethod, AuditLog, BusinessPolicy, ContractStatus, DamageClaim, Facility, InspectionLog, PaymentMethod,
-  PaymentTransaction, RentalContract, Reservation, ReservationStatus, StorageUnit, SupportTicket, UnitCategory,
-  UnitStatus, UnitType, User,
+  PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, StorageUnit, SupportTicket,
+  UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { addDays, addMonths, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
+import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
   users: User[];
@@ -16,6 +16,7 @@ export interface DB {
   inspections: InspectionLog[];
   tickets: SupportTicket[];
   claims: DamageClaim[];
+  swapRequests: UnitSwapRequest[];
   policies: BusinessPolicy[];
   audit: AuditLog[];
 }
@@ -74,17 +75,17 @@ export function createSeed(): DB {
 
   const users: User[] = [
     user(DEMO_IDS.customer, 'Nguyễn Minh Anh', 'CUSTOMER', [], { customerProfile: { idType: 'CCCD', idNumberLast4: '4821', address: 'TP. Hồ Chí Minh' } }),
-    user(DEMO_IDS.staff, 'Đỗ Văn Tài', 'STAFF', ['f-q7']),
-    user('u-staff-q7b', 'Hồ Thị Lan', 'STAFF', ['f-q7']),
-    user('u-staff-td', 'Ngô Đức Minh', 'STAFF', ['f-td']),
-    user('u-staff-tb', 'Dương Thu Trang', 'STAFF', ['f-tb']),
+    user(DEMO_IDS.staff, 'Đỗ Văn Tài', 'STAFF', ['f-q7'], { shift: 'SHIFT_1' }),
+    user('u-staff-q7b', 'Hồ Thị Lan', 'STAFF', ['f-q7'], { shift: 'SHIFT_3' }),
+    user('u-staff-td', 'Ngô Đức Minh', 'STAFF', ['f-td'], { shift: 'SHIFT_2' }),
+    user('u-staff-tb', 'Dương Thu Trang', 'STAFF', ['f-tb'], { shift: 'SHIFT_1' }),
     user(DEMO_IDS.manager, 'Bùi Thanh Tùng', 'FACILITY_MANAGER', ['f-q7']),
     // Mỗi chi nhánh đúng một quản lý — user.model.ts chặn FACILITY_MANAGER có số chi nhánh khác 1.
     user('u-fm-td', 'Lý Mỹ Duyên', 'FACILITY_MANAGER', ['f-td']),
     user('u-fm-tb', 'Trần Quốc Bảo', 'FACILITY_MANAGER', ['f-tb']),
     user(DEMO_IDS.ops, 'Phan Hoàng Nam', 'OPS_MANAGER'),
     user(DEMO_IDS.admin, 'Trịnh Khánh Linh', 'ADMIN'),
-    user('u-staff-new', 'Vũ Gia Khang', 'STAFF', ['f-td'], { status: 'PENDING_VERIFICATION', lastLoginAt: null }),
+    user('u-staff-new', 'Vũ Gia Khang', 'STAFF', ['f-td'], { status: 'PENDING_VERIFICATION', lastLoginAt: null, shift: 'SHIFT_4' }),
   ];
   const pool: User[] = [];
   for (let i = 1; i <= 45; i++) {
@@ -115,7 +116,7 @@ export function createSeed(): DB {
 
   // ---------- policies ----------
   const policyBody = {
-    deposit: { mode: 'MONTHS_OF_RENT' as const, value: 1 },
+    deposit: { mode: 'PERIODS_OF_RENT' as const, value: 1 },
     reservationHoldMinutes: 30, allocationLeadDays: 3, noShowAfterHours: 24,
     gracePeriodDays: 5, lockoutAfterDays: 15,
     lateFees: [
@@ -127,11 +128,11 @@ export function createSeed(): DB {
       { minHoursBeforeStart: 24, depositRefundPct: 50 },
       { minHoursBeforeStart: 0, depositRefundPct: 0 },
     ],
-    minRentalMonths: 1, maxRentalMonths: 36,
-    surcharges: [{ code: 'CLIMATE', label: 'Kho điều hòa nhiệt độ', kind: 'PERCENT' as const, value: 10, categories: ['SMALL', 'MEDIUM'] as UnitCategory[] }],
+    minPeriods: 1, maxPeriods: 36,
+    surcharges: [{ code: 'CLIMATE', label: 'Kho điều hòa nhiệt độ', kind: 'PERCENT' as const, value: 10, categories: ['SMALL', 'MEDIUM', 'LARGE', 'XL'] as UnitCategory[] }],
     discounts: [
-      { code: 'DAI_HAN_6', kind: 'PERCENT' as const, value: 5, minMonths: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
-      { code: 'DAI_HAN_12', kind: 'PERCENT' as const, value: 10, minMonths: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
+      { code: 'DAI_HAN_6', kind: 'PERCENT' as const, value: 5, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
+      { code: 'DAI_HAN_12', kind: 'PERCENT' as const, value: 10, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
     ],
     waiverLimits: [{ role: 'FACILITY_MANAGER' as const, maxAmount: 500_000 }, { role: 'OPS_MANAGER' as const, maxAmount: 5_000_000 }],
   };
@@ -142,13 +143,20 @@ export function createSeed(): DB {
   ];
 
   // ---------- unit types ----------
+  // Khách tự chọn chu kỳ lúc đặt (ngày/tuần/tháng) — mỗi loại kho niêm yết sẵn cả 3 giá.
+  // access = hình thức khoá dùng chung cho mọi ô thuộc loại này.
+  // Từ cỡ S trở lên (không áp dụng cho locker), mỗi cỡ có 2 biến thể — thường / có điều hòa — cùng
+  // 3 giá gốc; biến thể "có điều hòa" đắt hơn nhờ phụ phí CLIMATE của chính sách giá (không phải giá gốc khác nhau).
   const TYPE_DEFS = [
-    { key: 'LK', code: 'LK-1x1', name: 'Tủ locker', category: 'LOCKER', dims: [1, 1, 1.2], rate: 390_000, count: 12, floors: [1], prefix: 'T', desc: 'Vừa vali, hồ sơ, đồ cá nhân. Phù hợp sinh viên.' },
-    { key: 'S', code: 'S-1.5x2', name: 'Phòng S', category: 'SMALL', dims: [1.5, 2, 2.4], rate: 990_000, count: 10, floors: [1, 2], prefix: 'S', desc: 'Tương đương đồ đạc một phòng ngủ nhỏ.' },
-    { key: 'M', code: 'M-2x3', name: 'Phòng M', category: 'MEDIUM', dims: [2, 3, 2.4], rate: 1_790_000, count: 8, floors: [1, 2], prefix: 'M', desc: 'Đồ đạc căn hộ 1–2 phòng ngủ, hàng tồn kho shop online.' },
-    { key: 'L', code: 'L-3x4', name: 'Phòng L', category: 'LARGE', dims: [3, 4, 2.8], rate: 3_200_000, count: 6, floors: [1], prefix: 'L', desc: 'Nội thất căn nhà 3 phòng ngủ, kho hàng doanh nghiệp nhỏ.' },
-    { key: 'XL', code: 'XL-4x6', name: 'Phòng XL (drive-up)', category: 'XL', dims: [4, 6, 3], rate: 5_600_000, count: 3, floors: [1], prefix: 'X', desc: 'Xe tải lùi sát cửa kho. Dành cho doanh nghiệp.' },
-    { key: 'XM', code: 'XM-1x2', name: 'Chỗ gửi xe máy', category: 'VEHICLE', dims: [1, 2, 1.5], rate: 450_000, count: 8, floors: [-1], prefix: 'B', desc: 'Gửi xe máy dài hạn, có che phủ và camera.' },
+    { key: 'LK', code: 'LK-1x1', name: 'Tủ locker', category: 'LOCKER', access: 'PIN', dims: [1, 1, 1.2], rates: { DAY: 25_000, WEEK: 140_000, MONTH: 390_000 }, count: 14, floors: [1], prefix: 'T', ac: false, minPeriods: 1, desc: 'Vừa vali, hồ sơ, đồ cá nhân. Phù hợp sinh viên. Mở bằng mật khẩu.' },
+    { key: 'S', code: 'S-1.5x2', name: 'Phòng S', category: 'SMALL', access: 'RFID_CARD', dims: [1.5, 2, 2.4], rates: { DAY: 60_000, WEEK: 350_000, MONTH: 990_000 }, count: 10, floors: [1, 2], prefix: 'S', ac: false, minPeriods: 1, desc: 'Tương đương đồ đạc một phòng ngủ nhỏ. Không điều hòa. Ra vào bằng thẻ khoá.' },
+    { key: 'S-AC', code: 'S-1.5x2-AC', name: 'Phòng S (có điều hòa)', category: 'SMALL', access: 'RFID_CARD', dims: [1.5, 2, 2.4], rates: { DAY: 60_000, WEEK: 350_000, MONTH: 990_000 }, count: 8, floors: [2, 3], prefix: 'SA', ac: true, minPeriods: 1, desc: 'Như phòng S, có điều hòa giữ nhiệt độ ổn định — phù hợp đồ dễ ẩm mốc. Phụ phí điều hòa theo chính sách giá.' },
+    { key: 'M', code: 'M-2x3', name: 'Phòng M', category: 'MEDIUM', access: 'PIN', dims: [2, 3, 2.4], rates: { DAY: 100_000, WEEK: 600_000, MONTH: 1_790_000 }, count: 8, floors: [1, 2], prefix: 'M', ac: false, minPeriods: 1, desc: 'Đồ đạc căn hộ 1–2 phòng ngủ, hàng tồn kho shop online. Không điều hòa. Mở bằng mật khẩu.' },
+    { key: 'M-AC', code: 'M-2x3-AC', name: 'Phòng M (có điều hòa)', category: 'MEDIUM', access: 'PIN', dims: [2, 3, 2.4], rates: { DAY: 100_000, WEEK: 600_000, MONTH: 1_790_000 }, count: 8, floors: [2, 3], prefix: 'MA', ac: true, minPeriods: 1, desc: 'Như phòng M, có điều hòa — phù hợp nội thất gỗ, thiết bị điện tử. Phụ phí điều hòa theo chính sách giá.' },
+    { key: 'L', code: 'L-3x4', name: 'Phòng L', category: 'LARGE', access: 'PHYSICAL_KEY', dims: [3, 4, 2.8], rates: { DAY: 180_000, WEEK: 1_050_000, MONTH: 3_200_000 }, count: 8, floors: [1, 2], prefix: 'L', ac: false, minPeriods: 1, desc: 'Nội thất căn nhà 3 phòng ngủ, kho hàng doanh nghiệp nhỏ. Không điều hòa. Nhận chìa khoá.' },
+    { key: 'L-AC', code: 'L-3x4-AC', name: 'Phòng L (có điều hòa)', category: 'LARGE', access: 'PHYSICAL_KEY', dims: [3, 4, 2.8], rates: { DAY: 180_000, WEEK: 1_050_000, MONTH: 3_200_000 }, count: 6, floors: [1, 2], prefix: 'LA', ac: true, minPeriods: 1, desc: 'Như phòng L, có điều hòa — phù hợp hàng hoá cần bảo quản mát. Phụ phí điều hòa theo chính sách giá.' },
+    { key: 'XL', code: 'XL-4x6', name: 'Phòng XL (drive-up)', category: 'XL', access: 'PHYSICAL_KEY', dims: [4, 6, 3], rates: { DAY: 320_000, WEEK: 1_850_000, MONTH: 5_600_000 }, count: 5, floors: [1], prefix: 'X', ac: false, minPeriods: 3, desc: 'Xe tải lùi sát cửa kho. Không điều hòa. Dành cho doanh nghiệp. Nhận chìa khoá.' },
+    { key: 'XL-AC', code: 'XL-4x6-AC', name: 'Phòng XL (có điều hòa)', category: 'XL', access: 'PHYSICAL_KEY', dims: [4, 6, 3], rates: { DAY: 320_000, WEEK: 1_850_000, MONTH: 5_600_000 }, count: 4, floors: [1], prefix: 'XA', ac: true, minPeriods: 3, desc: 'Như phòng XL, có điều hòa — phù hợp hàng hoá giá trị cao cần bảo quản mát. Phụ phí điều hòa theo chính sách giá.' },
   ] as const;
   const FAC_PRICE: Record<string, number> = { 'f-q7': 1, 'f-td': 0.9, 'f-tb': 1.05, 'f-bt': 1 };
   const OCC_TARGET: Record<string, number> = { 'f-q7': 0.62, 'f-td': 0.55, 'f-tb': 0.6 };
@@ -162,9 +170,14 @@ export function createSeed(): DB {
         ...base(`ut-${f._id.slice(2)}-${t.key}`, f.createdAt), ...alive,
         facilityId: f._id, code: t.code, name: t.name, category: t.category as UnitCategory, description: t.desc,
         dimensions: { widthM: w, depthM: d, heightM: h }, areaM2: Math.round(w * d * 100) / 100,
-        features: { climateControlled: t.key === 'S' || t.key === 'M', driveUp: t.key === 'XL' || t.key === 'L', indoor: t.key !== 'XM', powerOutlet: t.key === 'XL' },
-        pricing: { baseMonthlyRate: Math.round((t.rate * FAC_PRICE[f._id]) / 10_000) * 10_000, tierMultipliers: { ECONOMY: 0.9, STANDARD: 1, PREMIUM: 1.15 } },
-        depositOverride: null, minRentalMonths: t.key === 'XL' ? 3 : 1, imageUrls: [], isActive: true, inventoryVersion: 0,
+        features: { climateControlled: t.ac, indoor: true },
+        rates: {
+          DAY: Math.round((t.rates.DAY * FAC_PRICE[f._id]) / 1_000) * 1_000,
+          WEEK: Math.round((t.rates.WEEK * FAC_PRICE[f._id]) / 1_000) * 1_000,
+          MONTH: Math.round((t.rates.MONTH * FAC_PRICE[f._id]) / 1_000) * 1_000,
+        },
+        accessMethod: t.access,
+        depositOverride: null, minPeriods: t.minPeriods, imageUrls: [], isActive: true, inventoryVersion: 0,
       };
       unitTypes.push(ut);
       if (f.status !== 'ACTIVE') continue;
@@ -180,12 +193,10 @@ export function createSeed(): DB {
           ...base(`su-${f._id.slice(2)}-${t.prefix}${i + 1}`, f.createdAt), ...alive,
           facilityId: f._id, unitTypeId: ut._id,
           unitNumber: `${t.prefix}${floor < 0 ? 'B' : floor}-${String(i + 1).padStart(2, '0')}`,
-          location: { building: 'A', floor, zone: t.key === 'XM' ? 'Hầm' : `Dãy ${t.prefix}` },
+          location: { building: 'A', floor, zone: `Dãy ${t.prefix}` },
           status, statusChangedAt: addDays(T, -int(1, 60)),
           statusReason: status === 'MAINTENANCE' ? pick(['Thay bản lề cửa cuốn', 'Sơn lại sàn', 'Kiểm tra rò rỉ trần']) : null,
-          priceTier: 'STANDARD', monthlyRateOverride: null, // không phân hạng giá theo từng ô nữa
-          currentReservationId: null, currentContractId: null, overlockActive: false,
-          lock: { type: t.key === 'XL' || t.key === 'L' ? 'SMART_LOCK' : 'PADLOCK', deviceId: null }, notes: '',
+          currentReservationId: null, currentContractId: null, overlockActive: false, notes: '',
         });
       }
     }
@@ -205,14 +216,14 @@ export function createSeed(): DB {
   const contracts: RentalContract[] = [];
   const payments: PaymentTransaction[] = [];
 
-  const quoteFor = (ut: UnitType, months: number, priceTier: StorageUnit['priceTier'] = 'STANDARD') => {
-    const monthlyRate = Math.round((ut.pricing.baseMonthlyRate * ut.pricing.tierMultipliers[priceTier]) / 1000) * 1000;
-    const discountPct = months >= 12 ? 10 : months >= 6 ? 5 : 0;
-    const discountAmount = Math.round((monthlyRate * discountPct) / 100);
+  const quoteFor = (ut: UnitType, period: RentalPeriod, periods: number) => {
+    const rate = ut.rates[period];
+    const discountPct = periods >= 12 ? 10 : periods >= 6 ? 5 : 0;
+    const discountAmount = Math.round((rate * discountPct) / 100);
     return {
-      currency: 'VND' as const, priceTier, monthlyRate, depositAmount: monthlyRate, discountAmount, surchargeAmount: 0,
+      currency: 'VND' as const, rentalPeriod: period, rate, depositAmount: rate, discountAmount, surchargeAmount: 0,
       appliedRuleCodes: discountPct ? [discountPct === 10 ? 'DAI_HAN_12' : 'DAI_HAN_6'] : [],
-      firstPeriodRent: monthlyRate - discountAmount, totalDueAtBooking: monthlyRate,
+      firstPeriodRent: rate - discountAmount, totalDueAtBooking: rate,
       policyId: ut.facilityId === 'f-td' ? 'pol-td-1' : 'pol-g-3', policyVersion: ut.facilityId === 'f-td' ? 1 : 3,
     };
   };
@@ -239,19 +250,23 @@ export function createSeed(): DB {
     const isDemoLocker = u._id === 'su-q7-T3';
     const customer = isDemoM || isDemoLocker ? DEMO_IDS.customer : pool[poolIdx++ % pool.length]._id;
 
-    const term = pick([3, 6, 12]);
-    const start = addDays(T, -int(12, 420));
-    let end = addMonths(start, term);
+    // Khách tự chọn chu kỳ lúc đặt — demo M / demo locker cố định THÁNG cho dễ theo dõi khi test.
+    const period: RentalPeriod = isDemoM || isDemoLocker ? 'MONTH' : pick(['DAY', 'WEEK', 'MONTH'] as const);
+    const addP = (iso: string, n: number) => addPeriods(iso, period, n);
+    // Số chu kỳ + độ lùi ngày tạo hợp đồng tùy chu kỳ, để kho thuê theo ngày không sinh hàng trăm kỳ tiền thuê.
+    const term = period === 'MONTH' ? pick([3, 6, 12]) : period === 'WEEK' ? pick([2, 4, 8]) : pick([5, 10, 20]);
+    const backMax = period === 'MONTH' ? 420 : period === 'WEEK' ? 60 : 25;
+    const start = addDays(T, -int(12, backMax));
+    let end = addP(start, term);
     const renewals: RentalContract['renewals'] = [];
     while (end <= addDays(T, 4)) {
-      const next = addMonths(end, term);
-      renewals.push({ previousEndDate: end, newEndDate: next, months: term, paymentId: null, at: end });
+      const next = addP(end, term);
+      renewals.push({ previousEndDate: end, newEndDate: next, periods: term, paymentId: null, at: end });
       end = next;
     }
-    const q = quoteFor(ut, term, u.priceTier);
-    const billingDay = Math.min(28, new Date(start).getUTCDate());
-    let nextBilling = new Date(Date.UTC(new Date(T).getUTCFullYear(), new Date(T).getUTCMonth(), billingDay)).toISOString();
-    if (nextBilling <= T) nextBilling = addMonths(nextBilling, 1);
+    const q = quoteFor(ut, period, term);
+    let nextBilling = start;
+    while (nextBilling <= T) nextBilling = addP(nextBilling, 1);
 
     let status: ContractStatus = 'ACTIVE';
     if (isDemoLocker) status = 'DELINQUENT';
@@ -261,14 +276,15 @@ export function createSeed(): DB {
 
     const overdueDays = status === 'LOCKED_OUT' ? int(16, 24) : status === 'DELINQUENT' ? int(6, 13) : 0;
     const paidThrough = overdueDays ? addDays(T, -overdueDays - 1) : addDays(nextBilling, -1);
-    const lateFee = overdueDays ? Math.round(q.monthlyRate * 0.05) + (overdueDays >= 15 ? 200_000 : 0) : 0;
+    const lateFee = overdueDays ? Math.round(q.rate * 0.05) + (overdueDays >= 15 ? 200_000 : 0) : 0;
     const cid = nid('ctr');
     const rid = nid('rsv');
-    const access: AccessMethod = u.lock.type === 'SMART_LOCK' ? 'PIN' : pick<AccessMethod>(['PHYSICAL_KEY', 'RFID_CARD']);
+    const access: AccessMethod = ut.accessMethod;
 
     reservations.push({
       ...base(rid, addDays(start, -int(2, 10))), code: makeCode('RSV'), facilityId: u.facilityId, customerId: customer, unitTypeId: ut._id,
-      unitId: u._id, status: 'CHECKED_IN', startDate: start, durationMonths: term, endDate: addMonths(start, term), quote: q,
+      unitId: u._id, status: 'CHECKED_IN', startDate: start, periods: term, endDate: addP(start, term), quote: q,
+      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const),
       holdExpiresAt: null, depositPaymentId: null, allocation: { allocatedAt: addDays(start, -1), allocatedBy: null },
       checkIn: { qrTokenHash: null, qrExpiresAt: null, checkedInAt: start, checkedInBy: null }, cancellation: null,
       contractId: cid, source: pick(['WEB', 'MOBILE', 'WALK_IN'] as const), idempotencyKey: null,
@@ -278,9 +294,9 @@ export function createSeed(): DB {
     const deposit = pay({ facilityId: u.facilityId, customerId: customer, contractId: cid, reservationId: rid, type: 'DEPOSIT', amount: q.depositAmount, status: 'SUCCEEDED', paidAt: addDays(start, -2) });
     payments.push(deposit);
     for (let m = 0; ; m++) {
-      const ps = addMonths(start, m);
+      const ps = addP(start, m);
       if (ps > T) break;
-      const pe = addDays(addMonths(start, m + 1), -1);
+      const pe = addDays(addP(start, m + 1), -1);
       const unpaid = overdueDays > 0 && ps > paidThrough;
       payments.push(pay({
         facilityId: u.facilityId, customerId: customer, contractId: cid, type: m === 0 ? 'RENT' : renewals.length && m % term === 0 ? 'RENEWAL' : 'RENT',
@@ -293,8 +309,8 @@ export function createSeed(): DB {
 
     contracts.push({
       ...base(cid, start), contractNumber: makeCode('CTR'), facilityId: u.facilityId, customerId: customer, unitId: u._id, unitTypeId: ut._id,
-      reservationId: rid, status, startDate: start, endDate: end, autoRenew: term >= 6,
-      billing: { currency: 'VND', monthlyRate: q.firstPeriodRent, billingDay, nextBillingDate: nextBilling, paidThrough },
+      reservationId: rid, status, startDate: start, endDate: end, autoRenew: period === 'MONTH' && term >= 6,
+      billing: { currency: 'VND', rentalPeriod: period, rate: q.firstPeriodRent, nextBillingDate: nextBilling, paidThrough },
       deposit: { amount: q.depositAmount, status: 'HELD', paymentId: deposit._id, refundedAmount: 0 },
       balance: { outstanding: overdueDays ? q.firstPeriodRent + lateFee : 0, lastPaymentAt: addDays(paidThrough, -28) },
       delinquency: overdueDays ? { since: addDays(T, -overdueDays), daysOverdue: overdueDays, lateFeesAccrued: lateFee, lockedOutAt: status === 'LOCKED_OUT' ? addDays(T, -1) : null } : null,
@@ -312,15 +328,19 @@ export function createSeed(): DB {
 
   // ---------- upcoming / pending / cancelled reservations ----------
   const availableOf = (fid: string, key: string) => units.filter((u) => u.facilityId === fid && u.unitTypeId === `ut-${fid.slice(2)}-${key}` && u.status === 'AVAILABLE');
-  const book = (fid: string, key: string, customerId: string, status: ReservationStatus, startOffset: number, months: number, extra: Partial<Reservation> = {}) => {
+  const book = (fid: string, key: string, customerId: string, status: ReservationStatus, startOffset: number, periods: number, extra: Partial<Reservation> = {}) => {
     const ut = typeOf(`ut-${fid.slice(2)}-${key}`);
     const id = nid('rsv');
     const start = addDays(T, startOffset);
-    const q = quoteFor(ut, months);
+    const period = pick(['DAY', 'WEEK', 'MONTH'] as const);
+    const q = quoteFor(ut, period, periods);
+    // Ô cụ thể được giữ ngay từ PENDING (khách chọn trên sơ đồ lúc đặt) — chỉ CANCELLED là không giữ
+    // (đã nhả lại trong thực tế). Hết ô trống cho ALLOCATED thì hạ xuống CONFIRMED — model bắt buộc
+    // ALLOCATED phải có unitId, còn CONFIRMED thì không.
     let unitId: string | null = null;
-    if (status === 'ALLOCATED') {
+    if (status !== 'CANCELLED') {
       const u = availableOf(fid, key)[0];
-      if (!u) status = 'CONFIRMED';
+      if (!u) { if (status === 'ALLOCATED') status = 'CONFIRMED'; }
       else { u.status = 'RESERVED'; u.currentReservationId = id; unitId = u._id; }
     }
     const createdAt = addDays(T, -int(1, 9));
@@ -331,9 +351,11 @@ export function createSeed(): DB {
     }
     reservations.push({
       ...base(id, createdAt), code: makeCode('RSV'), facilityId: fid, customerId, unitTypeId: ut._id, unitId, status,
-      startDate: start, durationMonths: months, endDate: addMonths(start, months), quote: q,
+      startDate: start, periods, endDate: addPeriods(start, period, periods), quote: q,
+      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const),
       holdExpiresAt: status === 'PENDING' ? new Date(Date.now() + 22 * 60_000).toISOString() : null,
-      depositPaymentId, allocation: unitId ? { allocatedAt: addDays(T, -1), allocatedBy: DEMO_IDS.manager } : null,
+      allocation: unitId ? { allocatedAt: addDays(T, -1), allocatedBy: null } : null,
+      depositPaymentId,
       checkIn: status === 'ALLOCATED' || status === 'CONFIRMED' ? { qrTokenHash: 'sha256:demo', qrExpiresAt: addDays(start, 2), checkedInAt: null, checkedInBy: null } : null,
       cancellation: null, contractId: null, source: pick(['WEB', 'MOBILE'] as const), idempotencyKey: null,
       statusHistory: [{ from: null, to: 'PENDING', at: createdAt }, ...(status !== 'PENDING' ? [{ from: 'PENDING' as const, to: status, at: createdAt }] : [])],
@@ -346,7 +368,6 @@ export function createSeed(): DB {
   book('f-td', 'L', DEMO_IDS.customer, 'CONFIRMED', 6, 12);
   book('f-q7', 'M', cust(1), 'ALLOCATED', 0, 3);
   book('f-q7', 'LK', cust(2), 'ALLOCATED', 0, 1);
-  book('f-q7', 'XM', cust(3), 'CONFIRMED', 0, 6);
   book('f-q7', 'S', cust(4), 'CONFIRMED', 1, 3);
   book('f-q7', 'L', cust(5), 'CONFIRMED', 2, 12);
   book('f-q7', 'M', cust(6), 'CONFIRMED', 5, 6);
@@ -356,7 +377,6 @@ export function createSeed(): DB {
   book('f-q7', 'M', cust(10), 'CANCELLED', 4, 6, { cancellation: { reason: 'CUSTOMER_REQUEST', note: 'Đổi kế hoạch chuyển nhà', cancelledAt: addDays(T, -2), cancelledBy: cust(10), refundAmount: 1_790_000 } });
   book('f-td', 'M', cust(11), 'ALLOCATED', 0, 6);
   book('f-td', 'S', cust(12), 'CONFIRMED', 1, 3);
-  book('f-td', 'XM', cust(13), 'CONFIRMED', 3, 12);
   book('f-tb', 'LK', cust(14), 'ALLOCATED', 1, 2);
   book('f-tb', 'M', cust(15), 'CONFIRMED', 0, 6);
   book('f-tb', 'XL', cust(16), 'PENDING', 7, 6);
@@ -370,6 +390,41 @@ export function createSeed(): DB {
     };
   };
   const demoM = contracts.find((c) => c.unitId === 'su-q7-M2');
+
+  // ---------- yêu cầu đổi ô (A1b) ----------
+  const swapTarget = (c: RentalContract | undefined) => units.find((u) => u.unitTypeId === c?.unitTypeId && u.status === 'AVAILABLE');
+  const otherActive = contracts.find((c) => c.facilityId === 'f-q7' && c.status === 'ACTIVE' && c._id !== demoM?._id);
+  const swapRequests: UnitSwapRequest[] = [];
+  if (demoM) {
+    const toUnit = swapTarget(demoM);
+    if (toUnit) {
+      swapRequests.push({
+        ...base(nid('swp'), addDays(NOW, -1)), requestNumber: makeCode('SWP'), facilityId: demoM.facilityId, customerId: demoM.customerId,
+        contractId: demoM._id, unitTypeId: demoM.unitTypeId, fromUnitId: demoM.unitId, toUnitId: toUnit._id, method: 'SELF',
+        reason: 'Muốn đổi sang ô gần cửa ra vào hơn cho dễ chở đồ.', status: 'SUBMITTED',
+        fee: 0, facilityFault: null, scheduledFor: null, moveDeadline: null, decidedBy: null, decidedAt: null,
+        rejectReason: null, completedAt: null, paymentId: null,
+        statusHistory: [{ from: null, to: 'SUBMITTED', at: addDays(NOW, -1) }],
+      });
+      toUnit.status = 'RESERVED'; toUnit.currentSwapRequestId = swapRequests[swapRequests.length - 1]._id;
+    }
+  }
+  if (otherActive) {
+    const toUnit = swapTarget(otherActive);
+    if (toUnit) {
+      const decidedAt = addDays(NOW, -2);
+      swapRequests.push({
+        ...base(nid('swp'), addDays(NOW, -3)), requestNumber: makeCode('SWP'), facilityId: otherActive.facilityId, customerId: otherActive.customerId,
+        contractId: otherActive._id, unitTypeId: otherActive.unitTypeId, fromUnitId: otherActive.unitId, toUnitId: toUnit._id, method: 'SELF',
+        reason: 'Kho bị thấm nước sau mưa lớn, xin chuyển sang ô khô ráo.', status: 'APPROVED',
+        fee: 0, facilityFault: true, scheduledFor: null, moveDeadline: addDays(NOW, 5), decidedBy: DEMO_IDS.manager, decidedAt,
+        rejectReason: null, completedAt: null, paymentId: null,
+        statusHistory: [{ from: null, to: 'SUBMITTED', at: addDays(NOW, -3) }, { from: 'SUBMITTED', to: 'APPROVED', at: decidedAt, by: DEMO_IDS.manager }],
+      });
+      toUnit.status = 'RESERVED'; toUnit.currentSwapRequestId = swapRequests[swapRequests.length - 1]._id;
+    }
+  }
+
   const tickets: SupportTicket[] = [
     ticket('f-q7', { kind: 'CUSTOMER_ISSUE', reporterId: DEMO_IDS.customer, contractId: demoM?._id ?? null, unitId: 'su-q7-M2', subject: 'Ổ khóa kho M bị kẹt, không mở được', description: 'Tối qua 20h tôi đến lấy đồ nhưng chìa không xoay được. Nhờ kiểm tra giúp.', category: 'ACCESS', priority: 'HIGH', status: 'IN_PROGRESS', assigneeId: DEMO_IDS.staff, dueAt: addDays(T, 0),
       messages: [{ authorId: DEMO_IDS.customer, body: 'Tối qua 20h tôi đến lấy đồ nhưng chìa không xoay được.', internal: false, at: addDays(NOW, -1) }, { authorId: DEMO_IDS.staff, body: 'Em đã nhận, sáng nay sẽ thay ổ khóa và báo lại anh/chị.', internal: false, at: addDays(NOW, -0.5) }] }),
@@ -464,5 +519,5 @@ export function createSeed(): DB {
     log(48, { action: 'facility.update', result: 'SUCCESS', actorId: DEMO_IDS.ops, actorRole: 'OPS_MANAGER', entityType: 'Facility', entityId: 'f-bt', changes: { after: { status: 'UNDER_CONSTRUCTION' } } }),
   ];
 
-  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, policies, audit };
+  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, policies, audit };
 }

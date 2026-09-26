@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ArrowLeftRight, Banknote, BadgePercent, Lock } from 'lucide-react';
 import type { RentalContract } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
+import { PERIOD_UNIT } from '@ssm/shared';
 import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
 import { effectivePolicy, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
@@ -55,7 +56,7 @@ export default function Contracts() {
           { key: 'u', header: 'Kho', cell: (x) => <div><p className="font-semibold">{unitLabel(db, x.unitId)}</p><p className="text-xs text-stone-500">{typeName(db, x.unitTypeId)}</p></div> },
           { key: 'k', header: 'Khách hàng', cell: (x) => <div><p>{userName(db, x.customerId)}</p><p className="font-mono text-[11px] text-stone-500">{x.contractNumber}</p></div> },
           { key: 'e', header: 'Hết hạn', cell: (x) => <div><p>{fmtDate(x.endDate)}</p><p className="text-xs text-stone-500">{x.autoRenew ? 'Tự gia hạn' : 'Không tự gia hạn'}</p></div> },
-          { key: 'r', header: 'Giá / tháng', className: 'tabular-nums', cell: (x) => vnd(x.billing.monthlyRate) },
+          { key: 'r', header: 'Giá thuê', className: 'tabular-nums', cell: (x) => `${vnd(x.billing.rate)}/${PERIOD_UNIT[x.billing.rentalPeriod]}` },
           { key: 'o', header: 'Công nợ', className: 'tabular-nums', cell: (x) => <div><p className={cx(x.balance.outstanding > 0 && 'font-medium text-red-700')}>{vnd(x.balance.outstanding)}</p>{x.delinquency && <p className="text-xs text-stone-500">quá hạn {x.delinquency.daysOverdue} ngày</p>}</div> },
           { key: 's', header: 'Trạng thái', cell: (x) => <StatusBadge map={CONTRACT_STATUS} value={x.status} /> },
           { key: 'a', header: '', className: 'text-right', cell: (x) => (
@@ -74,7 +75,7 @@ export default function Contracts() {
           <div className="space-y-5">
             <div className="flex flex-wrap gap-2"><StatusBadge map={CONTRACT_STATUS} value={c.status} /><StatusBadge map={DEPOSIT_STATUS} value={c.deposit.status} /></div>
             <KV items={[
-              ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`], ['Giá / tháng', vnd(c.billing.monthlyRate)],
+              ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`], ['Giá thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
               ['Đã thanh toán đến', fmtDate(c.billing.paidThrough)], ['Kỳ tới', fmtDate(c.billing.nextBillingDate)],
               ['Tiền cọc', vnd(c.deposit.amount)], ['Truy cập', `${ACCESS_METHOD[c.access.method]}${c.access.suspendedAt ? ' · đang tạm khóa' : ''}`],
               ['Chính sách', `v${c.terms.policyVersion} · ân hạn ${c.terms.gracePeriodDays} ngày`], ['Gia hạn', `${c.renewals.length} lần`],
@@ -118,7 +119,7 @@ export default function Contracts() {
         {swap && (
           <div className="space-y-4">
             <div className="rounded-lg bg-brand-50 p-3 text-sm text-brand-900 ring-1 ring-brand-200">
-              Chỉ đổi được sang ô <b>cùng loại</b>. Giá thuê <b>{vnd(swap.billing.monthlyRate)}/tháng</b> và tiền cọc <b>{vnd(swap.deposit.amount)}</b> giữ nguyên theo hợp đồng đã ký.
+              Chỉ đổi được sang ô <b>cùng loại</b>. Giá thuê <b>{vnd(swap.billing.rate)}/{PERIOD_UNIT[swap.billing.rentalPeriod]}</b> và tiền cọc <b>{vnd(swap.deposit.amount)}</b> giữ nguyên theo hợp đồng đã ký.
               Ô cũ chuyển sang <b>chờ kiểm tra</b> sau khi đổi.
             </div>
 

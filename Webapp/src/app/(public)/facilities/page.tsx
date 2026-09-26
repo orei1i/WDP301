@@ -11,7 +11,7 @@ import { unitRate } from '@/shared/lib/domain';
 import { vnd } from '@/shared/lib/format';
 import { Badge, ButtonLink, Card, EmptyState, Field, StatusBadge, cx, inputCls } from '@/shared/ui';
 
-const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL', 'VEHICLE'];
+const CATS: UnitCategory[] = ['LOCKER', 'SMALL', 'MEDIUM', 'LARGE', 'XL'];
 
 function FacilityList() {
   const { catalog } = useStore();
@@ -26,7 +26,7 @@ function FacilityList() {
     .map((f) => {
       const types = (catalog?.unitTypes ?? []).filter((t) => t.facilityId === f._id && t.isActive && (!cat || t.category === cat));
       const avail = types.map((t) => ({ t, a: f.availability.find((x) => x.unitTypeId === t._id)?.available ?? 0 }));
-      return { f, avail, from: types.length ? Math.min(...types.map((t) => unitRate(t))) : 0 };
+      return { f, avail, from: types.length ? Math.min(...types.map((t) => unitRate(t, 'MONTH'))) : 0 };
     })
     .filter((r) => r.avail.length > 0), [catalog, q, cat, onlyFacility]);
 

@@ -22,7 +22,7 @@ export interface PublicFacility extends Facility {
 }
 export interface Catalog { facilities: PublicFacility[]; unitTypes: UnitType[] }
 
-const EMPTY_DB: DB = { users: [], facilities: [], unitTypes: [], units: [], reservations: [], contracts: [], payments: [], inspections: [], tickets: [], claims: [], policies: [], audit: [] };
+const EMPTY_DB: DB = { users: [], facilities: [], unitTypes: [], units: [], reservations: [], contracts: [], payments: [], inspections: [], tickets: [], claims: [], swapRequests: [], policies: [], audit: [] };
 type Snapshot = DB & { me: User };
 
 interface StoreValue {

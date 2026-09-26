@@ -1,9 +1,9 @@
 'use client';
 
 import type {
-  AccessMethod, BusinessPolicy, CancellationReason, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
-  PaymentMethod, RentalContract, Reservation, Role, StorageUnit, SupportTicket, TicketCategory, TicketKind,
-  TicketPriority, TicketStatus, UnitStatus, User,
+  BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
+  PaymentMethod, RentalContract, RentalPeriod, Reservation, Role, StorageUnit, SupportTicket, SwapMethod,
+  TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitStatus, UnitSwapRequest, User,
 } from '@ssm/shared';
 import { api } from '@/shared/api/client';
 
@@ -14,9 +14,24 @@ import { api } from '@/shared/api/client';
 const day = (iso: string) => iso.slice(0, 10);
 const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 
+export interface BookingLine {
+  unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number;
+  /** Ca giờ khách dự kiến đến nhận kho — chọn ngay lúc đặt; 'UNKNOWN' = "Chưa rõ giờ". */
+  preferredCheckInShift: CheckInShift;
+}
+
 export const actions = {
-  createReservation: async (p: { unitTypeId: string; startDate: string; months: number; source?: Reservation['source']; consent: { termsVersion: string; privacyVersion: string } }) =>
-    api.post<Reservation>('/reservations', { unitTypeId: p.unitTypeId, startDate: day(p.startDate), months: p.months, source: p.source === 'MOBILE' ? 'MOBILE' : 'WEB' }, { 'idempotency-key': newKey() }),
+  // Khách bắt buộc chọn ô cụ thể (unitId) trên sơ đồ và chu kỳ thuê (rentalPeriod) lúc đặt.
+  createReservation: async (p: BookingLine & { source?: Reservation['source']; consent: { termsVersion: string; privacyVersion: string } }) =>
+    api.post<Reservation>('/reservations', {
+      unitTypeId: p.unitTypeId, unitId: p.unitId, startDate: day(p.startDate), rentalPeriod: p.rentalPeriod, periods: p.periods,
+      preferredCheckInShift: p.preferredCheckInShift,
+      source: p.source === 'MOBILE' ? 'MOBILE' : 'WEB', consent: p.consent,
+    }, { 'idempotency-key': newKey() }),
+
+  /** Đặt nhiều kho một lần (giỏ hàng) — cùng một lần chấp thuận điều khoản cho toàn giỏ. */
+  createReservationsBatch: async (p: { items: BookingLine[]; consent: { termsVersion: string; privacyVersion: string } }) =>
+    (await api.post<{ items: Reservation[] }>('/reservations/batch', p, { 'idempotency-key': newKey() })).items,
 
   payDeposit: async (p: { reservationId: string; method: PaymentMethod }) =>
     api.post<{ reservation: Reservation; qrPayload: string }>(`/reservations/${p.reservationId}/pay-deposit`, { method: p.method }),
@@ -29,8 +44,8 @@ export const actions = {
 
   unallocate: async (p: { reservationId: string }) => { await api.post(`/reservations/${p.reservationId}/unallocate`); },
 
-  checkIn: async (p: { reservationId: string; accessMethod: AccessMethod; keyTag?: string; payMethod: PaymentMethod }) =>
-    api.post<{ contract: RentalContract; unit: StorageUnit; pin?: string }>(`/reservations/${p.reservationId}/check-in`, { accessMethod: p.accessMethod, keyTag: p.keyTag, payMethod: p.payMethod }),
+  checkIn: async (p: { reservationId: string; keyTag?: string; payMethod: PaymentMethod }) =>
+    api.post<{ contract: RentalContract; unit: StorageUnit; pin?: string }>(`/reservations/${p.reservationId}/check-in`, { keyTag: p.keyTag, payMethod: p.payMethod }),
 
   requestMoveOut: async (p: { contractId: string; date: string }) => { await api.post(`/contracts/${p.contractId}/move-out`, { date: day(p.date) }); },
   receiveUnit: async (p: { contractId: string }) => { await api.post(`/contracts/${p.contractId}/receive`); },
@@ -38,8 +53,8 @@ export const actions = {
   submitInspection: async (p: { contractId: string; checklist: InspectionLog['checklist']; damages: InspectionLog['damages']; notes?: string }) =>
     (await api.post<{ inspection: InspectionLog }>(`/contracts/${p.contractId}/inspection`, { checklist: p.checklist, damages: p.damages, notes: p.notes || undefined })).inspection,
 
-  extendContract: async (p: { contractId: string; months: number; method: PaymentMethod }) =>
-    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { months: p.months, method: p.method })).amount,
+  extendContract: async (p: { contractId: string; periods: number; method: PaymentMethod }) =>
+    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { periods: p.periods, method: p.method })).amount,
 
   payBalance: async (p: { contractId: string; method: PaymentMethod }) =>
     (await api.post<{ amount: number }>(`/contracts/${p.contractId}/pay-balance`, { method: p.method })).amount,
@@ -57,7 +72,7 @@ export const actions = {
 
   setUnitStatus: async (p: { unitId: string; to: UnitStatus; reason?: string }) => { await api.patch(`/units/${p.unitId}/status`, { to: p.to, reason: p.reason }); },
 
-  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number; priceTier: StorageUnit['priceTier'] }) => { await api.post('/units', p); },
+  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number }) => { await api.post('/units', p); },
 
   createTicket: async (p: { facilityId: string; kind: TicketKind; category: TicketCategory; priority: TicketPriority; subject: string; description: string; unitId?: string | null; contractId?: string | null; assigneeId?: string | null; dueAt?: string | null }) =>
     api.post<SupportTicket>('/tickets', { ...p, description: p.description || undefined }),
@@ -88,11 +103,24 @@ export const actions = {
 
   publishPolicy: async (p: { facilityId: string | null; patch: Partial<BusinessPolicy> }) => api.post<BusinessPolicy>('/policies', p),
 
-  setBasePrice: async (p: { unitTypeId: string; rate: number }) => { await api.patch(`/facilities/unit-types/${p.unitTypeId}/price`, { rate: p.rate }); },
+  setUnitTypeRates: async (p: { unitTypeId: string; rates: Partial<Record<RentalPeriod, number>> }) => { await api.patch(`/facilities/unit-types/${p.unitTypeId}/price`, { rates: p.rates }); },
 
-  saveUser: async (p: { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: User['status'] }) => {
-    if (p._id) { await api.patch(`/users/${p._id}`, { fullName: p.fullName, role: p.role, facilityIds: p.facilityIds, status: p.status }); return { resetLink: null as string | null }; }
-    return api.post<{ resetLink: string | null }>('/users', { fullName: p.fullName, email: p.email, role: p.role, facilityIds: p.facilityIds, status: p.status });
+  // ---- yêu cầu đổi ô kho (A1b): khách gửi yêu cầu, FM xét duyệt
+  requestUnitSwap: async (p: { contractId: string; toUnitId: string; method: SwapMethod; reason: string }) =>
+    api.post<UnitSwapRequest>(`/contracts/${p.contractId}/swap-requests`, { toUnitId: p.toUnitId, method: p.method, reason: p.reason }),
+
+  cancelSwapRequest: async (p: { swapRequestId: string }) => { await api.post(`/swap-requests/${p.swapRequestId}/cancel`); },
+
+  decideSwapRequest: async (p: { swapRequestId: string; approve: boolean; facilityFault?: boolean; fee?: number; scheduledFor?: string; rejectReason?: string }) =>
+    api.post<UnitSwapRequest>(`/swap-requests/${p.swapRequestId}/decide`, {
+      approve: p.approve, facilityFault: p.facilityFault, fee: p.fee, scheduledFor: p.scheduledFor, rejectReason: p.rejectReason,
+    }),
+
+  completeSwapRequest: async (p: { swapRequestId: string }) => api.post<{ contract: RentalContract }>(`/swap-requests/${p.swapRequestId}/complete`),
+
+  saveUser: async (p: { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: User['status']; shift?: CheckInShift | null }) => {
+    if (p._id) { await api.patch(`/users/${p._id}`, { fullName: p.fullName, role: p.role, facilityIds: p.facilityIds, status: p.status, shift: p.role === 'STAFF' ? p.shift : null }); return { resetLink: null as string | null }; }
+    return api.post<{ resetLink: string | null }>('/users', { fullName: p.fullName, email: p.email, role: p.role, facilityIds: p.facilityIds, status: p.status, shift: p.role === 'STAFF' ? p.shift : undefined });
   },
 };
 

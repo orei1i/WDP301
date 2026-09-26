@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Wand2 } from 'lucide-react';
 import type { Reservation } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
+import { periodLabel } from '@ssm/shared';
 import { RESERVATION_STATUS } from '@/shared/lib/labels';
 import { effectivePolicy, typeName, unitLabel, unitRate, userName } from '@/shared/lib/domain';
 import { fmtDate, relativeDay, todayISO, vnd } from '@/shared/lib/format';
@@ -43,7 +44,7 @@ export default function Allocations() {
           { key: 'k', header: 'Khách hàng', cell: (x) => userName(db, x.customerId) },
           { key: 't', header: 'Loại kho', cell: (x) => typeName(db, x.unitTypeId) },
           { key: 'd', header: 'Ngày nhận', cell: (x) => <div><p>{fmtDate(x.startDate)}</p><p className={cx('text-xs', x.startDate <= T ? 'font-medium text-red-600' : 'text-stone-500')}>{relativeDay(x.startDate)}</p></div> },
-          { key: 'm', header: 'Thời hạn', cell: (x) => `${x.durationMonths} tháng` },
+          { key: 'm', header: 'Thời hạn', cell: (x) => periodLabel(x.quote.rentalPeriod, x.periods) },
           { key: 'u', header: 'Kho', cell: (x) => (x.unitId ? <Badge tone="violet">{unitLabel(db, x.unitId)}</Badge> : <span className="text-stone-400">—</span>) },
           { key: 's', header: 'Trạng thái', cell: (x) => <StatusBadge map={RESERVATION_STATUS} value={x.status} /> },
           { key: 'a', header: '', className: 'text-right', cell: (x) => (
@@ -66,8 +67,8 @@ export default function Allocations() {
             {candidates.map((u) => (
               <button key={u._id} onClick={() => setUnitId(u._id)} className={cx('rounded-lg p-3 text-left ring-1 ring-inset', unitId === u._id ? 'bg-brand-50 ring-2 ring-brand-600' : 'ring-stone-300 hover:bg-stone-50')}>
                 <p className="font-semibold">{u.unitNumber}</p>
-                <p className="text-xs text-stone-500">Tầng {u.location.floor} · {u.priceTier === 'PREMIUM' ? 'Premium' : 'Tiêu chuẩn'}</p>
-                <p className="mt-1 text-xs tabular-nums">{vnd(unitRate(db.unitTypes.find((t) => t._id === u.unitTypeId)!, u))}</p>
+                <p className="text-xs text-stone-500">Tầng {u.location.floor} · {u.location.zone ?? '—'}</p>
+                <p className="mt-1 text-xs tabular-nums">{vnd(unitRate(db.unitTypes.find((t) => t._id === u.unitTypeId)!, 'MONTH'))}</p>
               </button>
             ))}
           </div>
