@@ -73,6 +73,12 @@ Paths are relative because the docs follow whatever host served them — no base
 `http://localhost:4000/api` locally and `https://wdp301-production.up.railway.app/api` in production, and
 Swagger's *Try it out* always calls the server you are actually looking at.
 
+Swagger/OpenAPI above are the **API** contract (routes, request/response bodies). For the **data model** —
+entities and how they relate (facilities → unit types → storage units → reservations → contracts, the swap-request
+workflow, etc.) — see [`../erd.dbml`](../erd.dbml) at the repo root; paste it into
+[dbdiagram.io](https://dbdiagram.io) for a visual ERD. It is hand-maintained, so re-check it after any schema
+change under `features/*/*.model.ts`.
+
 **Getting a token for *Try it out*.** Set `FIREBASE_WEB_API_KEY` (Firebase Console → Project settings → General → Your apps → Web app → `apiKey` — already public, it ships in the Webapp bundle) and `GET /api` grows an email/password box. The browser calls Firebase directly, so this server never sees the password; the token is stored in `localStorage` on this origin and `/api/docs` picks it up and presses Authorize for you.
 
 Optionally set `DOC_DEMO_PASSWORD` to make the demo-account buttons fill the password too. **That publishes the password on a page anyone can open** — only ever point it at a throwaway demo database.

@@ -10,6 +10,8 @@ vận hành trên web. Monorepo npm workspaces.
 | `Webapp/` | Next.js 16 + Tailwind v4, gọi API thật — đủ 5 vai trò (khách, nhân viên, quản lý chi nhánh, vận hành, quản trị). Chi tiết ở [`Webapp/README.md`](Webapp/README.md) | ✅ |
 | `Mobile/React-Native/` | Expo Router — **chỉ dành cho khách hàng** (nhân viên dùng Webapp) | 🟡 xem bên dưới |
 
+📊 Sơ đồ dữ liệu (ERD) đầy đủ: [`erd.dbml`](erd.dbml) — dán vào [dbdiagram.io](https://dbdiagram.io) (New Diagram → Import) để xem trực quan.
+
 **Mobile đã có:** đăng nhập / đăng ký / quên mật khẩu, kho đang thuê, mã QR nhận kho, chọn chi nhánh → đặt kho → trả cọc,
 chi tiết hợp đồng (trả công nợ, gia hạn, đăng ký trả kho), phiếu hỗ trợ (nhắn tin, đóng / mở lại) và yêu cầu bồi thường.
 **Chưa có:** đính kèm ảnh cho phiếu hỗ trợ / bồi thường, đăng nhập Google (khách đăng nhập Google trên web thì đặt mật
