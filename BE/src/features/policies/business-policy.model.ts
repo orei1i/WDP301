@@ -14,7 +14,7 @@ const schema = new Schema<PolicyDoc>({
   isActive: { type: Boolean, default: false }, // the only mutable business field
   effectiveFrom: { type: Date, required: true, immutable: true },
   deposit: {
-    type: new Schema({ mode: { type: String, enum: ['MONTHS_OF_RENT', 'FIXED'], required: true }, value: { type: Number, required: true, min: 0 } }, subOptions),
+    type: new Schema({ mode: { type: String, enum: ['PERIODS_OF_RENT', 'FIXED'], required: true }, value: { type: Number, required: true, min: 0 } }, subOptions),
     required: true, immutable: true,
   },
   reservationHoldMinutes: int(5, 1440),
@@ -29,8 +29,8 @@ const schema = new Schema<PolicyDoc>({
   cancellation: rule(new Schema({
     minHoursBeforeStart: { type: Number, required: true, min: 0 }, depositRefundPct: { type: Number, required: true, min: 0, max: 100 },
   }, subOptions)),
-  minRentalMonths: int(1, 60),
-  maxRentalMonths: int(1, 120),
+  minPeriods: int(1, 60),
+  maxPeriods: int(1, 365),
   surcharges: rule(new Schema({
     code: { type: String, required: true }, label: { type: String, required: true },
     kind: { type: String, enum: ['FIXED', 'PERCENT'], required: true }, value: { type: Number, required: true, min: 0 },
@@ -38,7 +38,7 @@ const schema = new Schema<PolicyDoc>({
   }, subOptions)),
   discounts: rule(new Schema({
     code: { type: String, required: true }, kind: { type: String, enum: ['FIXED', 'PERCENT'], required: true },
-    value: { type: Number, required: true, min: 0 }, minMonths: { type: Number, default: 1, min: 1 },
+    value: { type: Number, required: true, min: 0 }, minPeriods: { type: Number, default: 1, min: 1 },
     validFrom: { type: Date, default: null }, validTo: { type: Date, default: null },
     requiresApprovalRole: { type: String, enum: enumValues(Role), default: null },
   }, subOptions)),
@@ -52,7 +52,7 @@ schema.pre('validate', function () {
   if (this.scope === 'FACILITY' && !this.facilityId) this.invalidate('facilityId', 'required for FACILITY scope');
   if (this.scope === 'GLOBAL' && this.facilityId) this.invalidate('facilityId', 'must be null for GLOBAL scope');
   if (this.lockoutAfterDays <= this.gracePeriodDays) this.invalidate('lockoutAfterDays', 'must exceed gracePeriodDays');
-  if (this.maxRentalMonths < this.minRentalMonths) this.invalidate('maxRentalMonths', 'must be >= minRentalMonths');
+  if (this.maxPeriods < this.minPeriods) this.invalidate('maxPeriods', 'must be >= minPeriods');
   if (this.isNew) this.lateFees.sort((a, b) => a.afterDays - b.afterDays);
 });
 

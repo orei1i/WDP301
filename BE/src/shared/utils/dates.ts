@@ -13,6 +13,10 @@ export function addMonthsUTC(d: Date, months: number): Date {
   r.setUTCDate(Math.min(d.getUTCDate(), last));
   return r;
 }
+/** Cộng n chu kỳ thuê vào một ngày. NGÀY = +n ngày, TUẦN = +7n ngày, THÁNG = +n tháng. */
+export function addPeriodsUTC(d: Date, period: 'DAY' | 'WEEK' | 'MONTH', n: number): Date {
+  return period === 'MONTH' ? addMonthsUTC(d, n) : addDays(d, period === 'WEEK' ? 7 * n : n);
+}
 export const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / DAY);
 /** Normalise "2026-09-11" or any ISO string to the date-only convention. */
 export const toDateOnly = (v: string | Date) => new Date(`${new Date(v).toISOString().slice(0, 10)}T00:00:00.000Z`);

@@ -1,10 +1,10 @@
 import { Types, type ClientSession } from 'mongoose';
-import type { InspectionLog, PaymentMethod, UnitStatus } from '@ssm/shared';
+import { PERIOD_UNIT, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
 import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
 import { effectivePolicy } from '../policies/pricing';
-import { addDays, addMonthsUTC, daysBetween, todayUTC, toDateOnly } from '../../shared/utils/dates';
+import { addDays, addPeriodsUTC, daysBetween, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment } from '../payments/payment.service';
@@ -16,24 +16,27 @@ const loadContract = async (id: string, session?: ClientSession) => {
 };
 
 // ---------------------------------------------------------------- extend (CUSTOMER owner)
-export async function extendContract(user: UserHydrated, id: string, months: number, method: PaymentMethod) {
+export async function extendContract(user: UserHydrated, id: string, periods: number, method: PaymentMethod) {
   return withTxn(async (session) => {
     const c = await loadContract(id, session);
     await assertCanAccess(user, c, 'contract.extend');
     if (c.status !== 'ACTIVE') throw Unprocessable('Chỉ gia hạn được hợp đồng đang hiệu lực, không có công nợ');
     const policy = await effectivePolicy(c.facilityId, session);
-    const totalMonths = daysBetween(c.startDate, addMonthsUTC(c.endDate, months)) / 30;
-    if (totalMonths > policy.maxRentalMonths + 1) throw Unprocessable(`Tổng thời hạn vượt tối đa ${policy.maxRentalMonths} tháng`);
+    const period = c.billing.rentalPeriod;
+    // Tổng số chu kỳ đã thuê + gia hạn thêm, tính thô từ số ngày để chặn vượt trần chính sách.
+    const perDays = period === 'MONTH' ? 30 : period === 'WEEK' ? 7 : 1;
+    const totalPeriods = daysBetween(c.startDate, addPeriodsUTC(c.endDate, period, periods)) / perDays;
+    if (totalPeriods > policy.maxPeriods + 1) throw Unprocessable(`Tổng thời hạn vượt tối đa ${policy.maxPeriods} ${PERIOD_UNIT[period]}`);
 
-    const newEnd = addMonthsUTC(c.endDate, months);
+    const newEnd = addPeriodsUTC(c.endDate, period, periods);
     const pay = await createPayment({
       facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENEWAL',
-      amount: c.billing.monthlyRate * months, status: 'SUCCEEDED', method, period: { start: c.endDate, end: newEnd },
+      amount: c.billing.rate * periods, status: 'SUCCEEDED', method, period: { start: c.endDate, end: newEnd },
     }, session);
-    c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, months, paymentId: pay._id, at: new Date() });
+    c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, periods, paymentId: pay._id, at: new Date() });
     c.endDate = newEnd;
     await c.save({ session });
-    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { months, amount: pay.amount, endDate: newEnd } } }, session);
+    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { periods, amount: pay.amount, endDate: newEnd } } }, session);
     return { contract: c, amount: pay.amount };
   });
 }
@@ -172,7 +175,7 @@ export async function swapUnit(user: UserHydrated, id: string, input: { toUnitId
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'PENALTY', amount: fee, status: 'PENDING', method: 'INTERNAL' }, session)
       : null;
 
-    // (4) hợp đồng trỏ sang ô mới; billing.monthlyRate và deposit giữ nguyên
+    // (4) hợp đồng trỏ sang ô mới; billing.rate và deposit giữ nguyên
     c.unitId = toUnit._id;
     c.unitSwaps = [...(c.unitSwaps ?? []), { fromUnitId, toUnitId: toUnit._id, reason: input.reason, fee, paymentId: feePayment?._id ?? null, at: now, by: user._id }];
     if (input.keyTag !== undefined) {
@@ -189,20 +192,21 @@ export async function swapUnit(user: UserHydrated, id: string, input: { toUnitId
     await UnitTypeModel.updateOne({ _id: c.unitTypeId }, { $inc: { inventoryVersion: 1 } }, { session });
     await audit({
       action: 'contract.swap_unit', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: input.reason,
-      changes: { before: { unit: fromUnit.unitNumber }, after: { unit: toUnit.unitNumber, fee, monthlyRate: c.billing.monthlyRate } },
+      changes: { before: { unit: fromUnit.unitNumber }, after: { unit: toUnit.unitNumber, fee, rate: c.billing.rate } },
     }, session);
     return { contract: c, fromUnit, toUnit, fee };
   });
 }
 
 /** Danh sách ô còn trống cùng loại với hợp đồng — dùng cho ô chọn ở màn hình đổi ô. */
+/** Danh sách ô trống cùng loại — dùng cho cả nhân viên đổi ngay (swapUnit) lẫn khách gửi yêu cầu đổi ô. */
 export async function swapCandidates(user: UserHydrated, id: string) {
   const c = await loadContract(id);
-  await assertFacility(user, c.facilityId, 'contract.swap_unit');
+  await assertCanAccess(user, c, 'contract.swap_unit');
   const items = await StorageUnitModel
-    .find({ facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', _id: { $ne: c.unitId } })
+    .find({ facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', _id: { $ne: c.unitId } }, { unitNumber: 1, location: 1, status: 1 })
     .sort({ 'location.floor': 1, unitNumber: 1 }).limit(200).lean();
-  return { currentUnitId: c.unitId, monthlyRate: c.billing.monthlyRate, items };
+  return { currentUnitId: c.unitId, rate: c.billing.rate, items };
 }
 
 // ---------------------------------------------------------------- move-out request (CUSTOMER owner, STAFF/FM)

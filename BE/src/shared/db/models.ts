@@ -10,6 +10,7 @@ export * from '../../features/tickets/support-ticket.model';
 export * from '../../features/claims/damage-claim.model';
 export * from '../../features/policies/business-policy.model';
 export * from '../../features/audit/audit-log.model';
+export * from '../../features/swaps/unit-swap-request.model';
 
 import { UserModel } from '../../features/users/user.model';
 import { FacilityModel } from '../../features/facilities/facility.model';
@@ -23,8 +24,9 @@ import { TicketModel } from '../../features/tickets/support-ticket.model';
 import { DamageClaimModel } from '../../features/claims/damage-claim.model';
 import { PolicyModel } from '../../features/policies/business-policy.model';
 import { AuditLogModel } from '../../features/audit/audit-log.model';
+import { UnitSwapRequestModel } from '../../features/swaps/unit-swap-request.model';
 
 export const ALL_MODELS = [
   UserModel, FacilityModel, UnitTypeModel, StorageUnitModel, ReservationModel, RentalContractModel,
-  PaymentModel, InspectionModel, TicketModel, DamageClaimModel, PolicyModel, AuditLogModel,
+  PaymentModel, InspectionModel, TicketModel, DamageClaimModel, PolicyModel, AuditLogModel, UnitSwapRequestModel,
 ] as const;

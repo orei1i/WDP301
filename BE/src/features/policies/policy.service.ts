@@ -6,7 +6,7 @@ import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 
 type Patch = Partial<Pick<BusinessPolicy, 'gracePeriodDays' | 'lockoutAfterDays' | 'reservationHoldMinutes' | 'allocationLeadDays' | 'noShowAfterHours'
-  | 'minRentalMonths' | 'maxRentalMonths' | 'deposit' | 'lateFees' | 'cancellation' | 'surcharges' | 'discounts' | 'waiverLimits'>>;
+  | 'minPeriods' | 'maxPeriods' | 'deposit' | 'lateFees' | 'cancellation' | 'surcharges' | 'discounts' | 'waiverLimits'>>;
 
 /** Policies are immutable: publishing clones the current effective rules + patch into a new version. */
 export async function publishPolicy(facilityId: string | null, patch: Patch) {

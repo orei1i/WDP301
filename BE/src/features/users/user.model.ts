@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { enumValues, FACILITY_SCOPED_ROLES, Role, UserStatus, type User } from '@ssm/shared';
+import { enumValues, FACILITY_SCOPED_ROLES, Role, STAFF_SHIFTS, UserStatus, type User } from '@ssm/shared';
 import { baseOptions, enumOf, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, softDeletePlugin } from '../../shared/db/plugins';
 
@@ -40,6 +40,8 @@ const schema = new Schema<UserDoc, UserModelType, Methods>({
     }, subOptions),
     default: null,
   },
+  // Ca làm việc cố định — chỉ STAFF mới có (bắt buộc), enum loại trừ UNKNOWN (nhân viên phải chốt 1 ca cụ thể).
+  shift: { type: String, enum: [...STAFF_SHIFTS, null], default: null },
 }, { ...baseOptions, collection: 'users' });
 
 schema.plugin(actorStampPlugin);
@@ -53,6 +55,9 @@ schema.pre('validate', function () {
   if (this.role === 'FACILITY_MANAGER' && this.facilityIds.length !== 1) this.invalidate('facilityIds', 'FACILITY_MANAGER phải quản lý đúng 1 chi nhánh');
   if (!scoped && this.facilityIds.length > 0) this.invalidate('facilityIds', `${this.role} must not be facility-scoped`);
   if (this.role !== 'CUSTOMER' && this.customerProfile) this.invalidate('customerProfile', 'customers only');
+  // Nhân viên chia theo ca (nhận kho theo hàng đợi đúng ca) — bắt buộc 1 ca cụ thể; vai trò khác không có ca.
+  if (this.role === 'STAFF' && !this.shift) this.invalidate('shift', 'STAFF requires a fixed shift');
+  if (this.role !== 'STAFF' && this.shift) this.invalidate('shift', `${this.role} must not have a shift`);
   if (!this.isNew && (this.isModified('role') || this.isModified('facilityIds') || this.isModified('status'))) this.tokenVersion += 1;
 });
 

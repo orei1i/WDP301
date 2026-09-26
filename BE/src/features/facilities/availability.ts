@@ -1,24 +1,21 @@
-import type { ClientSession, Types } from 'mongoose';
-import { ReservationModel, StorageUnitModel } from '../../shared/db/models';
-import { addMonthsUTC } from '../../shared/utils/dates';
+import type { Types } from 'mongoose';
+import { StorageUnitModel } from '../../shared/db/models';
 
 type Id = Types.ObjectId | string;
 
 /**
- * Sellable = free units − live un-allocated holds overlapping [start, start+months).
- * Allocated reservations already hold a RESERVED unit, so they are excluded from `free` instead.
- * Inside a transaction this read is only safe because the caller first bumps UnitType.inventoryVersion
- * (see reservation.service) — that write makes concurrent bookings of the same type conflict and retry.
+ * Mỗi ô kho là một vật lý duy nhất và khách BẮT BUỘC chọn đúng ô đó trên sơ đồ lúc đặt (không đặt
+ * theo "loại kho" trừu tượng rồi chờ phân sau) — ô chuyển sang RESERVED ngay lúc đặt. Vì vậy "còn
+ * trống" chỉ đơn giản là đếm theo `status` hiện tại, không cần tính chồng lấn theo khoảng ngày nữa
+ * (khác thiết kế cũ, vốn giữ chỗ bằng số lượng rồi phân ô sau).
  */
-export async function availability(facilityId: Id, unitTypeId: Id, start: Date, months: number, session?: ClientSession) {
-  const end = addMonthsUTC(start, months);
-  const now = new Date();
-  // Sequential on purpose: operations sharing one transaction session must not run concurrently.
-  const total = await StorageUnitModel.countDocuments({ facilityId, unitTypeId }).session(session ?? null);
-  const free = await StorageUnitModel.countDocuments({ facilityId, unitTypeId, status: 'AVAILABLE' }).session(session ?? null);
-  const holds = await ReservationModel.countDocuments({
-    facilityId, unitTypeId, startDate: { $lt: end }, endDate: { $gt: start },
-    $or: [{ status: 'CONFIRMED' }, { status: 'PENDING', holdExpiresAt: { $gt: now } }],
-  }).session(session ?? null);
-  return { total, free, holds, available: Math.max(0, free - holds) };
+export async function availability(facilityId: Id, unitTypeId: Id) {
+  const rows = await StorageUnitModel.aggregate<{ _id: string; n: number }>([
+    { $match: { facilityId, unitTypeId, isDeleted: false } },
+    { $group: { _id: '$status', n: { $sum: 1 } } },
+  ]);
+  const by = Object.fromEntries(rows.map((r) => [r._id, r.n]));
+  const total = rows.reduce((s, r) => s + r.n, 0);
+  const free = by.AVAILABLE ?? 0;
+  return { total, free, available: free };
 }

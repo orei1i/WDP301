@@ -1,8 +1,9 @@
 import { RentalContractModel, ReservationModel, StorageUnitModel } from '../shared/db/models';
 import { runAsSystem } from '../shared/core/request-context';
-import { addDays, addMonthsUTC, daysBetween, todayUTC } from '../shared/utils/dates';
+import { addDays, addPeriodsUTC, daysBetween, todayUTC } from '../shared/utils/dates';
 import { effectivePolicy } from '../features/policies/pricing';
 import { cancelReservation } from '../features/reservations/reservation.service';
+import { expireSwapRequests } from '../features/swaps/unit-swap-request.service';
 import { audit } from '../features/audit/audit.service';
 import { createPayment } from '../features/payments/payment.service';
 import { withTxn } from '../shared/db/txn';
@@ -22,7 +23,11 @@ export function startJobs() {
     setTimeout(tick, 5_000);
     return setInterval(tick, ms);
   };
-  const timers = [every(60_000, 'hold-expiry', expireHolds), every(60 * 60_000, 'billing', runBilling)];
+  const timers = [
+    every(60_000, 'hold-expiry', expireHolds),
+    every(60 * 60_000, 'billing', runBilling),
+    every(60 * 60_000, 'swap-expiry', expireSwapRequests),
+  ];
   return () => timers.forEach(clearInterval);
 }
 
@@ -45,14 +50,15 @@ export async function runBilling() {
       const c = await RentalContractModel.findById(_id).session(session);
       if (!c || c.billing.nextBillingDate > today) return;
       const start = c.billing.nextBillingDate;
-      const end = addDays(addMonthsUTC(start, 1), -1);
+      const period = c.billing.rentalPeriod;
+      const end = addDays(addPeriodsUTC(start, period, 1), -1);
       if (start >= c.endDate && !c.autoRenew) return; // lease ends; move-out handled by staff
-      await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount: c.billing.monthlyRate, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
-      c.balance.outstanding += c.billing.monthlyRate;
-      c.billing.nextBillingDate = addMonthsUTC(start, 1);
+      await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount: c.billing.rate, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
+      c.balance.outstanding += c.billing.rate;
+      c.billing.nextBillingDate = addPeriodsUTC(start, period, 1);
       if (start >= c.endDate && c.autoRenew) {
-        const newEnd = addMonthsUTC(c.endDate, 1);
-        c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, months: 1, paymentId: null, at: new Date() });
+        const newEnd = addPeriodsUTC(c.endDate, period, 1);
+        c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, periods: 1, paymentId: null, at: new Date() });
         c.endDate = newEnd;
       }
       await c.save({ session });
@@ -68,7 +74,7 @@ export async function runBilling() {
       const policy = await effectivePolicy(c.facilityId, session);
       if (c.status === 'ACTIVE' && days > c.terms.gracePeriodDays) {
         const pctRule = policy.lateFees.find((f) => f.kind === 'PERCENT_OF_RENT');
-        const fee = pctRule ? Math.round((c.billing.monthlyRate * pctRule.value) / 100) : 0;
+        const fee = pctRule ? Math.round((c.billing.rate * pctRule.value) / 100) : 0;
         if (fee) await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'LATE_FEE', amount: fee, status: 'PENDING', method: 'BANK_TRANSFER', idempotencyKey: `late-${c._id}-${c.billing.paidThrough.toISOString().slice(0, 10)}` }, session);
         c.balance.outstanding += fee;
         c.delinquency = { since: addDays(c.billing.paidThrough, 1), daysOverdue: days, lateFeesAccrued: fee, lockedOutAt: null };

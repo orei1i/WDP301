@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, Role, UserStatus } from '@ssm/shared';
+import { enumValues, Role, STAFF_SHIFTS, UserStatus, type CheckInShift } from '@ssm/shared';
 import { FacilityModel, UserModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
@@ -24,21 +24,26 @@ usersRouter.get('/', validate({ query: paging.extend({ role: e(Role).optional(),
 });
 
 const scopedRoles = (r: string) => r === 'STAFF' || r === 'FACILITY_MANAGER';
+const shiftBody = z.enum(STAFF_SHIFTS as [CheckInShift, ...CheckInShift[]]);
 usersRouter.post('/', validate({ body: z.object({
   fullName: z.string().min(2).max(120), email: z.string().email(), role: e(Role), facilityIds: z.array(zId).default([]), status: e(UserStatus).default('ACTIVE'),
+  shift: shiftBody.optional(),
 }) }), async (req, res) => {
   const b = req.valid.body;
   if (scopedRoles(b.role) && b.facilityIds.length === 0) throw Unprocessable('Vai trò này phải được gán ít nhất 1 chi nhánh');
   if (b.role === 'FACILITY_MANAGER' && b.facilityIds.length !== 1) throw Unprocessable('Quản lý chi nhánh chỉ phụ trách đúng 1 chi nhánh');
+  if (b.role === 'STAFF' && !b.shift) throw Unprocessable('Nhân viên phải được gán một ca làm việc cố định');
   if (b.facilityIds.length && (await FacilityModel.countDocuments({ _id: { $in: b.facilityIds } })) !== b.facilityIds.length) throw Unprocessable('Chi nhánh không tồn tại');
   res.status(201).json(await createStaffUser({ ...b, facilityIds: scopedRoles(b.role) ? b.facilityIds : [] }));
 });
 
 usersRouter.patch('/:id', validate({ params: idParams, body: z.object({
   fullName: z.string().min(2).max(120).optional(), role: e(Role).optional(), facilityIds: z.array(zId).optional(), status: e(UserStatus).optional(),
+  shift: shiftBody.nullable().optional(),
 }) }), async (req, res) => {
   const b = req.valid.body;
   // Model cũng chặn, nhưng báo ở đây thì thông báo dễ hiểu hơn lỗi validation của Mongoose.
   if (b.role === 'FACILITY_MANAGER' && b.facilityIds && b.facilityIds.length !== 1) throw Unprocessable('Quản lý chi nhánh chỉ phụ trách đúng 1 chi nhánh');
+  if (b.role === 'STAFF' && b.shift === null) throw Unprocessable('Nhân viên phải được gán một ca làm việc cố định');
   res.json(await updateUser(req.auth!.user, req.valid.params.id, b));
 });

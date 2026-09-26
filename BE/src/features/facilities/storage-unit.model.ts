@@ -1,6 +1,6 @@
 import { Schema, model, type Model } from 'mongoose';
-import { enumValues, PriceTier, UNIT_MACHINE, UnitStatus, type StorageUnit } from '@ssm/shared';
-import { baseOptions, enumOf, money, refOpt, refReq, subOptions, type OID } from '../../shared/db/schema-kit';
+import { enumValues, UNIT_MACHINE, UnitStatus, type StorageUnit } from '@ssm/shared';
+import { baseOptions, enumOf, refOpt, refReq, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, softDeletePlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
 
@@ -19,15 +19,10 @@ const schema = new Schema<StorageUnitDoc, StorageUnitModelType, Methods>({
   status: enumOf(enumValues(UnitStatus), 'AVAILABLE'),
   statusChangedAt: { type: Date, default: Date.now },
   statusReason: { type: String, default: null, maxlength: 500 },
-  priceTier: enumOf(enumValues(PriceTier), 'STANDARD'),
-  monthlyRateOverride: { ...money(false), default: null },
   currentReservationId: refOpt('Reservation'),
   currentContractId: refOpt('RentalContract'),
+  currentSwapRequestId: refOpt('UnitSwapRequest'),
   overlockActive: { type: Boolean, default: false },
-  lock: {
-    type: new Schema({ type: { type: String, enum: ['PADLOCK', 'SMART_LOCK'], default: 'PADLOCK' }, deviceId: { type: String, default: null } }, subOptions),
-    default: () => ({}),
-  },
   notes: { type: String, maxlength: 1000 },
 }, { ...baseOptions, collection: 'storageUnits', optimisticConcurrency: true });
 
@@ -43,11 +38,17 @@ schema.method('transitionTo', function (to: UnitStatus, ctx: TransitionCtx) {
 schema.pre('validate', function () {
   if (this.isModified('status')) this.statusChangedAt = new Date();
   const s = this.status;
-  if (s === 'RESERVED' && !this.currentReservationId) this.invalidate('currentReservationId', 'required when RESERVED');
+  // RESERVED giữ chỗ vì một trong hai lý do: đặt chỗ khách chọn ô (currentReservationId), hoặc
+  // đang chờ khách chuyển đồ sau khi yêu cầu đổi ô được duyệt (currentSwapRequestId).
+  if (s === 'RESERVED' && !this.currentReservationId && !this.currentSwapRequestId) {
+    this.invalidate('currentReservationId', 'required when RESERVED (or currentSwapRequestId)');
+  }
   // OCCUPIED luôn phải có hợp đồng. PENDING_INSPECTION thì KHÔNG bắt buộc: khi đổi ô kho, ô cũ được
   // trả về chờ kiểm tra trong khi hợp đồng đã chuyển sang ô mới — lúc đó ô cũ không còn hợp đồng nào.
   if (s === 'OCCUPIED' && !this.currentContractId) this.invalidate('currentContractId', 'required when OCCUPIED');
-  if (s === 'AVAILABLE' && (this.currentReservationId || this.currentContractId)) this.invalidate('status', 'AVAILABLE unit must not hold reservation/contract');
+  if (s === 'AVAILABLE' && (this.currentReservationId || this.currentContractId || this.currentSwapRequestId)) {
+    this.invalidate('status', 'AVAILABLE unit must not hold reservation/contract/swap-request');
+  }
   if (this.overlockActive && s !== 'OCCUPIED') this.invalidate('overlockActive', 'overlock only valid on OCCUPIED');
 });
 

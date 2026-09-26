@@ -1,10 +1,9 @@
-import type { FacilityStatus, PriceTier, UnitStatus } from '@ssm/shared';
+import type { FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertFacility } from '../../shared/http/scope';
 import { availability } from './availability';
-import { effectivePolicy, quote, unitRate } from '../policies/pricing';
-import { todayUTC, toDateOnly } from '../../shared/utils/dates';
+import { effectivePolicy, quote } from '../policies/pricing';
 import { audit } from '../audit/audit.service';
 
 // ---------------------------------------------------------------- public catalogue
@@ -14,26 +13,34 @@ export async function listFacilitiesPublic() {
   const items = await Promise.all(facilities.map(async (f) => {
     const ft = types.filter((t) => String(t.facilityId) === String(f._id));
     const avail = f.status === 'ACTIVE'
-      ? await Promise.all(ft.map(async (t) => ({ unitTypeId: t._id, name: t.name, category: t.category, ...(await availability(f._id, t._id, todayUTC(), 1)) })))
+      ? await Promise.all(ft.map(async (t) => ({ unitTypeId: t._id, name: t.name, category: t.category, ...(await availability(f._id, t._id)) })))
       : [];
-    return { ...f, fromPrice: ft.length ? Math.min(...ft.map((t) => unitRate(t))) : null, availability: avail };
+    // "Từ X đ/tháng" mốc quen thuộc để so sánh chi nhánh — giá thuê ngày/tuần vẫn xem ở trang chi tiết.
+    return { ...f, fromPrice: ft.length ? Math.min(...ft.map((t) => t.rates.MONTH)) : null, availability: avail };
   }));
   return { items, unitTypes: types };
 }
 
-export async function facilityDetailPublic(id: string, start?: string, months = 1) {
+export async function facilityDetailPublic(id: string, period: RentalPeriod = 'MONTH', periods = 1) {
   const f = await FacilityModel.findById(id).lean();
   if (!f) throw NotFound('chi nhánh');
   const policy = await effectivePolicy(f._id);
-  const startDate = start ? toDateOnly(start) : todayUTC();
-  const types = await UnitTypeModel.find({ facilityId: f._id, isActive: true }).sort({ 'pricing.baseMonthlyRate': 1 }).lean();
+  const types = await UnitTypeModel.find({ facilityId: f._id, isActive: true }).sort({ 'rates.MONTH': 1 }).lean();
   const unitTypes = await Promise.all(types.map(async (t) => ({
-    ...t, quote: quote(t, policy, months), availability: await availability(f._id, t._id, startDate, months),
+    ...t, quote: quote(t, policy, period, periods), availability: await availability(f._id, t._id),
   })));
   return {
     facility: f, unitTypes,
-    policy: { version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes, cancellation: policy.cancellation, minRentalMonths: policy.minRentalMonths, maxRentalMonths: policy.maxRentalMonths },
+    policy: { version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes, cancellation: policy.cancellation, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods },
   };
+}
+
+/** Sơ đồ 2D cơ bản: toàn bộ ô của một loại kho, đủ để khách bấm chọn ô còn trống lúc đặt. Công khai —
+ * hiện trạng thái từng ô (không phải chi tiết hợp đồng/khách) nên không rò rỉ gì nhạy cảm. */
+export async function floorPlan(facilityId: string, unitTypeId: string) {
+  const items = await StorageUnitModel.find({ facilityId, unitTypeId }, { unitNumber: 1, 'location.floor': 1, 'location.zone': 1, status: 1 })
+    .sort({ 'location.floor': 1, unitNumber: 1 }).lean();
+  return { items };
 }
 
 // ---------------------------------------------------------------- facilities CRUD (OPS, ADMIN)
@@ -58,23 +65,26 @@ export async function saveFacility(id: string | null, input: { code?: string; na
 }
 
 // ---------------------------------------------------------------- pricing (OPS)
-export async function setBasePrice(unitTypeId: string, rate: number) {
+/** Sửa 1-3 giá chu kỳ của loại kho (khách tự chọn chu kỳ nào thì tính theo giá đó). */
+export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record<RentalPeriod, number>>) {
   const ut = await UnitTypeModel.findById(unitTypeId);
   if (!ut) throw NotFound('loại kho');
-  const before = ut.pricing.baseMonthlyRate;
-  ut.set('pricing.baseMonthlyRate', rate);
+  const before = { ...ut.rates };
+  for (const [period, rate] of Object.entries(rates) as [RentalPeriod, number | undefined][]) {
+    if (rate !== undefined) ut.set(`rates.${period}`, rate);
+  }
   await ut.save();
-  await audit({ action: 'pricing.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before: { rate: before }, after: { rate } } });
+  await audit({ action: 'pricing.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before, after: ut.rates } });
   return ut;
 }
 
 // ---------------------------------------------------------------- units (STAFF, FM)
-export async function addUnit(user: UserHydrated, input: { unitTypeId: string; unitNumber: string; floor: number; priceTier: PriceTier; zone?: string }) {
+export async function addUnit(user: UserHydrated, input: { unitTypeId: string; unitNumber: string; floor: number; zone?: string }) {
   const ut = await UnitTypeModel.findById(input.unitTypeId);
   if (!ut) throw NotFound('loại kho');
   await assertFacility(user, ut.facilityId, 'unit.create');
   const u = await StorageUnitModel.create({
-    facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: input.unitNumber, location: { building: 'A', floor: input.floor, zone: input.zone }, priceTier: input.priceTier,
+    facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: input.unitNumber, location: { building: 'A', floor: input.floor, zone: input.zone },
   });
   await audit({ action: 'unit.create', entityType: 'StorageUnit', entityId: u._id, facilityId: ut.facilityId });
   return u;

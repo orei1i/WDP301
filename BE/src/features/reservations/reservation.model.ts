@@ -1,9 +1,9 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { CancellationReason, enumValues, PriceTier, RESERVATION_MACHINE, ReservationStatus, type PriceQuote, type Reservation } from '@ssm/shared';
+import { CancellationReason, CheckInShift, enumValues, RentalPeriod, RESERVATION_MACHINE, ReservationStatus, type PriceQuote, type Reservation } from '@ssm/shared';
 import { baseOptions, enumOf, humanCode, maxLen, money, refOpt, refReq, statusHistorySchema, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
-import { addMonthsUTC } from '../../shared/utils/dates';
+import { addPeriodsUTC } from '../../shared/utils/dates';
 
 export type ReservationDoc = Reservation<OID, Date>;
 interface Methods { transitionTo(to: ReservationStatus, ctx: TransitionCtx): void }
@@ -12,8 +12,8 @@ export type ReservationHydrated = HydratedDocument<ReservationDoc, Methods>;
 
 const quoteSchema = new Schema<PriceQuote<OID>>({
   currency: { type: String, enum: ['VND', 'USD'], required: true },
-  priceTier: enumOf(enumValues(PriceTier)),
-  monthlyRate: money(), depositAmount: money(), discountAmount: money(), surchargeAmount: money(),
+  rentalPeriod: enumOf(enumValues(RentalPeriod)),
+  rate: money(), depositAmount: money(), discountAmount: money(), surchargeAmount: money(),
   appliedRuleCodes: { type: [String], default: [] },
   firstPeriodRent: money(), totalDueAtBooking: money(),
   policyId: refReq('BusinessPolicy'),
@@ -28,8 +28,10 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
   unitId: refOpt('StorageUnit'),
   status: enumOf(enumValues(ReservationStatus), 'PENDING'),
   startDate: { type: Date, required: true },
-  durationMonths: { type: Number, required: true, min: 1, max: 60, validate: Number.isInteger },
+  periods: { type: Number, required: true, min: 1, max: 365, validate: Number.isInteger },
   endDate: { type: Date, required: true },
+  // Khách chọn ngay lúc đặt — "Chưa rõ giờ" (UNKNOWN) là lựa chọn hợp lệ, không phải giá trị thiếu.
+  preferredCheckInShift: enumOf(enumValues(CheckInShift), 'UNKNOWN'),
   quote: { type: quoteSchema, required: true, immutable: true },
   holdExpiresAt: { type: Date, default: null },
   depositPaymentId: refOpt('PaymentTransaction'),
@@ -85,8 +87,8 @@ schema.method('transitionTo', function (to: ReservationStatus, ctx: TransitionCt
 schema.pre('validate', function () {
   if (this.isNew && !this.code) this.code = humanCode('RSV');
   if (this.isNew && this.statusHistory.length === 0) this.statusHistory.push({ from: null, to: this.status, at: new Date() });
-  if (this.startDate && (this.isModified('startDate') || this.isModified('durationMonths'))) {
-    this.endDate = addMonthsUTC(this.startDate, this.durationMonths);
+  if (this.startDate && (this.isModified('startDate') || this.isModified('periods'))) {
+    this.endDate = addPeriodsUTC(this.startDate, this.quote.rentalPeriod, this.periods);
   }
   const s = this.status;
   if (['ALLOCATED', 'CHECKED_IN', 'COMPLETED'].includes(s) && !this.unitId) this.invalidate('unitId', `required when ${s}`);

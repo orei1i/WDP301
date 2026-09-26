@@ -51,7 +51,7 @@ export async function receivables(facilityIds: (string | Types.ObjectId)[]) {
     { $group: {
       _id: null,
       activeContracts: { $sum: 1 },
-      mrr: { $sum: '$billing.monthlyRate' },
+      mrr: { $sum: '$billing.rate' },
       overdue: { $sum: '$balance.outstanding' },
       delinquent: { $sum: { $cond: [{ $in: ['$status', ['DELINQUENT', 'LOCKED_OUT']] }, 1, 0] } },
       d1_7: { $sum: { $cond: [{ $and: [{ $gte: ['$delinquency.daysOverdue', 1] }, { $lte: ['$delinquency.daysOverdue', 7] }] }, '$balance.outstanding', 0] } },

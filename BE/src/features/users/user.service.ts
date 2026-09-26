@@ -1,4 +1,4 @@
-import type { Role, UserStatus } from '@ssm/shared';
+import type { CheckInShift, Role, UserStatus } from '@ssm/shared';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { firebaseAuth } from '../../shared/config/firebase';
 import { UserModel, type UserHydrated } from '../../shared/db/models';
@@ -49,26 +49,33 @@ export async function syncProfile(token: DecodedIdToken, input: {
   return { user, created: true };
 }
 
-export async function createStaffUser(input: { fullName: string; email: string; role: Role; facilityIds: string[]; status: UserStatus }) {
+export async function createStaffUser(input: { fullName: string; email: string; role: Role; facilityIds: string[]; status: UserStatus; shift?: CheckInShift | null }) {
   const email = input.email.toLowerCase();
   if (await UserModel.exists({ email })) throw Conflict('Email đã tồn tại');
   const fb = await firebaseAuth.getUserByEmail(email).catch(() => null)
     ?? await firebaseAuth.createUser({ email, displayName: input.fullName, emailVerified: false, disabled: input.status === 'SUSPENDED' });
-  const user = await UserModel.create({ firebaseUid: fb.uid, email, fullName: input.fullName, role: input.role, facilityIds: input.facilityIds, status: input.status });
+  const user = await UserModel.create({
+    firebaseUid: fb.uid, email, fullName: input.fullName, role: input.role, facilityIds: input.facilityIds, status: input.status,
+    shift: input.role === 'STAFF' ? (input.shift ?? null) : null,
+  });
   const resetLink = await firebaseAuth.generatePasswordResetLink(email).catch(() => null);
   await audit({ action: 'user.create', entityType: 'User', entityId: user._id, changes: { after: { role: input.role, facilityIds: input.facilityIds } } });
   return { user, resetLink }; // send resetLink by email in production; returned here for the admin UI
 }
 
-export async function updateUser(admin: UserHydrated, id: string, patch: { fullName?: string; role?: Role; facilityIds?: string[]; status?: UserStatus }) {
+export async function updateUser(admin: UserHydrated, id: string, patch: { fullName?: string; role?: Role; facilityIds?: string[]; status?: UserStatus; shift?: CheckInShift | null }) {
   const u = await UserModel.findById(id);
   if (!u) throw NotFound('người dùng');
   if (String(u._id) === String(admin._id) && patch.role && patch.role !== 'ADMIN') throw Unprocessable('Không thể tự hạ quyền quản trị của chính mình');
-  const before = { role: u.role, facilityIds: u.facilityIds.map(String), status: u.status };
+  const before = { role: u.role, facilityIds: u.facilityIds.map(String), status: u.status, shift: u.shift };
   if (patch.fullName) u.fullName = patch.fullName;
   if (patch.role) u.role = patch.role;
   if (patch.facilityIds) u.set('facilityIds', patch.role === 'STAFF' || patch.role === 'FACILITY_MANAGER' || (!patch.role && (u.role === 'STAFF' || u.role === 'FACILITY_MANAGER')) ? patch.facilityIds : []);
   else if (patch.role && patch.role !== 'STAFF' && patch.role !== 'FACILITY_MANAGER') u.set('facilityIds', []);
+  // Ca chỉ có ý nghĩa với STAFF — đổi sang vai trò khác thì gỡ, đổi sang STAFF thì cần chọn ca (patch.shift).
+  const staffAfter = patch.role ? patch.role === 'STAFF' : u.role === 'STAFF';
+  if (staffAfter) { if (patch.shift !== undefined) u.shift = patch.shift; }
+  else u.shift = null;
   if (patch.status) u.status = patch.status;
   const privilegeChanged = u.isModified('role') || u.isModified('facilityIds') || u.isModified('status');
   await u.save();
@@ -78,6 +85,6 @@ export async function updateUser(admin: UserHydrated, id: string, patch: { fullN
     await firebaseAuth.revokeRefreshTokens(u.firebaseUid);
     if (patch.status) await firebaseAuth.updateUser(u.firebaseUid, { disabled: patch.status === 'SUSPENDED' });
   }
-  await audit({ action: 'user.update', entityType: 'User', entityId: u._id, changes: { before, after: { role: u.role, facilityIds: u.facilityIds.map(String), status: u.status } } });
+  await audit({ action: 'user.update', entityType: 'User', entityId: u._id, changes: { before, after: { role: u.role, facilityIds: u.facilityIds.map(String), status: u.status, shift: u.shift } } });
   return u;
 }

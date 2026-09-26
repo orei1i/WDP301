@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel, RentalContractModel,
-  ReservationModel, StorageUnitModel, TicketModel, UnitTypeModel, UserModel,
+  ReservationModel, StorageUnitModel, TicketModel, UnitSwapRequestModel, UnitTypeModel, UserModel,
 } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { isScoped } from '../../shared/http/scope';
@@ -19,10 +19,10 @@ const ids = (xs: unknown[]) => [...new Set(xs.filter(Boolean).map(String))];
 
 bootstrapRouter.get('/', authenticate, async (req, res) => {
   const me = req.auth!.user;
-  const empty = { users: [], facilities: [], unitTypes: [], units: [], reservations: [], contracts: [], payments: [], inspections: [], tickets: [], claims: [], policies: [], audit: [] };
+  const empty = { users: [], facilities: [], unitTypes: [], units: [], reservations: [], contracts: [], payments: [], inspections: [], tickets: [], claims: [], swapRequests: [], policies: [], audit: [] };
 
   if (me.role === 'CUSTOMER') {
-    const [facilities, unitTypes, reservations, contracts, payments, rawTickets, claims] = await Promise.all([
+    const [facilities, unitTypes, reservations, contracts, payments, rawTickets, claims, swapRequests] = await Promise.all([
       FacilityModel.find({}).lean(),
       UnitTypeModel.find({}).lean(),
       ReservationModel.find({ customerId: me._id }, NO_QR_HASH).sort({ createdAt: -1 }).lean(),
@@ -30,9 +30,10 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
       PaymentModel.find({ customerId: me._id }).sort({ createdAt: -1 }).lean(),
       TicketModel.find({ reporterId: me._id }).lean(),
       DamageClaimModel.find({ customerId: me._id }).sort({ createdAt: -1 }).lean(),
+      UnitSwapRequestModel.find({ customerId: me._id }).sort({ createdAt: -1 }).lean(),
     ]);
     const tickets = rawTickets.map((t) => ({ ...t, messages: t.messages.filter((m) => !m.internal) }));
-    const unitIds = ids([...reservations.map((r) => r.unitId), ...contracts.map((c) => c.unitId)]);
+    const unitIds = ids([...reservations.map((r) => r.unitId), ...contracts.map((c) => c.unitId), ...swapRequests.flatMap((s) => [s.fromUnitId, s.toUnitId])]);
     const policyIds = ids([...reservations.map((r) => r.quote.policyId), ...contracts.map((c) => c.terms.policyId)]);
     const staffIds = ids(tickets.flatMap((t) => [t.assigneeId, ...t.messages.map((m) => m.authorId)])).filter((i) => i !== String(me._id));
     const [units, inspections, policies, others] = await Promise.all([
@@ -41,7 +42,7 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
       PolicyModel.find({ $or: [{ isActive: true }, { _id: { $in: policyIds } }] }).lean(),
       UserModel.find({ _id: { $in: staffIds } }, PUBLIC_USER).lean(),
     ]);
-    return res.json({ ...empty, me, users: [me, ...others], facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, policies });
+    return res.json({ ...empty, me, users: [me, ...others], facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, policies });
   }
 
   if (me.role === 'ADMIN') {
@@ -57,7 +58,7 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
   // STAFF / FACILITY_MANAGER (scoped) and OPS_MANAGER (chain-wide)
   const scoped = isScoped(me);
   const byFacility = scoped ? { facilityId: { $in: me.facilityIds } } : {};
-  const [facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, policies, audit] = await Promise.all([
+  const [facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, policies, audit] = await Promise.all([
     FacilityModel.find(scoped ? { _id: { $in: me.facilityIds } } : {}).lean(),
     UnitTypeModel.find(byFacility).lean(),
     StorageUnitModel.find(byFacility).lean(),
@@ -67,6 +68,7 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
     InspectionModel.find(byFacility).sort({ performedAt: -1 }).limit(300).lean(),
     TicketModel.find(byFacility).lean(),
     DamageClaimModel.find(byFacility).sort({ createdAt: -1 }).limit(300).lean(),
+    UnitSwapRequestModel.find(byFacility).sort({ createdAt: -1 }).limit(300).lean(),
     PolicyModel.find(scoped ? { $or: [{ scope: 'GLOBAL' }, { facilityId: { $in: me.facilityIds } }] } : {}).lean(),
     me.role === 'FACILITY_MANAGER' ? AuditLogModel.find(byFacility).sort({ at: -1 }).limit(100).lean() : Promise.resolve([]),
   ]);
@@ -80,5 +82,5 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
     }, { ...PUBLIC_USER, phone: 1, 'customerProfile.idNumberLast4': 1 }).lean()
     : await UserModel.find({}, { ...PUBLIC_USER, email: 1 }).lean();
 
-  res.json({ me, users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, policies, audit });
+  res.json({ me, users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, policies, audit });
 });

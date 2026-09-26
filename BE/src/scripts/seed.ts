@@ -10,7 +10,7 @@ import { firebaseAuth } from '../shared/config/firebase';
 import { connectMongo } from '../shared/db/connection';
 import {
   ALL_MODELS, AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel,
-  RentalContractModel, ReservationModel, StorageUnitModel, TicketModel, UnitTypeModel, UserModel,
+  RentalContractModel, ReservationModel, StorageUnitModel, TicketModel, UnitSwapRequestModel, UnitTypeModel, UserModel,
 } from '../shared/db/models';
 import { createSeed, DEMO_IDS } from '../../../Webapp/src/shared/lib/mock-data';
 
@@ -62,7 +62,7 @@ async function main() {
     [UserModel, data.users], [PolicyModel, data.policies], [FacilityModel, data.facilities], [UnitTypeModel, data.unitTypes],
     [StorageUnitModel, data.units], [ReservationModel, data.reservations], [RentalContractModel, data.contracts],
     [PaymentModel, data.payments], [InspectionModel, data.inspections], [TicketModel, data.tickets],
-    [DamageClaimModel, data.claims], [AuditLogModel, data.audit],
+    [DamageClaimModel, data.claims], [UnitSwapRequestModel, data.swapRequests], [AuditLogModel, data.audit],
   ];
   for (const [model, docs] of plan) {
     await model.insertMany(docs.map(convert), { ordered: true });

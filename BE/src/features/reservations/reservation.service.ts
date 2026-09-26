@@ -1,14 +1,13 @@
 import { Types, type ClientSession } from 'mongoose';
-import type { AccessMethod, CancellationReason, PaymentMethod, Reservation } from '@ssm/shared';
+import { PERIOD_UNIT, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation } from '@ssm/shared';
 import {
   FacilityModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, UserModel,
   type ReservationHydrated, type UserHydrated,
 } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
-import { availability } from '../facilities/availability';
 import { cancellationRefund, effectivePolicy, quote } from '../policies/pricing';
-import { addDays, addMonthsUTC, todayUTC, toDateOnly } from '../../shared/utils/dates';
+import { addDays, addPeriodsUTC, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment, randomToken, sha256, sixDigitPin } from '../payments/payment.service';
@@ -19,46 +18,92 @@ const loadReservation = async (id: string, session?: ClientSession) => {
   return r;
 };
 
-// ---------------------------------------------------------------- create (CUSTOMER)
-export async function createReservation(user: UserHydrated, input: { unitTypeId: string; startDate: string; months: number; source: Reservation['source']; idempotencyKey?: string }) {
-  if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
+export interface BookingItem {
+  unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number;
+  source: Reservation['source']; idempotencyKey?: string;
+  /** Ca giờ khách dự kiến đến nhận kho, chọn ngay lúc đặt — UNKNOWN ("Chưa rõ giờ") là lựa chọn hợp lệ. */
+  preferredCheckInShift: CheckInShift;
+  /** Bằng chứng đã đồng ý Điều khoản + Chính sách bảo mật — bắt buộc, đóng dấu ip/userAgent ở route. */
+  consent: { termsVersion: string; privacyVersion: string; acceptedAt?: string; ip: string | null; userAgent: string | null };
+}
 
-  // Retry-safe: same customer + same key returns the original booking instead of a duplicate.
+/**
+ * Đặt MỘT ô kho cụ thể — khách bắt buộc chọn ô trên sơ đồ trước (không đặt theo "loại kho" trừu
+ * tượng rồi chờ phân sau). Ô chuyển sang RESERVED ngay trong transaction này bằng compare-and-swap
+ * trên `status: 'AVAILABLE'`, nên hai khách cùng bấm một ô thì chỉ một người khớp filter, người kia
+ * nhận 409 — không cần đếm số lượng như thiết kế cũ.
+ *
+ * Dùng chung cho đặt lẻ (createReservation) và đặt nhiều kho một lần (createReservationsBatch).
+ */
+async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSession) {
   if (input.idempotencyKey) {
-    const existing = await ReservationModel.findOne({ customerId: user._id, idempotencyKey: input.idempotencyKey });
+    const existing = await ReservationModel.findOne({ customerId: user._id, idempotencyKey: input.idempotencyKey }).session(session);
     if (existing) return existing;
   }
   const start = toDateOnly(input.startDate);
   if (start < todayUTC()) throw Unprocessable('Ngày bắt đầu không được ở quá khứ');
   if (start > addDays(todayUTC(), 90)) throw Unprocessable('Chỉ nhận đặt trước tối đa 90 ngày');
 
+  const ut = await UnitTypeModel.findOne({ _id: input.unitTypeId, isActive: true }).session(session);
+  if (!ut) throw NotFound('loại kho');
+  const facility = await FacilityModel.findById(ut.facilityId).session(session);
+  if (!facility || facility.status !== 'ACTIVE') throw Unprocessable('Chi nhánh chưa nhận đặt chỗ');
+  const policy = await effectivePolicy(facility._id, session);
+  const minP = Math.max(policy.minPeriods, ut.minPeriods);
+  const unitLabel = PERIOD_UNIT[input.rentalPeriod];
+  if (input.periods < minP || input.periods > policy.maxPeriods) throw Unprocessable(`Thời hạn thuê phải từ ${minP} đến ${policy.maxPeriods} ${unitLabel}`);
+
+  const id = new Types.ObjectId();
+  const now = new Date();
+  const unit = await StorageUnitModel.findOneAndUpdate(
+    { _id: input.unitId, facilityId: ut.facilityId, unitTypeId: ut._id, status: 'AVAILABLE', isDeleted: false },
+    { $set: { status: 'RESERVED', currentReservationId: id, statusChangedAt: now, statusReason: 'Giữ chỗ — đặt kho' } },
+    { new: true, session },
+  );
+  if (!unit) throw Conflict('Ô kho đã chọn không còn trống — vui lòng chọn ô khác trên sơ đồ', 'UNIT_NOT_AVAILABLE');
+  // Token chống race cho khách khác đang xem cùng loại kho này (đếm chỗ trống trên trang danh mục).
+  await UnitTypeModel.updateOne({ _id: ut._id }, { $inc: { inventoryVersion: 1 } }, { session });
+
+  const q = quote(ut, policy, input.rentalPeriod, input.periods);
+  const deposit = await createPayment({ facilityId: facility._id, customerId: user._id, reservationId: id, type: 'DEPOSIT', amount: q.depositAmount, status: 'PENDING', method: 'VNPAY' }, session);
+  const [r] = await ReservationModel.create([{
+    _id: id, facilityId: facility._id, customerId: user._id, unitTypeId: ut._id, unitId: unit._id, status: 'PENDING',
+    startDate: start, periods: input.periods, endDate: addPeriodsUTC(start, input.rentalPeriod, input.periods), quote: q,
+    preferredCheckInShift: input.preferredCheckInShift,
+    holdExpiresAt: new Date(now.getTime() + policy.reservationHoldMinutes * 60_000),
+    // Ô đã được chọn đúng lúc đặt — không còn bước "Quản lý chi nhánh phân kho" riêng như thiết kế cũ.
+    allocation: { allocatedAt: now, allocatedBy: null },
+    depositPaymentId: deposit._id, source: input.source, idempotencyKey: input.idempotencyKey ?? null,
+    consent: { ...input.consent, acceptedAt: now },
+  }], { session });
+  await audit({
+    action: 'reservation.create', entityType: 'Reservation', entityId: id, facilityId: facility._id,
+    changes: { after: { code: r.code, unitType: ut.code, unit: unit.unitNumber, rentalPeriod: input.rentalPeriod, periods: input.periods } },
+  }, session);
+  return r;
+}
+
+// ---------------------------------------------------------------- create (CUSTOMER)
+export async function createReservation(user: UserHydrated, input: BookingItem) {
+  if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
+  return withTxn((session) => bookOne(user, input, session));
+}
+
+/**
+ * Đặt nhiều kho trong một lần bấm (giỏ hàng) — tất cả cùng một transaction: hoặc cả N ô đều giữ
+ * được, hoặc không ô nào bị giữ (ô nào tranh chấp sẽ báo rõ trong lỗi để khách bỏ dòng đó ra).
+ */
+export async function createReservationsBatch(user: UserHydrated, items: BookingItem[]) {
+  if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
+  if (items.length === 0) throw Unprocessable('Giỏ hàng trống');
+  if (items.length > 10) throw Unprocessable('Chỉ đặt tối đa 10 kho một lần');
+  const unitIds = new Set(items.map((i) => i.unitId));
+  if (unitIds.size !== items.length) throw Unprocessable('Không thể đặt cùng một ô kho hai lần trong một lượt');
+
   return withTxn(async (session) => {
-    const ut = await UnitTypeModel.findOne({ _id: input.unitTypeId, isActive: true }).session(session);
-    if (!ut) throw NotFound('loại kho');
-    const facility = await FacilityModel.findById(ut.facilityId).session(session);
-    if (!facility || facility.status !== 'ACTIVE') throw Unprocessable('Chi nhánh chưa nhận đặt chỗ');
-    const policy = await effectivePolicy(facility._id, session);
-    const minM = Math.max(policy.minRentalMonths, ut.minRentalMonths);
-    if (input.months < minM || input.months > policy.maxRentalMonths) throw Unprocessable(`Thời hạn thuê phải từ ${minM} đến ${policy.maxRentalMonths} tháng`);
-
-    // Serialization point: every booking/allocation of this type writes this doc, so two concurrent
-    // transactions conflict (WriteConflict → driver retries the loser, which then re-counts).
-    await UnitTypeModel.updateOne({ _id: ut._id }, { $inc: { inventoryVersion: 1 } }, { session });
-
-    const avail = await availability(facility._id, ut._id, start, input.months, session);
-    if (avail.available <= 0) throw Conflict('Loại kho này đã hết chỗ trong khoảng thời gian bạn chọn', 'SOLD_OUT');
-
-    const q = quote(ut, policy, input.months);
-    const id = new Types.ObjectId();
-    const deposit = await createPayment({ facilityId: facility._id, customerId: user._id, reservationId: id, type: 'DEPOSIT', amount: q.depositAmount, status: 'PENDING', method: 'VNPAY' }, session);
-    const [r] = await ReservationModel.create([{
-      _id: id, facilityId: facility._id, customerId: user._id, unitTypeId: ut._id, status: 'PENDING',
-      startDate: start, durationMonths: input.months, endDate: addMonthsUTC(start, input.months), quote: q,
-      holdExpiresAt: new Date(Date.now() + policy.reservationHoldMinutes * 60_000),
-      depositPaymentId: deposit._id, source: input.source, idempotencyKey: input.idempotencyKey ?? null,
-    }], { session });
-    await audit({ action: 'reservation.create', entityType: 'Reservation', entityId: id, facilityId: facility._id, changes: { after: { code: r.code, unitType: ut.code, months: input.months } } }, session);
-    return r;
+    const results: ReservationHydrated[] = [];
+    for (const item of items) results.push(await bookOne(user, item, session));
+    return results;
   });
 }
 
@@ -78,6 +123,9 @@ export async function payDeposit(user: UserHydrated, id: string, method: Payment
     const qrToken = randomToken(12);
     r.transitionTo('CONFIRMED', { actor: 'SYSTEM', reason: `Đặt cọc qua ${method}` });
     r.checkIn = { qrTokenHash: sha256(qrToken), qrExpiresAt: addDays(r.startDate, 2), checkedInAt: null, checkedInBy: null };
+    // Ô đã được chọn ngay lúc đặt (bookOne) — không còn bước Quản lý chi nhánh phân kho riêng, nên
+    // trả cọc xong là chuyển thẳng sang ALLOCATED để màn "sẵn sàng nhận kho" nhận đúng reservation này.
+    if (r.unitId) r.transitionTo('ALLOCATED', { actor: 'SYSTEM', reason: 'Ô đã chọn lúc đặt' });
     await r.save({ session });
     await audit({ action: 'payment.deposit', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { amount: pay.amount, method } } }, session);
     // QR payload shown to the customer; only its hash is stored.
@@ -166,7 +214,7 @@ export async function allocate(user: UserHydrated, id: string, unitId?: string) 
     const unit = await StorageUnitModel.findOneAndUpdate(
       filter,
       { $set: { status: 'RESERVED', currentReservationId: r._id, statusChangedAt: new Date(), statusReason: `Giữ cho ${r.code}` } },
-      { new: true, session, sort: { priceTier: -1, 'location.floor': 1, unitNumber: 1 } }, // STANDARD before PREMIUM/ECONOMY
+      { new: true, session, sort: { 'location.floor': 1, unitNumber: 1 } },
     );
     if (!unit) throw Conflict(unitId ? 'Kho đã chọn không còn trống hoặc không đúng loại' : 'Không còn kho trống cùng loại để phân', 'UNIT_NOT_AVAILABLE');
 
@@ -209,7 +257,7 @@ export async function lookupForCheckIn(user: UserHydrated, codeOrQr: string) {
 }
 
 // ---------------------------------------------------------------- check-in (STAFF, FM)
-export async function checkIn(user: UserHydrated, id: string, input: { accessMethod: AccessMethod; keyTag?: string; payMethod: PaymentMethod; qrToken?: string }) {
+export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: string; payMethod: PaymentMethod; qrToken?: string }) {
   return withTxn(async (session) => {
     const r = await loadReservation(id, session);
     await assertFacility(user, r.facilityId, 'reservation.check_in');
@@ -217,6 +265,12 @@ export async function checkIn(user: UserHydrated, id: string, input: { accessMet
     if (input.qrToken && r.checkIn?.qrTokenHash !== sha256(input.qrToken)) throw Forbidden('Mã QR không hợp lệ', 'QR_INVALID');
     const customer = await UserModel.findById(r.customerId).session(session);
     if (!customer || customer.status === 'SUSPENDED') throw Unprocessable('Tài khoản khách đang bị tạm khóa');
+
+    // Hình thức khoá đến từ loại kho (không do nhân viên chọn tại quầy); chu kỳ thuê là khách đã
+    // chọn lúc đặt, chốt sẵn trong quote — không suy ra từ loại kho nữa.
+    const ut = await UnitTypeModel.findById(r.unitTypeId).session(session);
+    if (!ut) throw NotFound('loại kho');
+    const period = r.quote.rentalPeriod;
 
     const policy = await effectivePolicy(r.facilityId, session);
     const now = new Date();
@@ -230,8 +284,9 @@ export async function checkIn(user: UserHydrated, id: string, input: { accessMet
     );
     if (!unit) throw Conflict('Kho được phân không còn ở trạng thái giữ chỗ', 'UNIT_STATE_MISMATCH');
 
-    const pin = input.accessMethod === 'PIN' ? sixDigitPin() : undefined;
-    const periodEnd = addDays(addMonthsUTC(today, 1), -1);
+    const pin = ut.accessMethod === 'PIN' ? sixDigitPin() : undefined;
+    const nextBilling = addPeriodsUTC(today, period, 1);
+    const periodEnd = addDays(nextBilling, -1);
     const rent = await createPayment({
       facilityId: r.facilityId, customerId: r.customerId, contractId, reservationId: r._id, type: 'RENT',
       amount: r.quote.firstPeriodRent, status: 'SUCCEEDED', method: input.payMethod,
@@ -240,11 +295,11 @@ export async function checkIn(user: UserHydrated, id: string, input: { accessMet
 
     const [contract] = await RentalContractModel.create([{
       _id: contractId, facilityId: r.facilityId, customerId: r.customerId, unitId: unit._id, unitTypeId: r.unitTypeId, reservationId: r._id,
-      status: 'ACTIVE', startDate: today, endDate: addMonthsUTC(today, r.durationMonths), autoRenew: r.durationMonths >= 6,
-      billing: { currency: 'VND', monthlyRate: r.quote.firstPeriodRent, billingDay: Math.min(28, today.getUTCDate()), nextBillingDate: addMonthsUTC(today, 1), paidThrough: periodEnd },
+      status: 'ACTIVE', startDate: today, endDate: addPeriodsUTC(today, period, r.periods), autoRenew: period === 'MONTH' && r.periods >= 6,
+      billing: { currency: 'VND', rentalPeriod: period, rate: r.quote.firstPeriodRent, nextBillingDate: nextBilling, paidThrough: periodEnd },
       deposit: { amount: r.quote.depositAmount, status: 'HELD', paymentId: r.depositPaymentId ?? null, refundedAmount: 0 },
       balance: { outstanding: 0, lastPaymentAt: now },
-      access: { method: input.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
+      access: { method: ut.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
       terms: { policyId: policy._id, policyVersion: policy.version, gracePeriodDays: policy.gracePeriodDays, lockoutAfterDays: policy.lockoutAfterDays, signedAt: now, signatureRef: `esign-${contractId}` },
       statusHistory: [{ from: null, to: 'ACTIVE', at: now, by: user._id }],
     }], { session });
@@ -253,7 +308,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { accessMet
     r.contractId = contractId;
     r.checkIn = { qrTokenHash: r.checkIn?.qrTokenHash ?? null, qrExpiresAt: r.checkIn?.qrExpiresAt ?? null, checkedInAt: now, checkedInBy: user._id };
     await r.save({ session });
-    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: input.accessMethod, rent: rent.amount } } }, session);
+    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: ut.accessMethod, rent: rent.amount } } }, session);
     return { contract, unit, pin }; // PIN is returned exactly once; only its hash is stored
   });
 }

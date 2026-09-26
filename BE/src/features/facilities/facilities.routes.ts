@@ -1,21 +1,27 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, FacilityStatus, PriceTier, UnitStatus } from '@ssm/shared';
+import { enumValues, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { scopeFilter, scopeQueryFacility, assertFacility } from '../../shared/http/scope';
-import { idParams, validate, zDate, zId } from '../../shared/http/validate';
-import { addUnit, facilityDetailPublic, listFacilitiesPublic, saveFacility, setBasePrice, setUnitStatus } from './inventory.service';
+import { idParams, validate, zId } from '../../shared/http/validate';
+import { addUnit, facilityDetailPublic, floorPlan, listFacilitiesPublic, saveFacility, setUnitTypeRates, setUnitStatus } from './inventory.service';
+
+const e = <T extends string>(o: Record<string, T>) => z.enum(enumValues(o) as [T, ...T[]]);
 
 export const facilitiesRouter = Router();
 
-// ---- public catalogue (no auth)
+// ---- public catalogue (no auth) — khách chọn CHU KỲ (ngày/tuần/tháng) lúc xem giá, không cố định theo loại kho.
 facilitiesRouter.get('/public', async (_req, res) => {
   res.json(await listFacilitiesPublic());
 });
-facilitiesRouter.get('/public/:id', validate({ params: idParams, query: z.object({ start: zDate.optional(), months: z.coerce.number().int().min(1).max(60).default(1) }) }), async (req, res) => {
-  res.json(await facilityDetailPublic(req.valid.params.id, req.valid.query.start, req.valid.query.months));
+facilitiesRouter.get('/public/:id', validate({ params: idParams, query: z.object({ period: e(RentalPeriod).default('MONTH'), periods: z.coerce.number().int().min(1).max(365).default(1) }) }), async (req, res) => {
+  res.json(await facilityDetailPublic(req.valid.params.id, req.valid.query.period, req.valid.query.periods));
+});
+/** Sơ đồ 2D cơ bản để khách bấm chọn ô còn trống — công khai, không cần đăng nhập. */
+facilitiesRouter.get('/public/:id/unit-types/:typeId/floor-plan', validate({ params: idParams.extend({ typeId: zId }) }), async (req, res) => {
+  res.json(await floorPlan(req.valid.params.id, req.valid.params.typeId));
 });
 
 // ---- back office
@@ -41,10 +47,12 @@ facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ par
 // ---- unit types & pricing
 facilitiesRouter.get('/:id/unit-types', validate({ params: idParams }), async (req, res) => {
   await assertFacility(req.auth!.user, req.valid.params.id);
-  res.json({ items: await UnitTypeModel.find({ facilityId: req.valid.params.id }).sort({ 'pricing.baseMonthlyRate': 1 }) });
+  res.json({ items: await UnitTypeModel.find({ facilityId: req.valid.params.id }).sort({ 'rates.MONTH': 1 }) });
 });
-facilitiesRouter.patch('/unit-types/:id/price', authorize('OPS_MANAGER'), validate({ params: idParams, body: z.object({ rate: z.number().int().min(50_000) }) }), async (req, res) => {
-  res.json(await setBasePrice(req.valid.params.id, req.valid.body.rate));
+facilitiesRouter.patch('/unit-types/:id/price', authorize('OPS_MANAGER'), validate({ params: idParams, body: z.object({
+  rates: z.object({ DAY: z.number().int().min(1_000).optional(), WEEK: z.number().int().min(1_000).optional(), MONTH: z.number().int().min(1_000).optional() }),
+}) }), async (req, res) => {
+  res.json(await setUnitTypeRates(req.valid.params.id, req.valid.body.rates));
 });
 
 // ---- physical units
@@ -59,7 +67,7 @@ unitsRouter.get('/', validate({ query: z.object({ facilityId: zId, status: z.enu
 });
 
 unitsRouter.post('/', authorize('FACILITY_MANAGER'), validate({ body: z.object({
-  unitTypeId: zId, unitNumber: z.string().min(1).max(20), floor: z.number().int().min(-5).max(100), priceTier: z.enum(enumValues(PriceTier) as [PriceTier, ...PriceTier[]]).default('STANDARD'), zone: z.string().optional(),
+  unitTypeId: zId, unitNumber: z.string().min(1).max(20), floor: z.number().int().min(-5).max(100), zone: z.string().optional(),
 }) }), async (req, res) => {
   res.status(201).json(await addUnit(req.auth!.user, req.valid.body));
 });

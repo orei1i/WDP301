@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { AccessMethod, CONTRACT_MACHINE, ContractStatus, DepositStatus, enumValues, OPEN_CONTRACT_STATUSES, type RentalContract } from '@ssm/shared';
+import { AccessMethod, CONTRACT_MACHINE, ContractStatus, DepositStatus, enumValues, OPEN_CONTRACT_STATUSES, RentalPeriod, type RentalContract } from '@ssm/shared';
 import { baseOptions, enumOf, humanCode, maxLen, money, refOpt, refReq, statusHistorySchema, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
@@ -25,8 +25,8 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
   billing: {
     type: new Schema({
       currency: { type: String, enum: ['VND', 'USD'], required: true },
-      monthlyRate: money(),
-      billingDay: { type: Number, required: true, min: 1, max: 28 },
+      rentalPeriod: enumOf(enumValues(RentalPeriod), 'MONTH'),
+      rate: money(),
       nextBillingDate: { type: Date, required: true },
       paidThrough: { type: Date, required: true },
     }, subOptions),
@@ -68,7 +68,7 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
   renewals: {
     type: [new Schema({
       previousEndDate: { type: Date, required: true }, newEndDate: { type: Date, required: true },
-      months: { type: Number, required: true, min: 1 }, paymentId: refOpt('PaymentTransaction'), at: { type: Date, default: Date.now },
+      periods: { type: Number, required: true, min: 1 }, paymentId: refOpt('PaymentTransaction'), at: { type: Date, default: Date.now },
     }, subOptions)],
     default: [], validate: maxLen(120),
   },

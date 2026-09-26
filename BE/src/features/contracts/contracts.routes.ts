@@ -11,6 +11,7 @@ import {
   extendContract, lockout, payBalance, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
+import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
 
 export const contractsRouter = Router();
 contractsRouter.use(authenticate);
@@ -39,8 +40,8 @@ contractsRouter.get('/:id', validate({ params: idParams }), async (req, res) => 
 
 const pm = z.enum(enumValues(PaymentMethod) as [string, ...string[]]).refine((m) => m !== 'INTERNAL') as z.ZodType<PaymentMethod>;
 
-contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ months: z.number().int().min(1).max(24), method: pm }) }), async (req, res) => {
-  res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.months, req.valid.body.method));
+contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm }) }), async (req, res) => {
+  res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.periods, req.valid.body.method));
 });
 contractsRouter.post('/:id/pay-balance', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ method: pm }) }), async (req, res) => {
   res.json(await payBalance(req.auth!.user, req.valid.params.id, req.valid.body.method));
@@ -52,7 +53,10 @@ contractsRouter.post('/:id/waive-late-fees', authorize('FACILITY_MANAGER', 'OPS_
   res.json(await waiveLateFees(req.auth!.user, req.valid.params.id, req.valid.body.reason));
 });
 // ---- đổi ô kho cùng loại (A1)
-contractsRouter.get('/:id/swap-candidates', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
+// Nhân viên/FM đổi NGAY (sự cố khẩn cấp — kho hỏng, cần di dời gấp) và khách gửi YÊU CẦU (chờ FM
+// duyệt) đều cần xem danh sách ô trống cùng loại, nên route này mở cho cả CUSTOMER (đã đổi sang
+// assertCanAccess trong service để kiểm tra đúng vai — khách phải là chủ hợp đồng).
+contractsRouter.get('/:id/swap-candidates', validate({ params: idParams }), async (req, res) => {
   res.json(await swapCandidates(req.auth!.user, req.valid.params.id));
 });
 contractsRouter.post('/:id/swap-unit', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
@@ -62,6 +66,18 @@ contractsRouter.post('/:id/swap-unit', authorize('STAFF', 'FACILITY_MANAGER'), v
   fee: zMoney.max(SWAP_FEE_MAX).optional().describe('Phí thao tác, chỉ Quản lý chi nhánh được đặt > 0'),
 }) }), async (req, res) => {
   res.json(await swapUnit(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+
+// ---- yêu cầu đổi ô (A1b): khách gửi yêu cầu, FM xét duyệt (xem POST/GET /swap-requests cho phần FM)
+contractsRouter.post('/:id/swap-requests', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({
+  toUnitId: zId,
+  method: z.enum(['SELF', 'DELIVERY']).describe('Tự chuyển (7 ngày) hoặc thuê nhân viên chi nhánh chuyển hộ'),
+  reason: z.string().min(5).max(500),
+}) }), async (req, res) => {
+  res.status(201).json(await createSwapRequest(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+contractsRouter.get('/:id/swap-requests', validate({ params: idParams }), async (req, res) => {
+  res.json({ items: await listSwapRequestsForContract(req.auth!.user, req.valid.params.id) });
 });
 
 contractsRouter.post('/:id/move-out', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ date: zDate }) }), async (req, res) => {
