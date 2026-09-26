@@ -113,6 +113,7 @@ app/facility/[id].tsx    →  src/features/facilities/facility-detail-screen.tsx
 app/booking/[id].tsx     →  src/features/payments/booking-screen.tsx
 app/qr/[id].tsx          →  src/features/reservations/qr-screen.tsx
 app/contract/[id].tsx    →  src/features/contracts/contract-screen.tsx
+app/contract/swap.tsx    →  src/features/contracts/swap-request-screen.tsx
 app/ticket/new.tsx       →  src/features/tickets/ticket-new-screen.tsx
 app/ticket/[id].tsx      →  src/features/tickets/ticket-detail-screen.tsx
 app/claim/new.tsx        →  src/features/claims/claim-new-screen.tsx
