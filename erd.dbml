@@ -11,13 +11,16 @@
 //  - Bỏ loại kho nhà xe (VEHICLE) và bỏ phân hạng giá (price tier).
 //  - Khách TỰ CHỌN chu kỳ thuê lúc đặt (ngày/tuần/tháng), không cố định theo loại kho — mỗi loại
 //    kho niêm yết sẵn 3 giá (rate_day/rate_week/rate_month). Cọc = 1 chu kỳ theo giá đã chọn.
-//  - Hình thức khoá (access_method) gắn theo loại kho: PHYSICAL_KEY (chìa) / RFID_CARD (thẻ) / PIN (mật khẩu).
+//  - Hình thức khoá (access_method: PHYSICAL_KEY/chìa, RFID_CARD/thẻ, PIN/mật khẩu) là thuộc tính của
+//    TỪNG Ô (storage_units.access_method), không phải loại kho — cùng loại kho có thể có ô khoá khác nhau,
+//    khách lọc/chọn ngay trên sơ đồ lúc đặt.
 //  - Khách BẮT BUỘC chọn đúng một ô cụ thể trên sơ đồ lúc đặt (reservations.unit_id không còn null
 //    chờ 'phân kho' sau) — ô chuyển sang RESERVED ngay khi đặt.
 //  - Đổi ô kho theo yêu cầu (unit_swap_requests): khách gửi yêu cầu kèm ô muốn đổi, Quản lý chi
 //    nhánh xét duyệt (miễn/thu phí), rồi xác nhận khi khách đã chuyển xong.
-//  - Từ cỡ SMALL trở lên, mỗi cỡ có 2 biến thể loại kho — thường / có điều hòa (unit_types.climate_controlled)
-//    — biến thể có điều hòa cộng thêm phụ phí CLIMATE của chính sách giá, không phải giá gốc khác nhau.
+//  - Điều hòa là ADD-ON khách tự bật lúc đặt (reservations.use_air_conditioning), KHÔNG phải thuộc
+//    tính của loại kho hay của ô — mọi ô từ cỡ SMALL trở lên (policy.surcharges[CLIMATE].categories)
+//    đều sẵn có máy lạnh về cơ sở vật chất; bật thì cộng phụ phí CLIMATE, không bật thì không tính phí.
 //  - Ca giờ nhận kho (check_in_shift): khách chọn ngay lúc đặt (reservations.preferred_check_in_shift,
 //    UNKNOWN = "chưa rõ giờ" hợp lệ) — cùng bộ enum dùng làm ca làm việc cố định của nhân viên (users.shift,
 //    bắt buộc với STAFF, không áp dụng vai trò khác, không nhận giá trị UNKNOWN).
@@ -184,10 +187,8 @@ Table unit_types {
   category unit_category
   rate_day int [note: 'giá 1 ngày — khách tự chọn chu kỳ lúc đặt']
   rate_week int [note: 'giá 1 tuần']
-  rate_month int [note: 'giá 1 tháng']
-  access_method access_method [note: 'hình thức khoá dùng chung mọi ô thuộc loại này']
+  rate_month int [note: 'giá 1 tháng — giá KHÔNG dùng điều hòa; điều hòa là add-on cộng phụ phí CLIMATE lúc đặt, không phải giá gốc khác nhau']
   area_m2 float
-  climate_controlled boolean [note: 'từ cỡ SMALL trở lên có cả 2 biến thể (thường / có điều hòa) cùng giá gốc — biến thể có điều hòa cộng phụ phí CLIMATE của chính sách giá']
   indoor boolean
   deposit_override int [note: 'null -> cọc = 1 chu kỳ theo chính sách']
   min_periods int
@@ -204,6 +205,7 @@ Table storage_units {
   unit_number varchar
   floor int
   zone varchar
+  access_method access_method [note: 'hình thức khoá của TỪNG Ô — khác nhau trong cùng một loại kho, khách lọc/chọn trên sơ đồ']
   status unit_status
   current_reservation_id objectid
   current_contract_id objectid
@@ -225,6 +227,7 @@ Table reservations {
   periods int [note: 'số chu kỳ thuê']
   end_date date [note: 'start + periods × rental_period']
   preferred_check_in_shift check_in_shift [note: 'khách chọn ngay lúc đặt; UNKNOWN = "chưa rõ giờ" (mặc định)']
+  use_air_conditioning boolean [note: 'add-on khách tự chọn lúc đặt — không gắn với ô cụ thể; false với loại kho không hợp lệ (VD Locker)']
   "quote.rental_period" rental_period
   "quote.rate" int
   "quote.deposit_amount" int
@@ -248,6 +251,7 @@ Table rental_contracts {
   start_date date
   end_date date
   auto_renew boolean
+  use_air_conditioning boolean [note: 'chốt từ reservations.use_air_conditioning lúc nhận kho']
   "billing.rental_period" rental_period
   "billing.rate" int [note: 'tiền thuê mỗi chu kỳ']
   "billing.next_billing_date" date
