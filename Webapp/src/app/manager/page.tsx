@@ -1,10 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { Banknote, CalendarClock, Gauge, TriangleAlert } from 'lucide-react';
+import { Banknote, Gauge, TriangleAlert } from 'lucide-react';
 import { useStore } from '@/shared/store/store';
-import { byId, effectivePolicy, facilityStats, typeName, unitLabel, userName } from '@/shared/lib/domain';
-import { addDays, compactVnd, fmtDate, fmtDateTime, pct, relativeDay, todayISO, vnd } from '@/shared/lib/format';
+import { byId, effectivePolicy, facilityStats, unitLabel, userName } from '@/shared/lib/domain';
+import { compactVnd, fmtDateTime, pct, vnd } from '@/shared/lib/format';
 import { Badge, ButtonLink, Card, CardHeader, EmptyState, PageHeader, Progress, Stat } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
@@ -14,8 +13,6 @@ export default function ManagerHome() {
   const fid = scope.facilityId;
   const s = facilityStats(db, fid);
   const policy = effectivePolicy(db, fid);
-  const T = todayISO();
-  const needAlloc = db.reservations.filter((r) => r.facilityId === fid && r.status === 'CONFIRMED' && r.startDate <= addDays(T, policy.allocationLeadDays)).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const delinquent = db.contracts.filter((c) => c.facilityId === fid && (c.status === 'DELINQUENT' || c.status === 'LOCKED_OUT')).sort((a, b) => b.balance.outstanding - a.balance.outstanding);
   const types = db.unitTypes.filter((t) => t.facilityId === fid);
   const activity = db.audit.filter((a) => a.facilityId === fid).slice(0, 6);
@@ -23,11 +20,10 @@ export default function ManagerHome() {
   return (
     <>
       <PageHeader title="Tổng quan chi nhánh" description={`Chính sách v${policy.version}: ân hạn ${policy.gracePeriodDays} ngày, khóa truy cập sau ${policy.lockoutAfterDays} ngày quá hạn.`} actions={<FacilityPicker scope={scope} />} />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Tỷ lệ lấp đầy" value={pct(s.occupancy)} sub={`${s.occupied}/${s.total - s.maintenance} kho khả dụng · diện tích ${pct(s.areaOccupancy)}`} icon={<Gauge className="size-4" />} />
         <Stat label="Doanh thu định kỳ / tháng" value={compactVnd(s.mrr)} sub={`${s.activeContracts} hợp đồng đang mở`} icon={<Banknote className="size-4" />} tone="green" />
         <Stat label="Công nợ quá hạn" value={compactVnd(s.overdue)} sub={`${s.delinquentCount} hợp đồng`} icon={<TriangleAlert className="size-4" />} tone="amber" />
-        <Stat label="Cần phân kho" value={needAlloc.length} sub={`Nhận kho trong ${policy.allocationLeadDays} ngày tới`} icon={<CalendarClock className="size-4" />} tone="blue" />
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -48,23 +44,6 @@ export default function ManagerHome() {
               );
             })}
           </ul>
-        </Card>
-
-        <Card>
-          <CardHeader title="Cần phân kho" actions={<Link href="/manager/allocations" className="text-xs font-medium text-brand-700">Phân kho</Link>} />
-          {needAlloc.length === 0 ? <EmptyState title="Tất cả đặt chỗ sắp tới đã được phân kho" /> : (
-            <ul className="divide-y divide-stone-100">
-              {needAlloc.map((r) => (
-                <li key={r._id} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium">{typeName(db, r.unitTypeId)} · {userName(db, r.customerId)}</p>
-                    <p className="text-xs text-stone-500">{r.code} · nhận {fmtDate(r.startDate)}</p>
-                  </div>
-                  <Badge tone={r.startDate <= T ? 'red' : 'amber'}>{relativeDay(r.startDate)}</Badge>
-                </li>
-              ))}
-            </ul>
-          )}
         </Card>
 
         <Card>

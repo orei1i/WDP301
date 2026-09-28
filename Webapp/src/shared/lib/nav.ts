@@ -35,7 +35,6 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
     items: [
       { href: '/manager', label: 'Tổng quan', icon: LayoutDashboard },
       { href: '/manager/units', label: 'Quản lý kho', icon: LayoutGrid },
-      { href: '/manager/allocations', label: 'Phân kho', icon: CalendarCheck },
       { href: '/manager/contracts', label: 'Hợp đồng & công nợ', icon: FileText },
       { href: '/manager/tasks', label: 'Yêu cầu & công việc', icon: ListTodo },
       { href: '/manager/claims', label: 'Bồi thường', icon: HandCoins },

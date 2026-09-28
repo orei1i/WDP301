@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { CircleCheck, KeyRound, ScanLine, Search, TriangleAlert } from 'lucide-react';
+import { CircleCheck, KeyRound, ScanLine, Search, TriangleAlert, Undo2 } from 'lucide-react';
 import type { CheckInShift, PaymentMethod, Reservation } from '@ssm/shared';
 import { periodLabel } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
@@ -29,7 +29,8 @@ function CheckInInner() {
   if (!user) return null;
 
   const r = found ? db.reservations.find((x) => x._id === found._id) ?? null : null;
-  const method = (r ? db.unitTypes.find((t) => t._id === r.unitTypeId)?.accessMethod : null) ?? 'PIN';
+  // Hình thức khoá là thuộc tính của chính ô đã chọn (không còn theo loại kho).
+  const method = (r ? db.units.find((u) => u._id === r.unitId)?.accessMethod : null) ?? 'PIN';
   const arrivals = db.reservations.filter((x) => x.status === 'ALLOCATED' && x.startDate <= todayISO() && inScope(db, user, x.facilityId)
     && (shiftFilter === 'ALL' || x.preferredCheckInShift === shiftFilter));
 
@@ -133,11 +134,15 @@ function CheckInInner() {
           <ul className="divide-y divide-stone-100">
             {arrivals.length === 0 && <li className="px-5 py-6 text-sm text-stone-500">Không có lượt nào.</li>}
             {arrivals.map((x) => (
-              <li key={x._id}>
-                <button onClick={() => { setCode(x.code); void lookup(x.code); }} className="w-full px-5 py-3 text-left hover:bg-stone-50">
+              <li key={x._id} className="flex items-center">
+                <button onClick={() => { setCode(x.code); void lookup(x.code); }} className="min-w-0 flex-1 px-5 py-3 text-left hover:bg-stone-50">
                   <p className="text-sm font-medium">{userName(db, x.customerId)}</p>
                   <p className="font-mono text-xs text-stone-500">{x.code} · {unitLabel(db, x.unitId)}</p>
                   <div className="mt-1"><StatusBadge map={CHECK_IN_SHIFT} value={x.preferredCheckInShift} /></div>
+                </button>
+                <button type="button" title="Gỡ phân kho — hiếm dùng, chỉ khi cần đổi ô trước khi khách đến" onClick={() => void run('unallocate', { reservationId: x._id }, 'Đã gỡ phân kho')}
+                  className="mr-3 shrink-0 rounded-md p-2 text-stone-400 hover:bg-stone-100 hover:text-red-600">
+                  <Undo2 className="size-4" />
                 </button>
               </li>
             ))}
