@@ -1,5 +1,5 @@
 import type { ClientSession, Types } from 'mongoose';
-import type { PriceQuote, RentalPeriod } from '@ssm/shared';
+import type { PriceQuote, RentalPeriod, UnitCategory } from '@ssm/shared';
 import { FacilityModel, PolicyModel, type PolicyDoc, type UnitTypeDoc, type ReservationDoc } from '../../shared/db/models';
 
 /** Facility override if active, otherwise the active GLOBAL policy. */
@@ -16,16 +16,27 @@ export function unitRate(ut: Pick<UnitTypeDoc, 'rates'>, period: RentalPeriod) {
   return ut.rates[period];
 }
 
-/** Same formula as the Webapp mock (lib/domain.ts) so quotes match across clients. `periods` = số chu kỳ thuê. */
+/** Loại kho này có tuỳ chọn điều hòa (add-on) hay không — theo đúng danh mục cỡ kho khai báo ở
+ * policy.surcharges[CLIMATE].categories (VD SMALL/MEDIUM/LARGE/XL, không có LOCKER). */
+export function climateEligible(policy: Pick<PolicyDoc, 'surcharges'>, category: UnitCategory) {
+  return policy.surcharges.some((s) => s.code === 'CLIMATE' && s.categories.includes(category));
+}
+
+/**
+ * Same formula as the Webapp mock (lib/domain.ts) so quotes match across clients. `periods` = số chu kỳ thuê.
+ * `useAirConditioning` là add-on KHÁCH TỰ CHỌN lúc đặt (không phải thuộc tính của ô) — mọi ô của loại
+ * kho hợp lệ đều sẵn có máy lạnh, chỉ tính phụ phí CLIMATE khi khách chọn dùng.
+ */
 export function quote(
-  ut: Pick<UnitTypeDoc, 'rates' | 'category' | 'features' | 'depositOverride'>,
+  ut: Pick<UnitTypeDoc, 'rates' | 'category' | 'depositOverride'>,
   policy: PolicyDoc & { _id: Types.ObjectId },
   period: RentalPeriod,
   periods: number,
+  useAirConditioning: boolean,
 ): PriceQuote<Types.ObjectId> {
   const rate = unitRate(ut, period);
   const surcharge = policy.surcharges
-    .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || ut.features.climateControlled))
+    .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || useAirConditioning))
     .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((rate * s.value) / 100) : s.value), 0);
   const now = new Date();
   const eligible = policy.discounts

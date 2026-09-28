@@ -32,6 +32,8 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
   endDate: { type: Date, required: true },
   // Khách chọn ngay lúc đặt — "Chưa rõ giờ" (UNKNOWN) là lựa chọn hợp lệ, không phải giá trị thiếu.
   preferredCheckInShift: enumOf(enumValues(CheckInShift), 'UNKNOWN'),
+  // Add-on điều hòa khách tự chọn lúc đặt — không phải thuộc tính của ô. false với loại kho không hợp lệ.
+  useAirConditioning: { type: Boolean, default: false },
   quote: { type: quoteSchema, required: true, immutable: true },
   holdExpiresAt: { type: Date, default: null },
   depositPaymentId: refOpt('PaymentTransaction'),

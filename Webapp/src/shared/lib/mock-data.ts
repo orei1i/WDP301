@@ -3,6 +3,7 @@ import type {
   PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
+import { ACCESS_METHOD } from '@ssm/shared';
 import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
@@ -143,23 +144,29 @@ export function createSeed(): DB {
   ];
 
   // ---------- unit types ----------
-  // Khách tự chọn chu kỳ lúc đặt (ngày/tuần/tháng) — mỗi loại kho niêm yết sẵn cả 3 giá.
-  // access = hình thức khoá dùng chung cho mọi ô thuộc loại này.
-  // Từ cỡ S trở lên (không áp dụng cho locker), mỗi cỡ có 2 biến thể — thường / có điều hòa — cùng
-  // 3 giá gốc; biến thể "có điều hòa" đắt hơn nhờ phụ phí CLIMATE của chính sách giá (không phải giá gốc khác nhau).
+  // Khách tự chọn chu kỳ lúc đặt (ngày/tuần/tháng) — mỗi loại kho niêm yết sẵn cả 3 giá (giá GỐC,
+  // ô không điều hòa). Điều hòa và hình thức khoá KHÔNG còn cố định theo loại kho — mỗi Ô VẬT LÝ tự
+  // có (xem vòng lặp bên dưới), nên cùng một loại kho có cả ô thường/ô điều hòa, cả 3 hình thức khoá.
   const TYPE_DEFS = [
-    { key: 'LK', code: 'LK-1x1', name: 'Tủ locker', category: 'LOCKER', access: 'PIN', dims: [1, 1, 1.2], rates: { DAY: 25_000, WEEK: 140_000, MONTH: 390_000 }, count: 14, floors: [1], prefix: 'T', ac: false, minPeriods: 1, desc: 'Vừa vali, hồ sơ, đồ cá nhân. Phù hợp sinh viên. Mở bằng mật khẩu.' },
-    { key: 'S', code: 'S-1.5x2', name: 'Phòng S', category: 'SMALL', access: 'RFID_CARD', dims: [1.5, 2, 2.4], rates: { DAY: 60_000, WEEK: 350_000, MONTH: 990_000 }, count: 10, floors: [1, 2], prefix: 'S', ac: false, minPeriods: 1, desc: 'Tương đương đồ đạc một phòng ngủ nhỏ. Không điều hòa. Ra vào bằng thẻ khoá.' },
-    { key: 'S-AC', code: 'S-1.5x2-AC', name: 'Phòng S (có điều hòa)', category: 'SMALL', access: 'RFID_CARD', dims: [1.5, 2, 2.4], rates: { DAY: 60_000, WEEK: 350_000, MONTH: 990_000 }, count: 8, floors: [2, 3], prefix: 'SA', ac: true, minPeriods: 1, desc: 'Như phòng S, có điều hòa giữ nhiệt độ ổn định — phù hợp đồ dễ ẩm mốc. Phụ phí điều hòa theo chính sách giá.' },
-    { key: 'M', code: 'M-2x3', name: 'Phòng M', category: 'MEDIUM', access: 'PIN', dims: [2, 3, 2.4], rates: { DAY: 100_000, WEEK: 600_000, MONTH: 1_790_000 }, count: 8, floors: [1, 2], prefix: 'M', ac: false, minPeriods: 1, desc: 'Đồ đạc căn hộ 1–2 phòng ngủ, hàng tồn kho shop online. Không điều hòa. Mở bằng mật khẩu.' },
-    { key: 'M-AC', code: 'M-2x3-AC', name: 'Phòng M (có điều hòa)', category: 'MEDIUM', access: 'PIN', dims: [2, 3, 2.4], rates: { DAY: 100_000, WEEK: 600_000, MONTH: 1_790_000 }, count: 8, floors: [2, 3], prefix: 'MA', ac: true, minPeriods: 1, desc: 'Như phòng M, có điều hòa — phù hợp nội thất gỗ, thiết bị điện tử. Phụ phí điều hòa theo chính sách giá.' },
-    { key: 'L', code: 'L-3x4', name: 'Phòng L', category: 'LARGE', access: 'PHYSICAL_KEY', dims: [3, 4, 2.8], rates: { DAY: 180_000, WEEK: 1_050_000, MONTH: 3_200_000 }, count: 8, floors: [1, 2], prefix: 'L', ac: false, minPeriods: 1, desc: 'Nội thất căn nhà 3 phòng ngủ, kho hàng doanh nghiệp nhỏ. Không điều hòa. Nhận chìa khoá.' },
-    { key: 'L-AC', code: 'L-3x4-AC', name: 'Phòng L (có điều hòa)', category: 'LARGE', access: 'PHYSICAL_KEY', dims: [3, 4, 2.8], rates: { DAY: 180_000, WEEK: 1_050_000, MONTH: 3_200_000 }, count: 6, floors: [1, 2], prefix: 'LA', ac: true, minPeriods: 1, desc: 'Như phòng L, có điều hòa — phù hợp hàng hoá cần bảo quản mát. Phụ phí điều hòa theo chính sách giá.' },
-    { key: 'XL', code: 'XL-4x6', name: 'Phòng XL (drive-up)', category: 'XL', access: 'PHYSICAL_KEY', dims: [4, 6, 3], rates: { DAY: 320_000, WEEK: 1_850_000, MONTH: 5_600_000 }, count: 5, floors: [1], prefix: 'X', ac: false, minPeriods: 3, desc: 'Xe tải lùi sát cửa kho. Không điều hòa. Dành cho doanh nghiệp. Nhận chìa khoá.' },
-    { key: 'XL-AC', code: 'XL-4x6-AC', name: 'Phòng XL (có điều hòa)', category: 'XL', access: 'PHYSICAL_KEY', dims: [4, 6, 3], rates: { DAY: 320_000, WEEK: 1_850_000, MONTH: 5_600_000 }, count: 4, floors: [1], prefix: 'XA', ac: true, minPeriods: 3, desc: 'Như phòng XL, có điều hòa — phù hợp hàng hoá giá trị cao cần bảo quản mát. Phụ phí điều hòa theo chính sách giá.' },
+    { key: 'LK', code: 'LK-1x1', name: 'Tủ locker', category: 'LOCKER', dims: [1, 1, 1.2], rates: { DAY: 25_000, WEEK: 140_000, MONTH: 390_000 }, count: 18, floors: [1], prefix: 'T', minPeriods: 1, desc: 'Vừa vali, hồ sơ, đồ cá nhân. Phù hợp sinh viên. Không điều hòa, mở bằng mật khẩu.' },
+    { key: 'S', code: 'S-1.5x2', name: 'Phòng S', category: 'SMALL', dims: [1.5, 2, 2.4], rates: { DAY: 60_000, WEEK: 350_000, MONTH: 990_000 }, count: 30, floors: [1, 2], prefix: 'S', minPeriods: 1, desc: 'Tương đương đồ đạc một phòng ngủ nhỏ. Có cả ô thường và ô điều hòa, đủ 3 hình thức khoá.' },
+    { key: 'M', code: 'M-2x3', name: 'Phòng M', category: 'MEDIUM', dims: [2, 3, 2.4], rates: { DAY: 100_000, WEEK: 600_000, MONTH: 1_790_000 }, count: 24, floors: [2, 3], prefix: 'M', minPeriods: 1, desc: 'Đồ đạc căn hộ 1–2 phòng ngủ, hàng tồn kho shop online. Có cả ô thường và ô điều hòa, đủ 3 hình thức khoá.' },
+    { key: 'L', code: 'L-3x4', name: 'Phòng L', category: 'LARGE', dims: [3, 4, 2.8], rates: { DAY: 180_000, WEEK: 1_050_000, MONTH: 3_200_000 }, count: 24, floors: [1, 2], prefix: 'L', minPeriods: 1, desc: 'Nội thất căn nhà 3 phòng ngủ, kho hàng doanh nghiệp nhỏ. Có cả ô thường và ô điều hòa, đủ 3 hình thức khoá.' },
+    { key: 'XL', code: 'XL-4x6', name: 'Phòng XL (drive-up)', category: 'XL', dims: [4, 6, 3], rates: { DAY: 320_000, WEEK: 1_850_000, MONTH: 5_600_000 }, count: 18, floors: [1], prefix: 'X', minPeriods: 3, desc: 'Xe tải lùi sát cửa kho, tầng trệt. Có cả ô thường và ô điều hòa, đủ 3 hình thức khoá.' },
   ] as const;
   const FAC_PRICE: Record<string, number> = { 'f-q7': 1, 'f-td': 0.9, 'f-tb': 1.05, 'f-bt': 1 };
   const OCC_TARGET: Record<string, number> = { 'f-q7': 0.62, 'f-td': 0.55, 'f-tb': 0.6 };
+  // Chia sơ đồ theo khu khoá (thẻ/mật khẩu/chìa) liên tiếp — 2 ô kề nhau luôn cùng hình thức khoá,
+  // dễ demo cho khách muốn thuê 2 ô giống hệt nhau nằm cạnh nhau. Điều hòa KHÔNG còn chia khu vật lý
+  // nữa — giờ là add-on khách tự bật lúc đặt (UnitType.rates + Reservation.useAirConditioning), áp
+  // dụng như nhau cho MỌI ô của loại kho hợp lệ (không phải một số ô mới có).
+  const LOCK_CYCLE: readonly AccessMethod[] = ['RFID_CARD', 'PIN', 'PHYSICAL_KEY'];
+  const lockFor = (i: number, count: number, isLocker: boolean): AccessMethod =>
+    isLocker ? 'PIN' : LOCK_CYCLE[Math.min(2, Math.floor(i / Math.ceil(count / 3)))];
+  // Rải đều theo tầng thành từng khối liên tiếp (không round-robin) để mỗi tầng gọn thành một khối
+  // trên sơ đồ, dễ nhìn khi có nhiều tầng.
+  const floorFor = (i: number, count: number, floors: readonly number[]) =>
+    floors.length <= 1 ? floors[0] : floors[Math.min(floors.length - 1, Math.floor(i / Math.ceil(count / floors.length)))];
 
   const unitTypes: UnitType[] = [];
   const units: StorageUnit[] = [];
@@ -170,13 +177,12 @@ export function createSeed(): DB {
         ...base(`ut-${f._id.slice(2)}-${t.key}`, f.createdAt), ...alive,
         facilityId: f._id, code: t.code, name: t.name, category: t.category as UnitCategory, description: t.desc,
         dimensions: { widthM: w, depthM: d, heightM: h }, areaM2: Math.round(w * d * 100) / 100,
-        features: { climateControlled: t.ac, indoor: true },
+        features: { indoor: true },
         rates: {
           DAY: Math.round((t.rates.DAY * FAC_PRICE[f._id]) / 1_000) * 1_000,
           WEEK: Math.round((t.rates.WEEK * FAC_PRICE[f._id]) / 1_000) * 1_000,
           MONTH: Math.round((t.rates.MONTH * FAC_PRICE[f._id]) / 1_000) * 1_000,
         },
-        accessMethod: t.access,
         depositOverride: null, minPeriods: t.minPeriods, imageUrls: [], isActive: true, inventoryVersion: 0,
       };
       unitTypes.push(ut);
@@ -185,15 +191,18 @@ export function createSeed(): DB {
       const occN = Math.floor(t.count * OCC_TARGET[f._id]);
       const maintN = t.count >= 10 ? 1 : 0;
       const order = Array.from({ length: t.count }, (_, k) => k).sort(() => rand() - 0.5);
+      const isLocker = t.key === 'LK';
       for (let i = 0; i < t.count; i++) {
-        const floor = t.floors[i % t.floors.length];
+        const accessMethod = lockFor(i, t.count, isLocker);
+        const floor = floorFor(i, t.count, t.floors);
         const rank = order.indexOf(i);
         const status: UnitStatus = rank < occN ? 'OCCUPIED' : rank < occN + maintN ? 'MAINTENANCE' : 'AVAILABLE';
         units.push({
           ...base(`su-${f._id.slice(2)}-${t.prefix}${i + 1}`, f.createdAt), ...alive,
           facilityId: f._id, unitTypeId: ut._id,
           unitNumber: `${t.prefix}${floor < 0 ? 'B' : floor}-${String(i + 1).padStart(2, '0')}`,
-          location: { building: 'A', floor, zone: `Dãy ${t.prefix}` },
+          location: { building: 'A', floor, zone: `Khu ${ACCESS_METHOD[accessMethod]}` },
+          accessMethod,
           status, statusChangedAt: addDays(T, -int(1, 60)),
           statusReason: status === 'MAINTENANCE' ? pick(['Thay bản lề cửa cuốn', 'Sơn lại sàn', 'Kiểm tra rò rỉ trần']) : null,
           currentReservationId: null, currentContractId: null, overlockActive: false, notes: '',
@@ -216,14 +225,18 @@ export function createSeed(): DB {
   const contracts: RentalContract[] = [];
   const payments: PaymentTransaction[] = [];
 
-  const quoteFor = (ut: UnitType, period: RentalPeriod, periods: number) => {
+  // useAirConditioning là add-on khách tự chọn lúc đặt (không phải thuộc tính của ô) — mirror công
+  // thức BE (pricing.ts: quote() + climateEligible()).
+  const quoteFor = (ut: UnitType, period: RentalPeriod, periods: number, useAirConditioning = false) => {
     const rate = ut.rates[period];
+    const surchargeAmount = useAirConditioning && ut.category !== 'LOCKER' ? Math.round(rate * 0.1) : 0;
+    const gross = rate + surchargeAmount;
     const discountPct = periods >= 12 ? 10 : periods >= 6 ? 5 : 0;
-    const discountAmount = Math.round((rate * discountPct) / 100);
+    const discountAmount = Math.round((gross * discountPct) / 100);
     return {
-      currency: 'VND' as const, rentalPeriod: period, rate, depositAmount: rate, discountAmount, surchargeAmount: 0,
-      appliedRuleCodes: discountPct ? [discountPct === 10 ? 'DAI_HAN_12' : 'DAI_HAN_6'] : [],
-      firstPeriodRent: rate - discountAmount, totalDueAtBooking: rate,
+      currency: 'VND' as const, rentalPeriod: period, rate, depositAmount: gross, discountAmount, surchargeAmount,
+      appliedRuleCodes: [...(surchargeAmount ? ['CLIMATE'] : []), ...(discountPct ? [discountPct === 10 ? 'DAI_HAN_12' : 'DAI_HAN_6'] : [])],
+      firstPeriodRent: gross - discountAmount, totalDueAtBooking: gross,
       policyId: ut.facilityId === 'f-td' ? 'pol-td-1' : 'pol-g-3', policyVersion: ut.facilityId === 'f-td' ? 1 : 3,
     };
   };
@@ -264,7 +277,9 @@ export function createSeed(): DB {
       renewals.push({ previousEndDate: end, newEndDate: next, periods: term, paymentId: null, at: end });
       end = next;
     }
-    const q = quoteFor(ut, period, term);
+    // Add-on điều hòa khách tự chọn lúc đặt — không gắn với ô nào, chỉ loại LOCKER luôn false.
+    const useAc = ut.category !== 'LOCKER' && rand() < 0.45;
+    const q = quoteFor(ut, period, term, useAc);
     let nextBilling = start;
     while (nextBilling <= T) nextBilling = addP(nextBilling, 1);
 
@@ -279,12 +294,12 @@ export function createSeed(): DB {
     const lateFee = overdueDays ? Math.round(q.rate * 0.05) + (overdueDays >= 15 ? 200_000 : 0) : 0;
     const cid = nid('ctr');
     const rid = nid('rsv');
-    const access: AccessMethod = ut.accessMethod;
+    const access: AccessMethod = u.accessMethod;
 
     reservations.push({
       ...base(rid, addDays(start, -int(2, 10))), code: makeCode('RSV'), facilityId: u.facilityId, customerId: customer, unitTypeId: ut._id,
       unitId: u._id, status: 'CHECKED_IN', startDate: start, periods: term, endDate: addP(start, term), quote: q,
-      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const),
+      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const), useAirConditioning: useAc,
       holdExpiresAt: null, depositPaymentId: null, allocation: { allocatedAt: addDays(start, -1), allocatedBy: null },
       checkIn: { qrTokenHash: null, qrExpiresAt: null, checkedInAt: start, checkedInBy: null }, cancellation: null,
       contractId: cid, source: pick(['WEB', 'MOBILE', 'WALK_IN'] as const), idempotencyKey: null,
@@ -309,7 +324,7 @@ export function createSeed(): DB {
 
     contracts.push({
       ...base(cid, start), contractNumber: makeCode('CTR'), facilityId: u.facilityId, customerId: customer, unitId: u._id, unitTypeId: ut._id,
-      reservationId: rid, status, startDate: start, endDate: end, autoRenew: period === 'MONTH' && term >= 6,
+      reservationId: rid, status, startDate: start, endDate: end, autoRenew: period === 'MONTH' && term >= 6, useAirConditioning: useAc,
       billing: { currency: 'VND', rentalPeriod: period, rate: q.firstPeriodRent, nextBillingDate: nextBilling, paidThrough },
       deposit: { amount: q.depositAmount, status: 'HELD', paymentId: deposit._id, refundedAmount: 0 },
       balance: { outstanding: overdueDays ? q.firstPeriodRent + lateFee : 0, lastPaymentAt: addDays(paidThrough, -28) },
@@ -333,7 +348,6 @@ export function createSeed(): DB {
     const id = nid('rsv');
     const start = addDays(T, startOffset);
     const period = pick(['DAY', 'WEEK', 'MONTH'] as const);
-    const q = quoteFor(ut, period, periods);
     // Ô cụ thể được giữ ngay từ PENDING (khách chọn trên sơ đồ lúc đặt) — chỉ CANCELLED là không giữ
     // (đã nhả lại trong thực tế). Hết ô trống cho ALLOCATED thì hạ xuống CONFIRMED — model bắt buộc
     // ALLOCATED phải có unitId, còn CONFIRMED thì không.
@@ -343,6 +357,9 @@ export function createSeed(): DB {
       if (!u) { if (status === 'ALLOCATED') status = 'CONFIRMED'; }
       else { u.status = 'RESERVED'; u.currentReservationId = id; unitId = u._id; }
     }
+    // Add-on điều hòa khách tự chọn lúc đặt — không gắn với ô nào, chỉ loại LOCKER luôn false.
+    const useAc = ut.category !== 'LOCKER' && rand() < 0.45;
+    const q = quoteFor(ut, period, periods, useAc);
     const createdAt = addDays(T, -int(1, 9));
     let depositPaymentId: string | null = null;
     if (status !== 'PENDING' && status !== 'CANCELLED') {
@@ -352,7 +369,7 @@ export function createSeed(): DB {
     reservations.push({
       ...base(id, createdAt), code: makeCode('RSV'), facilityId: fid, customerId, unitTypeId: ut._id, unitId, status,
       startDate: start, periods, endDate: addPeriods(start, period, periods), quote: q,
-      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const),
+      preferredCheckInShift: pick(['SHIFT_1', 'SHIFT_2', 'SHIFT_3', 'SHIFT_4', 'UNKNOWN'] as const), useAirConditioning: useAc,
       holdExpiresAt: status === 'PENDING' ? new Date(Date.now() + 22 * 60_000).toISOString() : null,
       allocation: unitId ? { allocatedAt: addDays(T, -1), allocatedBy: null } : null,
       depositPaymentId,

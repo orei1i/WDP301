@@ -1,5 +1,5 @@
 import { Schema, model, type Model } from 'mongoose';
-import { enumValues, UNIT_MACHINE, UnitStatus, type StorageUnit } from '@ssm/shared';
+import { AccessMethod, enumValues, UNIT_MACHINE, UnitStatus, type StorageUnit } from '@ssm/shared';
 import { baseOptions, enumOf, refOpt, refReq, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, softDeletePlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
@@ -16,6 +16,10 @@ const schema = new Schema<StorageUnitDoc, StorageUnitModelType, Methods>({
     type: new Schema({ building: String, floor: { type: Number, required: true, min: -5, max: 100 }, zone: String, aisle: String }, subOptions),
     required: true,
   },
+  // Hình thức khoá là thuộc tính CỦA TỪNG Ô (khác nhau trong cùng một loại kho) — khách lọc/chọn ngay
+  // trên sơ đồ lúc đặt. Điều hòa KHÔNG ở đây nữa — mọi ô của loại kho hợp lệ đều sẵn có máy lạnh về
+  // cơ sở vật chất, dùng hay không là add-on khách chọn lúc đặt (Reservation.useAirConditioning).
+  accessMethod: enumOf(enumValues(AccessMethod), 'PIN'),
   status: enumOf(enumValues(UnitStatus), 'AVAILABLE'),
   statusChangedAt: { type: Date, default: Date.now },
   statusReason: { type: String, default: null, maxlength: 500 },

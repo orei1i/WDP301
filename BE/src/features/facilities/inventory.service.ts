@@ -1,9 +1,9 @@
-import type { FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
+import type { AccessMethod, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertFacility } from '../../shared/http/scope';
 import { availability } from './availability';
-import { effectivePolicy, quote } from '../policies/pricing';
+import { climateEligible, effectivePolicy, quote } from '../policies/pricing';
 import { audit } from '../audit/audit.service';
 
 // ---------------------------------------------------------------- public catalogue
@@ -21,25 +21,35 @@ export async function listFacilitiesPublic() {
   return { items, unitTypes: types };
 }
 
-export async function facilityDetailPublic(id: string, period: RentalPeriod = 'MONTH', periods = 1) {
+export async function facilityDetailPublic(id: string, period: RentalPeriod = 'MONTH', periods = 1, useAirConditioning = false) {
   const f = await FacilityModel.findById(id).lean();
   if (!f) throw NotFound('chi nhánh');
   const policy = await effectivePolicy(f._id);
   const types = await UnitTypeModel.find({ facilityId: f._id, isActive: true }).sort({ 'rates.MONTH': 1 }).lean();
-  const unitTypes = await Promise.all(types.map(async (t) => ({
-    ...t, quote: quote(t, policy, period, periods), availability: await availability(f._id, t._id),
-  })));
+  // Điều hòa là add-on khách tự bật lúc đặt, không phải thuộc tính của ô — mọi ô của loại kho hợp lệ
+  // đều dùng chung một giá. Loại kho không hợp lệ (VD Locker) luôn bỏ qua cờ này (không có phụ phí).
+  const unitTypes = await Promise.all(types.map(async (t) => {
+    const acEligible = climateEligible(policy, t.category);
+    return { ...t, acEligible, quote: quote(t, policy, period, periods, acEligible && useAirConditioning), availability: await availability(f._id, t._id) };
+  }));
   return {
     facility: f, unitTypes,
     policy: { version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes, cancellation: policy.cancellation, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods },
   };
 }
 
-/** Sơ đồ 2D cơ bản: toàn bộ ô của một loại kho, đủ để khách bấm chọn ô còn trống lúc đặt. Công khai —
- * hiện trạng thái từng ô (không phải chi tiết hợp đồng/khách) nên không rò rỉ gì nhạy cảm. */
+/**
+ * Sơ đồ 2D cơ bản: toàn bộ ô của một loại kho, đủ để khách bấm chọn ô còn trống lúc đặt. Công khai —
+ * hiện trạng thái từng ô (không phải chi tiết hợp đồng/khách) nên không rò rỉ gì nhạy cảm.
+ *
+ * Chỉ hình thức khoá khác nhau giữa các ô — điều hòa là add-on chung cho cả loại kho (xem
+ * facilityDetailPublic), không cần báo giá riêng cho từng ô nữa.
+ */
 export async function floorPlan(facilityId: string, unitTypeId: string) {
-  const items = await StorageUnitModel.find({ facilityId, unitTypeId }, { unitNumber: 1, 'location.floor': 1, 'location.zone': 1, status: 1 })
-    .sort({ 'location.floor': 1, unitNumber: 1 }).lean();
+  const items = await StorageUnitModel.find(
+    { facilityId, unitTypeId },
+    { unitNumber: 1, 'location.floor': 1, 'location.zone': 1, status: 1, accessMethod: 1 },
+  ).sort({ 'location.floor': 1, unitNumber: 1 }).lean();
   return { items };
 }
 
@@ -79,12 +89,15 @@ export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record
 }
 
 // ---------------------------------------------------------------- units (STAFF, FM)
-export async function addUnit(user: UserHydrated, input: { unitTypeId: string; unitNumber: string; floor: number; zone?: string }) {
+export async function addUnit(user: UserHydrated, input: {
+  unitTypeId: string; unitNumber: string; floor: number; zone?: string; accessMethod: AccessMethod;
+}) {
   const ut = await UnitTypeModel.findById(input.unitTypeId);
   if (!ut) throw NotFound('loại kho');
   await assertFacility(user, ut.facilityId, 'unit.create');
   const u = await StorageUnitModel.create({
     facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: input.unitNumber, location: { building: 'A', floor: input.floor, zone: input.zone },
+    accessMethod: input.accessMethod,
   });
   await audit({ action: 'unit.create', entityType: 'StorageUnit', entityId: u._id, facilityId: ut.facilityId });
   return u;

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
+import { AccessMethod, enumValues, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
@@ -16,8 +16,12 @@ export const facilitiesRouter = Router();
 facilitiesRouter.get('/public', async (_req, res) => {
   res.json(await listFacilitiesPublic());
 });
-facilitiesRouter.get('/public/:id', validate({ params: idParams, query: z.object({ period: e(RentalPeriod).default('MONTH'), periods: z.coerce.number().int().min(1).max(365).default(1) }) }), async (req, res) => {
-  res.json(await facilityDetailPublic(req.valid.params.id, req.valid.query.period, req.valid.query.periods));
+// ac = khách có muốn dùng điều hòa (add-on) không — áp cho mọi loại kho hợp lệ trong response, không
+// gắn với ô cụ thể nào; loại kho không hợp lệ (VD Locker) tự bỏ qua cờ này (facilityDetailPublic).
+facilitiesRouter.get('/public/:id', validate({ params: idParams, query: z.object({
+  period: e(RentalPeriod).default('MONTH'), periods: z.coerce.number().int().min(1).max(365).default(1), ac: z.coerce.boolean().default(false),
+}) }), async (req, res) => {
+  res.json(await facilityDetailPublic(req.valid.params.id, req.valid.query.period, req.valid.query.periods, req.valid.query.ac));
 });
 /** Sơ đồ 2D cơ bản để khách bấm chọn ô còn trống — công khai, không cần đăng nhập. */
 facilitiesRouter.get('/public/:id/unit-types/:typeId/floor-plan', validate({ params: idParams.extend({ typeId: zId }) }), async (req, res) => {
@@ -68,6 +72,7 @@ unitsRouter.get('/', validate({ query: z.object({ facilityId: zId, status: z.enu
 
 unitsRouter.post('/', authorize('FACILITY_MANAGER'), validate({ body: z.object({
   unitTypeId: zId, unitNumber: z.string().min(1).max(20), floor: z.number().int().min(-5).max(100), zone: z.string().optional(),
+  accessMethod: e(AccessMethod).default('PIN'),
 }) }), async (req, res) => {
   res.status(201).json(await addUnit(req.auth!.user, req.valid.body));
 });

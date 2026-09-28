@@ -6,7 +6,7 @@ import {
 } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
-import { cancellationRefund, effectivePolicy, quote } from '../policies/pricing';
+import { cancellationRefund, climateEligible, effectivePolicy, quote } from '../policies/pricing';
 import { addDays, addPeriodsUTC, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
@@ -23,6 +23,9 @@ export interface BookingItem {
   source: Reservation['source']; idempotencyKey?: string;
   /** Ca giờ khách dự kiến đến nhận kho, chọn ngay lúc đặt — UNKNOWN ("Chưa rõ giờ") là lựa chọn hợp lệ. */
   preferredCheckInShift: CheckInShift;
+  /** Add-on điều hòa khách tự chọn lúc đặt — không gắn với ô cụ thể nào. Server tự ép về false nếu
+   * loại kho không hợp lệ (VD Locker), không báo lỗi, để client không phải biết trước danh sách cỡ hợp lệ. */
+  useAirConditioning: boolean;
   /** Bằng chứng đã đồng ý Điều khoản + Chính sách bảo mật — bắt buộc, đóng dấu ip/userAgent ở route. */
   consent: { termsVersion: string; privacyVersion: string; acceptedAt?: string; ip: string | null; userAgent: string | null };
 }
@@ -64,12 +67,15 @@ async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSe
   // Token chống race cho khách khác đang xem cùng loại kho này (đếm chỗ trống trên trang danh mục).
   await UnitTypeModel.updateOne({ _id: ut._id }, { $inc: { inventoryVersion: 1 } }, { session });
 
-  const q = quote(ut, policy, input.rentalPeriod, input.periods);
+  // Điều hòa là add-on khách tự chọn — ép về false nếu loại kho không hợp lệ (VD Locker), không cần
+  // client tự biết trước danh sách cỡ hợp lệ.
+  const useAc = input.useAirConditioning && climateEligible(policy, ut.category);
+  const q = quote(ut, policy, input.rentalPeriod, input.periods, useAc);
   const deposit = await createPayment({ facilityId: facility._id, customerId: user._id, reservationId: id, type: 'DEPOSIT', amount: q.depositAmount, status: 'PENDING', method: 'VNPAY' }, session);
   const [r] = await ReservationModel.create([{
     _id: id, facilityId: facility._id, customerId: user._id, unitTypeId: ut._id, unitId: unit._id, status: 'PENDING',
     startDate: start, periods: input.periods, endDate: addPeriodsUTC(start, input.rentalPeriod, input.periods), quote: q,
-    preferredCheckInShift: input.preferredCheckInShift,
+    preferredCheckInShift: input.preferredCheckInShift, useAirConditioning: useAc,
     holdExpiresAt: new Date(now.getTime() + policy.reservationHoldMinutes * 60_000),
     // Ô đã được chọn đúng lúc đặt — không còn bước "Quản lý chi nhánh phân kho" riêng như thiết kế cũ.
     allocation: { allocatedAt: now, allocatedBy: null },
@@ -266,10 +272,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     const customer = await UserModel.findById(r.customerId).session(session);
     if (!customer || customer.status === 'SUSPENDED') throw Unprocessable('Tài khoản khách đang bị tạm khóa');
 
-    // Hình thức khoá đến từ loại kho (không do nhân viên chọn tại quầy); chu kỳ thuê là khách đã
-    // chọn lúc đặt, chốt sẵn trong quote — không suy ra từ loại kho nữa.
-    const ut = await UnitTypeModel.findById(r.unitTypeId).session(session);
-    if (!ut) throw NotFound('loại kho');
+    // Chu kỳ thuê là khách đã chọn lúc đặt, chốt sẵn trong quote — không suy ra từ loại kho.
     const period = r.quote.rentalPeriod;
 
     const policy = await effectivePolicy(r.facilityId, session);
@@ -284,7 +287,9 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     );
     if (!unit) throw Conflict('Kho được phân không còn ở trạng thái giữ chỗ', 'UNIT_STATE_MISMATCH');
 
-    const pin = ut.accessMethod === 'PIN' ? sixDigitPin() : undefined;
+    // Hình thức khoá đến từ chính ô khách nhận (unit.accessMethod), không phải loại kho — mỗi ô có
+    // thể khác nhau trong cùng một loại. Nhân viên không tự chọn tại quầy.
+    const pin = unit.accessMethod === 'PIN' ? sixDigitPin() : undefined;
     const nextBilling = addPeriodsUTC(today, period, 1);
     const periodEnd = addDays(nextBilling, -1);
     const rent = await createPayment({
@@ -296,10 +301,11 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     const [contract] = await RentalContractModel.create([{
       _id: contractId, facilityId: r.facilityId, customerId: r.customerId, unitId: unit._id, unitTypeId: r.unitTypeId, reservationId: r._id,
       status: 'ACTIVE', startDate: today, endDate: addPeriodsUTC(today, period, r.periods), autoRenew: period === 'MONTH' && r.periods >= 6,
+      useAirConditioning: r.useAirConditioning,
       billing: { currency: 'VND', rentalPeriod: period, rate: r.quote.firstPeriodRent, nextBillingDate: nextBilling, paidThrough: periodEnd },
       deposit: { amount: r.quote.depositAmount, status: 'HELD', paymentId: r.depositPaymentId ?? null, refundedAmount: 0 },
       balance: { outstanding: 0, lastPaymentAt: now },
-      access: { method: ut.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
+      access: { method: unit.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
       terms: { policyId: policy._id, policyVersion: policy.version, gracePeriodDays: policy.gracePeriodDays, lockoutAfterDays: policy.lockoutAfterDays, signedAt: now, signatureRef: `esign-${contractId}` },
       statusHistory: [{ from: null, to: 'ACTIVE', at: now, by: user._id }],
     }], { session });
@@ -308,7 +314,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     r.contractId = contractId;
     r.checkIn = { qrTokenHash: r.checkIn?.qrTokenHash ?? null, qrExpiresAt: r.checkIn?.qrExpiresAt ?? null, checkedInAt: now, checkedInBy: user._id };
     await r.save({ session });
-    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: ut.accessMethod, rent: rent.amount } } }, session);
+    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: unit.accessMethod, rent: rent.amount } } }, session);
     return { contract, unit, pin }; // PIN is returned exactly once; only its hash is stored
   });
 }

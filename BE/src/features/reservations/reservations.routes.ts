@@ -48,7 +48,7 @@ reservationsRouter.get('/:id', validate({ params: idParams }), async (req, res) 
 // "loại kho" trừu tượng rồi chờ phân sau nữa.
 const bookingItemBody = z.object({
   unitTypeId: zId, unitId: zId, startDate: zDate, rentalPeriod: e(RentalPeriod), periods: z.number().int().min(1).max(365),
-  preferredCheckInShift: e(CheckInShift).default('UNKNOWN'),
+  preferredCheckInShift: e(CheckInShift).default('UNKNOWN'), useAirConditioning: z.boolean().default(false),
   source: z.enum(['WEB', 'MOBILE']).default('WEB'), idempotencyKey: z.string().min(8).max(100).optional(),
 });
 // Bắt buộc: không có chấp thuận thì không tạo được đặt chỗ. Client chỉ gửi số phiên bản,

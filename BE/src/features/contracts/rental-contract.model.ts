@@ -22,6 +22,8 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
   startDate: { type: Date, required: true, immutable: true },
   endDate: { type: Date, required: true },
   autoRenew: { type: Boolean, default: false },
+  // Chốt từ Reservation.useAirConditioning lúc nhận kho — hiện cho nhân viên biết hợp đồng có tính phí điều hòa hay không.
+  useAirConditioning: { type: Boolean, default: false },
   billing: {
     type: new Schema({
       currency: { type: String, enum: ['VND', 'USD'], required: true },
