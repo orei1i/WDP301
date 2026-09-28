@@ -84,13 +84,14 @@ export function UnitMap({ facilityId }: { facilityId: string }) {
               // Khách tự chọn chu kỳ lúc đặt nên hiện đủ cả 3 giá thay vì chỉ một mức cố định.
               ['Giá theo chu kỳ', `${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'DAY'))}/ngày · ${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'WEEK'))}/tuần · ${vnd(unitRate(byId(db.unitTypes, u.unitTypeId)!, 'MONTH'))}/tháng`],
               ['Đổi trạng thái lúc', fmtDateTime(u.statusChangedAt)],
-              ['Hình thức khoá', ACCESS_METHOD[byId(db.unitTypes, u.unitTypeId)!.accessMethod]],
+              ['Hình thức khoá', ACCESS_METHOD[u.accessMethod]],
               ['Ghi chú', u.statusReason ?? '—'],
             ]} />
             {contract && (
               <div className="rounded-lg bg-stone-50 p-3 text-sm">
                 <p className="font-medium">Hợp đồng {contract.contractNumber} <StatusBadge map={CONTRACT_STATUS} value={contract.status} /></p>
                 <p className="mt-1 text-stone-600">{userName(db, contract.customerId)} · đến {fmtDate(contract.endDate)} · công nợ {vnd(contract.balance.outstanding)}</p>
+                <p className="mt-1 text-stone-600">Điều hòa: {contract.useAirConditioning ? 'Có dùng' : 'Không dùng'}</p>
               </div>
             )}
             {reservation && (

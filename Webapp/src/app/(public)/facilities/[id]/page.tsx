@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
-import { Camera, Clock, KeyRound, MapPin, Phone, ShoppingCart, Thermometer, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Camera, Clock, KeyRound, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
-import { periodLabel, STAFF_SHIFTS } from '@ssm/shared';
+import { AccessMethod, enumValues, periodLabel, STAFF_SHIFTS } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, RENTAL_PERIOD, UNIT_CATEGORY } from '@/shared/lib/labels';
@@ -14,21 +14,27 @@ import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/shared/ui';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
 
-type TypeRow = UnitType & { quote: PriceQuote; availability: { total: number; free: number; available: number } };
+// acEligible: loại kho này có tuỳ chọn điều hòa (add-on) hay không, theo policy.surcharges[CLIMATE].
+type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability: { total: number; free: number; available: number } };
 interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods'>;
 }
-/** Một dòng trong giỏ — đã chốt ô cụ thể và báo giá tại thời điểm thêm vào giỏ. */
-interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; quote: PriceQuote }
+/** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
+interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; useAirConditioning: boolean; quote: PriceQuote }
 
 const PERIODS: RentalPeriod[] = ['DAY', 'WEEK', 'MONTH'];
 /** Ca giờ nhận kho — chọn ngay lúc đặt, cộng thêm "Chưa rõ giờ" cho khách chưa chắc lịch. */
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const].map((s) => ({ value: s, label: CHECK_IN_SHIFT[s].label }));
+/** Hình thức khoá — thuộc tính của TỪNG Ô (không phải loại kho); "Tất cả" = không lọc. */
+const LOCK_OPTIONS: { value: AccessMethod | null; label: string }[] = [
+  { value: null, label: 'Tất cả' },
+  ...enumValues(AccessMethod).map((v) => ({ value: v, label: ACCESS_METHOD[v] })),
+];
 
-/** Công tắc bật/tắt — dùng cho bộ lọc "Có điều hòa" (dễ nhìn hơn 3 nút bấm cạnh nhau). */
-function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+/** Công tắc bật/tắt — dễ nhìn hơn 2-3 nút bấm cạnh nhau cho lựa chọn nhị phân. */
+function Switch({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: ReactNode }) {
   return (
     <label className="inline-flex cursor-pointer items-center gap-2.5 select-none">
       <button
@@ -50,7 +56,11 @@ export default function FacilityDetail() {
   const [period, setPeriod] = useState<RentalPeriod>('MONTH');
   const [periods, setPeriods] = useState(3);
   const [checkInShift, setCheckInShift] = useState<CheckInShift>('UNKNOWN');
-  const [acOnly, setAcOnly] = useState(false);
+  // Điều hòa là ADD-ON khách tự bật khi đặt — không gắn với ô cụ thể nào, mọi ô của loại kho hợp lệ
+  // đều dùng chung một giá. Hình thức khoá vẫn là thuộc tính của TỪNG Ô — lọc ngay trên sơ đồ (làm
+  // mờ ô không khớp, không ẩn khỏi sơ đồ).
+  const [useAirConditioning, setUseAirConditioning] = useState(false);
+  const [lockFilter, setLockFilter] = useState<AccessMethod | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
@@ -60,14 +70,15 @@ export default function FacilityDetail() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
 
-  // Khách tự chọn chu kỳ (ngày/tuần/tháng) + số chu kỳ — server tính lại giá theo đúng combo này.
+  // Khách tự chọn chu kỳ (ngày/tuần/tháng) + số chu kỳ + có dùng điều hòa không — server tính lại giá
+  // theo đúng combo này (ac bị bỏ qua cho loại kho không hợp lệ, xem TypeRow.acEligible).
   useEffect(() => {
     let alive = true;
-    api.get<Detail>(`/facilities/public/${id}?period=${period}&periods=${periods}`)
+    api.get<Detail>(`/facilities/public/${id}?period=${period}&periods=${periods}&ac=${useAirConditioning}`)
       .then((d) => { if (!alive) return; setDetail(d); setError(''); setTypeId((cur) => cur || d.unitTypes.find((t) => t.availability.available > 0)?._id || ''); })
       .catch((e: Error) => alive && setError(e.message));
     return () => { alive = false; };
-  }, [id, period, periods]);
+  }, [id, period, periods, useAirConditioning]);
 
   // Sơ đồ 2D cơ bản của loại kho đang chọn — bắt buộc chọn đúng một ô trống trước khi thêm vào giỏ.
   useEffect(() => {
@@ -86,19 +97,18 @@ export default function FacilityDetail() {
   if (!detail) return <main className="mx-auto max-w-7xl p-16 text-center text-sm text-stone-500">Đang tải…</main>;
 
   const { facility: f, unitTypes: types, policy } = detail;
-  // Có/không điều hòa là một biến thể loại kho riêng (giá gốc bằng nhau, biến thể có điều hòa cộng
-  // thêm phụ phí điều hòa của chính sách giá) — công tắc chỉ để khách dễ so sánh trong danh sách.
-  const visibleTypes = types.filter((t) => t.features.climateControlled === acOnly);
   const ut = types.find((t) => t._id === typeId);
+  const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
   const discountPct = q && q.discountAmount ? Math.round((q.discountAmount / (q.rate + q.surchargeAmount)) * 100) : 0;
   const bookable = f.status === 'ACTIVE';
   const alreadyInCart = cart.some((l) => l.unitId === unitId);
 
   const addToCart = () => {
-    if (!ut || !q || !unitId) return;
-    const unit = floorPlan?.find((u) => u._id === unitId);
-    setCart((c) => [...c, { key: `${unitId}-${c.length}`, typeId: ut._id, typeName: ut.name, unitId, unitNumber: unit?.unitNumber ?? '', quote: q }]);
+    if (!ut || !unitId || !q) return;
+    // Chốt đúng cấu hình điều hòa hiện tại vào dòng giỏ — nếu khách đổi công tắc rồi thêm ô khác, mỗi
+    // dòng vẫn giữ đúng lựa chọn lúc thêm, không bị đè bởi lần bật/tắt sau.
+    setCart((c) => [...c, { key: `${unitId}-${c.length}`, typeId: ut._id, typeName: ut.name, unitId, unitNumber: selectedUnit?.unitNumber ?? '', useAirConditioning: ut.acEligible && useAirConditioning, quote: q }]);
     setUnitId(null);
     toast('Đã thêm vào giỏ — chọn tiếp ô khác hoặc giữ chỗ toàn bộ giỏ', 'info');
   };
@@ -112,12 +122,12 @@ export default function FacilityDetail() {
     const startDate = `${start}T00:00:00.000Z`;
     if (cart.length === 1) {
       const line = cart[0];
-      const res = await run('createReservation', { unitTypeId: line.typeId, unitId: line.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, source: 'WEB', consent }, 'Đã giữ chỗ — vui lòng thanh toán tiền cọc');
+      const res = await run('createReservation', { unitTypeId: line.typeId, unitId: line.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, useAirConditioning: line.useAirConditioning, source: 'WEB', consent }, 'Đã giữ chỗ — vui lòng thanh toán tiền cọc');
       if (res.ok) router.push(`/booking/${res.value._id}`);
       return;
     }
     const res = await run('createReservationsBatch', {
-      items: cart.map((l) => ({ unitTypeId: l.typeId, unitId: l.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift })), consent,
+      items: cart.map((l) => ({ unitTypeId: l.typeId, unitId: l.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, useAirConditioning: l.useAirConditioning })), consent,
     }, (items) => `Đã giữ chỗ ${items.length} kho — thanh toán cọc từng kho trong mục Đặt chỗ của tôi`);
     if (res.ok) router.push('/portal/reservations');
   };
@@ -139,12 +149,9 @@ export default function FacilityDetail() {
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_380px]">
         <div className="space-y-6">
           <Card>
-            <CardHeader title="Loại kho" description={`Giá tính theo ${periodLabel(period, periods)}, bắt đầu ${fmtDate(`${start}T00:00:00.000Z`)}`}
-              actions={<Switch checked={acOnly} onChange={setAcOnly} label={acOnly ? 'Có điều hòa' : 'Không điều hòa'} />}
-            />
+            <CardHeader title="Loại kho" description={`Giá từ, tính theo ${periodLabel(period, periods)}, bắt đầu ${fmtDate(`${start}T00:00:00.000Z`)} — chọn ô cụ thể trên sơ đồ để xem giá chính xác`} />
             <ul className="divide-y divide-stone-100">
-              {visibleTypes.length === 0 && <li className="px-5 py-6 text-sm text-stone-500">Không có loại kho phù hợp bộ lọc.</li>}
-              {visibleTypes.map((t) => {
+              {types.map((t) => {
                 const a = t.availability;
                 const selected = t._id === typeId;
                 return (
@@ -156,8 +163,6 @@ export default function FacilityDetail() {
                         <p className="mt-0.5 text-sm text-stone-500">{t.description}</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <Badge>{UNIT_CATEGORY[t.category]}</Badge>
-                          {t.features.climateControlled && <Badge tone="blue"><Thermometer className="size-3" />Điều hòa</Badge>}
-                          <Badge tone="violet"><KeyRound className="size-3" />{ACCESS_METHOD[t.accessMethod]}</Badge>
                           {t.minPeriods > 1 && <Badge tone="gray">Tối thiểu {periodLabel(period, t.minPeriods)}</Badge>}
                         </div>
                       </div>
@@ -177,9 +182,23 @@ export default function FacilityDetail() {
           {ut && (
             <Card className="p-5">
               <CardHeader title={`Chọn ô kho — ${ut.name}`} description="Bắt buộc chọn đúng một ô còn trống trên sơ đồ" />
-              <div className="mt-4">
-                {floorPlan === null ? <p className="text-sm text-stone-500">Đang tải sơ đồ…</p> : <FloorPlanPicker items={floorPlan} value={unitId} onChange={setUnitId} />}
+              <div className="mt-4 flex flex-wrap gap-1.5">
+                {LOCK_OPTIONS.map((o) => (
+                  <button key={o.label} type="button" onClick={() => setLockFilter(o.value)} className={cx('rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset', lockFilter === o.value ? 'bg-brand-600 text-white ring-brand-600' : 'text-stone-600 ring-stone-300 hover:bg-stone-50')}>{o.label}</button>
+                ))}
               </div>
+              <p className="mt-2 text-xs text-stone-500">Ô không khớp hình thức khoá đang chọn sẽ mờ đi (không bấm được) nhưng vẫn hiện trên sơ đồ.</p>
+              <div className="mt-4">
+                {floorPlan === null ? <p className="text-sm text-stone-500">Đang tải sơ đồ…</p> : (
+                  <FloorPlanPicker items={floorPlan} value={unitId} onChange={setUnitId} lockMethod={lockFilter} />
+                )}
+              </div>
+              {selectedUnit && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  <Badge tone="violet">Ô {selectedUnit.unitNumber}</Badge>
+                  {selectedUnit.accessMethod && <Badge tone="gray"><KeyRound className="size-3" />{ACCESS_METHOD[selectedUnit.accessMethod]}</Badge>}
+                </div>
+              )}
               <Button className="mt-4" disabled={!unitId || alreadyInCart} onClick={addToCart}>
                 <ShoppingCart className="size-4" />{alreadyInCart ? 'Ô này đã có trong giỏ' : 'Thêm vào giỏ'}
               </Button>
@@ -217,6 +236,12 @@ export default function FacilityDetail() {
                   <span className="text-xs text-stone-500">{PERIOD_UNIT[period]} — tự nhập số bất kỳ</span>
                 </div>
               </Field>
+              {ut?.acEligible && (
+                <Field label="Điều hòa" hint="Cơ sở vật chất loại kho này đã có sẵn máy lạnh — bật thì cộng phụ phí, không bật thì không tính phí.">
+                  <Switch checked={useAirConditioning} onChange={setUseAirConditioning}
+                    label={<span className="inline-flex items-center gap-1"><Snowflake className="size-3.5 text-sky-500" />{useAirConditioning ? 'Có sử dụng' : 'Không sử dụng'}</span>} />
+                </Field>
+              )}
               <Field label="Ca giờ dự kiến đến nhận kho" hint="Giúp chi nhánh xếp đúng nhân viên trực ca đón bạn — chọn 'Chưa rõ giờ' nếu chưa chắc lịch.">
                 <div className="grid grid-cols-2 gap-2">
                   {CHECK_IN_SHIFTS.map((s) => (

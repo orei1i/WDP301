@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { RentalPeriod } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { ACCESS_METHOD, RENTAL_PERIOD, UNIT_CATEGORY } from '@/shared/lib/labels';
+import { RENTAL_PERIOD, UNIT_CATEGORY } from '@/shared/lib/labels';
 import { pct, vnd } from '@/shared/lib/format';
 import { Button, Card, CardHeader, PageHeader, cx, inputCls } from '@/shared/ui';
 
@@ -57,7 +57,7 @@ export default function Pricing() {
                 const sample = db.unitTypes.find((t) => t.code === code)!;
                 return (
                   <tr key={code}>
-                    <td className="px-4 py-3"><p className="font-medium">{sample.name}</p><p className="text-xs text-stone-500">{UNIT_CATEGORY[sample.category]} · {sample.areaM2} m² · {ACCESS_METHOD[sample.accessMethod]}</p></td>
+                    <td className="px-4 py-3"><p className="font-medium">{sample.name}</p><p className="text-xs text-stone-500">{UNIT_CATEGORY[sample.category]} · {sample.areaM2} m²</p></td>
                     {facilities.map((f) => {
                       const ut = db.unitTypes.find((t) => t.facilityId === f._id && t.code === code);
                       if (!ut) return <td key={f._id} className="px-4 py-3 text-stone-400">—</td>;

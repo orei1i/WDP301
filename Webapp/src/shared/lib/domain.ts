@@ -33,12 +33,15 @@ export function unitRate(ut: UnitType, period: RentalPeriod) {
   return ut.rates[period];
 }
 
-/** `period`/`periods` = chu kỳ và số chu kỳ khách chọn lúc đặt. Cùng công thức với BE để báo giá khớp. */
-export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: number): PriceQuote & { discountPct: number; periods: number } {
+/**
+ * `period`/`periods` = chu kỳ và số chu kỳ khách chọn lúc đặt. Cùng công thức với BE để báo giá khớp.
+ * `useAirConditioning` là add-on khách tự chọn lúc đặt (không phải thuộc tính của ô hay loại kho).
+ */
+export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: number, useAirConditioning: boolean): PriceQuote & { discountPct: number; periods: number } {
   const policy = effectivePolicy(db, ut.facilityId);
   const rate = unitRate(ut, period);
   const surcharge = policy.surcharges
-    .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || ut.features.climateControlled))
+    .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || useAirConditioning))
     .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((rate * s.value) / 100) : s.value), 0);
   const eligible = policy.discounts.filter((d) => periods >= d.minPeriods).sort((a, b) => b.minPeriods - a.minPeriods)[0];
   const gross = rate + surcharge;

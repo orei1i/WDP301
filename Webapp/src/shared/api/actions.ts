@@ -1,7 +1,7 @@
 'use client';
 
 import type {
-  BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
+  AccessMethod, BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
   PaymentMethod, RentalContract, RentalPeriod, Reservation, Role, StorageUnit, SupportTicket, SwapMethod,
   TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitStatus, UnitSwapRequest, User,
 } from '@ssm/shared';
@@ -18,6 +18,8 @@ export interface BookingLine {
   unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number;
   /** Ca giờ khách dự kiến đến nhận kho — chọn ngay lúc đặt; 'UNKNOWN' = "Chưa rõ giờ". */
   preferredCheckInShift: CheckInShift;
+  /** Add-on điều hòa khách tự chọn lúc đặt — không gắn với ô cụ thể nào. */
+  useAirConditioning: boolean;
 }
 
 export const actions = {
@@ -25,7 +27,7 @@ export const actions = {
   createReservation: async (p: BookingLine & { source?: Reservation['source']; consent: { termsVersion: string; privacyVersion: string } }) =>
     api.post<Reservation>('/reservations', {
       unitTypeId: p.unitTypeId, unitId: p.unitId, startDate: day(p.startDate), rentalPeriod: p.rentalPeriod, periods: p.periods,
-      preferredCheckInShift: p.preferredCheckInShift,
+      preferredCheckInShift: p.preferredCheckInShift, useAirConditioning: p.useAirConditioning,
       source: p.source === 'MOBILE' ? 'MOBILE' : 'WEB', consent: p.consent,
     }, { 'idempotency-key': newKey() }),
 
@@ -72,7 +74,7 @@ export const actions = {
 
   setUnitStatus: async (p: { unitId: string; to: UnitStatus; reason?: string }) => { await api.patch(`/units/${p.unitId}/status`, { to: p.to, reason: p.reason }); },
 
-  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number }) => { await api.post('/units', p); },
+  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number; accessMethod: AccessMethod }) => { await api.post('/units', p); },
 
   createTicket: async (p: { facilityId: string; kind: TicketKind; category: TicketCategory; priority: TicketPriority; subject: string; description: string; unitId?: string | null; contractId?: string | null; assigneeId?: string | null; dueAt?: string | null }) =>
     api.post<SupportTicket>('/tickets', { ...p, description: p.description || undefined }),

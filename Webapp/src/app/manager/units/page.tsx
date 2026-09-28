@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { Plus } from 'lucide-react';
+import { AccessMethod, enumValues } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { UNIT_CATEGORY } from '@/shared/lib/labels';
+import { ACCESS_METHOD, UNIT_CATEGORY } from '@/shared/lib/labels';
 import { availability, unitRate } from '@/shared/lib/domain';
 import { vnd } from '@/shared/lib/format';
 import { Button, Card, CardHeader, Field, Modal, PageHeader, Table, inputCls } from '@/shared/ui';
@@ -16,7 +17,7 @@ export default function ManagerUnits() {
   const fid = scope.facilityId;
   const types = db.unitTypes.filter((t) => t.facilityId === fid);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ unitTypeId: '', unitNumber: '', floor: 1 });
+  const [form, setForm] = useState({ unitTypeId: '', unitNumber: '', floor: 1, accessMethod: 'PIN' as AccessMethod });
 
   const rows = types.map((t) => {
     const us = db.units.filter((u) => u.unitTypeId === t._id && !u.isDeleted);
@@ -26,7 +27,7 @@ export default function ManagerUnits() {
 
   return (
     <>
-      <PageHeader title="Quản lý kho" description="Tồn kho theo loại và sơ đồ từng kho. Giá cơ sở do Quản lý vận hành thiết lập." actions={<><FacilityPicker scope={scope} /><Button onClick={() => { setForm({ unitTypeId: types[0]?._id ?? '', unitNumber: '', floor: 1 }); setOpen(true); }}><Plus className="size-4" />Thêm kho</Button></>} />
+      <PageHeader title="Quản lý kho" description="Tồn kho theo loại và sơ đồ từng kho. Giá cơ sở do Quản lý vận hành thiết lập." actions={<><FacilityPicker scope={scope} /><Button onClick={() => { setForm({ unitTypeId: types[0]?._id ?? '', unitNumber: '', floor: 1, accessMethod: 'PIN' }); setOpen(true); }}><Plus className="size-4" />Thêm kho</Button></>} />
       <Card>
         <CardHeader title="Tồn kho theo loại" description="“Có thể bán” = trống trừ các lượt giữ chỗ chưa phân kho" />
         <Table rows={rows} rowKey={(r) => r.t._id} columns={[
@@ -52,6 +53,11 @@ export default function ManagerUnits() {
             <Field label="Mã kho"><input className={inputCls} value={form.unitNumber} onChange={(e) => setForm({ ...form, unitNumber: e.target.value })} placeholder="M2-09" /></Field>
             <Field label="Tầng"><input type="number" className={inputCls} value={form.floor} onChange={(e) => setForm({ ...form, floor: Number(e.target.value) })} /></Field>
           </div>
+          <Field label="Hình thức khoá" hint="Điều hòa không cần chọn ở đây — mọi ô của loại kho phù hợp đều sẵn có máy lạnh, khách tự bật khi đặt.">
+            <select className={inputCls} value={form.accessMethod} onChange={(e) => setForm({ ...form, accessMethod: e.target.value as AccessMethod })}>
+              {enumValues(AccessMethod).map((m) => <option key={m} value={m}>{ACCESS_METHOD[m]}</option>)}
+            </select>
+          </Field>
         </div>
       </Modal>
     </>
