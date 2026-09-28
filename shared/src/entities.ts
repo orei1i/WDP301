@@ -92,14 +92,18 @@ export interface UnitType<I = ID, D = string> extends BaseEntity<I, D>, SoftDele
   description?: string;
   dimensions: { widthM: number; depthM: number; heightM: number };
   areaM2: number;                         // derived
-  features: { climateControlled: boolean; indoor: boolean };
+  /** indoor/outdoor là thuộc tính CHUNG cho cả loại (VD XL drive-up luôn ngoài trời). Hình thức khoá
+   * KHÔNG ở đây — mỗi ô vật lý tự có (StorageUnit.accessMethod), vì cùng loại kho có thể có ô khoá
+   * thẻ lẫn ô khoá chìa. */
+  features: { indoor: boolean };
   /**
    * Giá cho MỖI chu kỳ khách có thể chọn lúc đặt (khách tự chọn ngày/tuần/tháng, không cố định
-   * theo loại kho) — Quản lý vận hành niêm yết sẵn cả 3 mức.
+   * theo loại kho) — Quản lý vận hành niêm yết sẵn cả 3 mức. Đây là giá KHÔNG dùng điều hòa; điều hòa
+   * là add-on khách tự bật lúc đặt (không phải thuộc tính của ô) — cộng phụ phí CLIMATE của chính
+   * sách giá khi bật, với các cỡ nằm trong `policy.surcharges[CLIMATE].categories` (mọi ô của loại
+   * kho hợp lệ đều SẴN CÓ máy lạnh về mặt cơ sở vật chất — chỉ tính phí khi khách chọn dùng).
    */
   rates: Record<RentalPeriod, number>;
-  /** Hình thức khoá: mọi ô kho thuộc loại này dùng chung — chìa khoá / thẻ khoá / mật khẩu. */
-  accessMethod: AccessMethod;
   depositOverride?: number | null;
   /** Số chu kỳ tối thiểu phải thuê. */
   minPeriods: number;
@@ -115,6 +119,10 @@ export interface StorageUnit<I = ID, D = string> extends BaseEntity<I, D>, SoftD
   unitTypeId: I;
   unitNumber: string;                     // "B2-117"
   location: { building?: string; floor: number; zone?: string; aisle?: string };
+  /** Hình thức khoá của TỪNG Ô — chìa khoá / thẻ khoá / mật khẩu; khách lọc/chọn ngay trên sơ đồ.
+   * (Điều hòa KHÔNG ở đây nữa — xem UnitType.rates: mọi ô của loại kho hợp lệ đều có sẵn máy lạnh,
+   * dùng hay không là lựa chọn của khách lúc đặt, xem Reservation.useAirConditioning.) */
+  accessMethod: AccessMethod;
   status: UnitStatus;
   statusChangedAt: D;
   statusReason?: string | null;
@@ -154,6 +162,12 @@ export interface Reservation<I = ID, D = string> extends BaseEntity<I, D> {
   endDate: D;                             // derived: startDate + periods × rentalPeriod
   /** Ca giờ khách dự kiến đến nhận kho — chọn ngay lúc đặt; UNKNOWN = "Chưa rõ giờ" (mặc định). */
   preferredCheckInShift: CheckInShift;
+  /**
+   * Add-on điều hòa — khách TỰ CHỌN lúc đặt, không phải thuộc tính của ô. Mọi ô của loại kho hợp lệ
+   * (theo policy.surcharges[CLIMATE].categories) đều sẵn có máy lạnh về cơ sở vật chất; bật thì cộng
+   * phụ phí CLIMATE vào `quote`, không bật thì không tính phí. false với loại kho không hợp lệ (VD Locker).
+   */
+  useAirConditioning: boolean;
   quote: PriceQuote<I>;                   // frozen at booking -> later price/policy changes don't affect it
   holdExpiresAt?: D | null;               // PENDING only
   depositPaymentId?: I | null;
@@ -189,6 +203,8 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   startDate: D;
   endDate: D;                             // current term end (moves on renewal)
   autoRenew: boolean;
+  /** Chốt từ Reservation.useAirConditioning lúc nhận kho — hiện cho nhân viên biết hợp đồng có tính phí điều hòa hay không. */
+  useAirConditioning: boolean;
   billing: { currency: CurrencyCode; rentalPeriod: RentalPeriod; rate: number; nextBillingDate: D; paidThrough: D };
   deposit: { amount: number; status: DepositStatus; paymentId?: I | null; refundedAmount: number };
   balance: { outstanding: number; lastPaymentAt?: D | null };
