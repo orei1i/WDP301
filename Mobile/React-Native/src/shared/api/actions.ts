@@ -17,7 +17,7 @@ const newKey = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math
 
 export const actions = {
   // ---- đặt kho (bắt buộc chọn ô cụ thể trên sơ đồ + chu kỳ thuê tự chọn)
-  createReservation: async (p: { unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number; preferredCheckInShift: CheckInShift }) =>
+  createReservation: async (p: { unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number; preferredCheckInShift: CheckInShift; useAirConditioning: boolean }) =>
     api.post<Reservation>('/reservations', {
       unitTypeId: p.unitTypeId,
       unitId: p.unitId,
@@ -25,6 +25,7 @@ export const actions = {
       rentalPeriod: p.rentalPeriod,
       periods: p.periods,
       preferredCheckInShift: p.preferredCheckInShift,
+      useAirConditioning: p.useAirConditioning,
       source: 'MOBILE',
       consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION },
     }, { 'idempotency-key': newKey() }),
