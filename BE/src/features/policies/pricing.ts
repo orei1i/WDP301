@@ -62,3 +62,21 @@ export async function cancellationRefund(r: Pick<ReservationDoc, 'status' | 'dep
   const pct = tier?.depositRefundPct ?? 0;
   return { pct, amount: Math.round((r.quote.depositAmount * pct) / 100) };
 }
+
+/** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. */
+export function elapsedTermPct(startDate: Date, endDate: Date, scheduledFor: Date) {
+  const span = endDate.getTime() - startDate.getTime();
+  if (span <= 0) return 100;
+  return Math.min(100, Math.max(0, ((scheduledFor.getTime() - startDate.getTime()) / span) * 100));
+}
+
+/**
+ * TRẦN % hoàn cọc khi trả kho SỚM (trước `endDate` của kỳ hạn hiện tại), theo % thời gian kỳ hạn đã
+ * dùng (`elapsedTermPct`). Dùng min() với phần hoàn còn lại sau khi trừ hư hỏng/công nợ ở
+ * contract.service — không cộng dồn phạt. CHỈ áp dụng khi trả kho trước `endDate`; trả đúng/quá hạn
+ * là move-out bình thường, không bị phạt.
+ */
+export function earlyTerminationRefundPct(policy: Pick<PolicyDoc, 'earlyTermination'>, elapsedPct: number) {
+  const tier = [...policy.earlyTermination].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct).find((t) => elapsedPct <= t.maxElapsedPct);
+  return tier?.depositRefundPct ?? 0;
+}

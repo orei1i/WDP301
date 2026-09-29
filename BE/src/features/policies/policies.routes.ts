@@ -25,15 +25,18 @@ policiesRouter.get('/', authorize('OPS_MANAGER', 'ADMIN', 'FACILITY_MANAGER'), v
 });
 
 const tier = z.object({ minHoursBeforeStart: z.number().min(0), depositRefundPct: z.number().min(0).max(100) });
+const earlyTerminationTier = z.object({ maxElapsedPct: z.number().min(0).max(100), depositRefundPct: z.number().min(0).max(100) });
 policiesRouter.post('/', authorize('OPS_MANAGER'), validate({ body: z.object({
   facilityId: zId.nullable().default(null),
   patch: z.object({
     gracePeriodDays: z.number().int().min(0).max(60), lockoutAfterDays: z.number().int().min(1).max(180),
+    abandonAfterLockedOutDays: z.number().int().min(1).max(365),
     reservationHoldMinutes: z.number().int().min(5).max(1440), allocationLeadDays: z.number().int().min(0).max(60), noShowAfterHours: z.number().int().min(1).max(168),
     minPeriods: z.number().int().min(1), maxPeriods: z.number().int().max(365),
     deposit: z.object({ mode: z.enum(['PERIODS_OF_RENT', 'FIXED']), value: z.number().min(0) }),
     lateFees: z.array(z.object({ afterDays: z.number().min(0), kind: z.enum(['FIXED', 'PERCENT_OF_RENT']), value: z.number().min(0), recurringEveryDays: z.number().int().min(1).nullable().default(null) })).max(10),
     cancellation: z.array(tier).max(10),
+    earlyTermination: z.array(earlyTerminationTier).max(10),
     discounts: z.array(z.object({ code: z.string(), kind: z.enum(['FIXED', 'PERCENT']), value: z.number().min(0), minPeriods: z.number().int().min(1), validFrom: z.coerce.date().nullable().default(null), validTo: z.coerce.date().nullable().default(null), requiresApprovalRole: e(Role).nullable().default(null) })).max(20),
   }).partial().strict(),
 }) }), async (req, res) => {

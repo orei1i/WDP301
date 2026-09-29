@@ -5,8 +5,8 @@ import { effectivePolicy } from './pricing';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 
-type Patch = Partial<Pick<BusinessPolicy, 'gracePeriodDays' | 'lockoutAfterDays' | 'reservationHoldMinutes' | 'allocationLeadDays' | 'noShowAfterHours'
-  | 'minPeriods' | 'maxPeriods' | 'deposit' | 'lateFees' | 'cancellation' | 'surcharges' | 'discounts' | 'waiverLimits'>>;
+type Patch = Partial<Pick<BusinessPolicy, 'gracePeriodDays' | 'lockoutAfterDays' | 'abandonAfterLockedOutDays' | 'reservationHoldMinutes' | 'allocationLeadDays' | 'noShowAfterHours'
+  | 'minPeriods' | 'maxPeriods' | 'deposit' | 'lateFees' | 'cancellation' | 'earlyTermination' | 'surcharges' | 'discounts' | 'waiverLimits'>>;
 
 /** Policies are immutable: publishing clones the current effective rules + patch into a new version. */
 export async function publishPolicy(facilityId: string | null, patch: Patch) {

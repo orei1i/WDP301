@@ -1,9 +1,9 @@
 import { Types, type ClientSession } from 'mongoose';
-import { PERIOD_UNIT, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
+import { PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
 import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
-import { effectivePolicy } from '../policies/pricing';
+import { earlyTerminationRefundPct, effectivePolicy, elapsedTermPct } from '../policies/pricing';
 import { addDays, addPeriodsUTC, daysBetween, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
@@ -253,8 +253,20 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     if (!unit || unit.status !== 'PENDING_INSPECTION') throw Unprocessable('Kho chưa ở trạng thái chờ kiểm tra — hãy xác nhận nhận lại kho trước');
 
     const damageFee = input.damages.reduce((s, d) => s + d.cost, 0);
-    const deductions = Math.min(c.deposit.amount, damageFee + c.balance.outstanding);
-    const refundAmount = c.deposit.amount - deductions;
+    const normalDeductions = Math.min(c.deposit.amount, damageFee + c.balance.outstanding);
+    let refundAmount = c.deposit.amount - normalDeductions;
+
+    // Trả kho SỚM (trước endDate của kỳ hạn hiện tại) bị áp trần hoàn cọc theo % thời gian đã dùng —
+    // trả đúng/quá hạn (scheduledFor >= endDate) là move-out bình thường, không bị phạt thêm.
+    let earlyTermination: NonNullable<InspectionLog['depositSettlement']>['earlyTermination'] = null;
+    if (c.moveOut?.scheduledFor && c.moveOut.scheduledFor.getTime() < c.endDate.getTime()) {
+      const policy = await effectivePolicy(c.facilityId, session);
+      const elapsedPct = elapsedTermPct(c.startDate, c.endDate, c.moveOut.scheduledFor);
+      const refundCapPct = earlyTerminationRefundPct(policy, elapsedPct);
+      refundAmount = Math.min(refundAmount, Math.round((c.deposit.amount * refundCapPct) / 100));
+      earlyTermination = { elapsedPct: Math.round(elapsedPct), refundCapPct };
+    }
+    const deductions = c.deposit.amount - refundAmount;
     const outcome: InspectionLog['outcome'] = input.damages.some((d) => d.severity === 'SEVERE') ? 'MAINTENANCE_REQUIRED' : input.damages.length ? 'PASS_WITH_DAMAGE' : 'PASS';
     const now = new Date();
 
@@ -270,7 +282,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const [inspection] = await InspectionModel.create([{
       _id: inspectionId, facilityId: c.facilityId, unitId: unit._id, contractId: c._id, type: 'MOVE_OUT', status: 'APPROVED',
       inspectorId: user._id, performedAt: now, checklist: input.checklist, damages: input.damages, outcome, notes: input.notes,
-      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now },
+      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now, earlyTermination },
     }], { session });
 
     // Outstanding charges are settled from the deposit
@@ -295,6 +307,66 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     if (r && r.status === 'CHECKED_IN') { r.transitionTo('COMPLETED', { actor: 'SYSTEM' }); await r.save({ session }); }
 
     await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome } } }, session);
+    return { inspection, contract: c };
+  });
+}
+
+/**
+ * Xử lý đồ đạc bỏ lại khi hợp đồng LOCKED_OUT quá lâu mà khách không đóng tiền/liên hệ (FM). Kiểm kê
+ * vật dụng + chọn phương án xử lý (thanh lý/quyên tặng/tiêu hủy), mất TOÀN BỘ tiền cọc để bù nợ (không
+ * theo dõi tiền bán thanh lý — chính sách đơn giản, không truy thu thêm), đóng hợp đồng và giải phóng ô.
+ */
+export async function processAbandonment(
+  user: UserHydrated,
+  id: string,
+  input: { items: { description: string; quantity: number }[]; disposalMethod: AbandonedItemsDisposal; notes?: string },
+) {
+  return withTxn(async (session) => {
+    const c = await loadContract(id, session);
+    await assertFacility(user, c.facilityId, 'contract.abandonment');
+    if (c.status !== 'LOCKED_OUT') throw Unprocessable('Chỉ xử lý được hợp đồng đang bị khóa truy cập');
+    const lockedOutAt = c.delinquency?.lockedOutAt;
+    if (!lockedOutAt) throw Conflict('Hợp đồng thiếu mốc thời gian khóa truy cập');
+    const policy = await effectivePolicy(c.facilityId, session);
+    const daysLocked = daysBetween(lockedOutAt, todayUTC());
+    if (daysLocked < policy.abandonAfterLockedOutDays) throw Unprocessable(`Chỉ xử lý được sau ${policy.abandonAfterLockedOutDays} ngày kể từ khi khóa truy cập (hiện ${daysLocked} ngày)`);
+
+    const unit = await StorageUnitModel.findById(c.unitId).session(session);
+    if (!unit) throw NotFound('kho');
+
+    const now = new Date();
+    const inspectionId = new Types.ObjectId();
+    const [inspection] = await InspectionModel.create([{
+      _id: inspectionId, facilityId: c.facilityId, unitId: unit._id, contractId: c._id, type: 'ABANDONMENT', status: 'APPROVED',
+      inspectorId: user._id, performedAt: now, outcome: 'PASS', notes: input.notes,
+      abandonment: { items: input.items, disposalMethod: input.disposalMethod },
+      depositSettlement: { depositHeld: c.deposit.amount, deductions: c.deposit.amount, refundAmount: 0, refundPaymentId: null, damagePaymentId: null, approvedBy: user._id, approvedAt: now, earlyTermination: null },
+    }], { session });
+
+    await PaymentModel.updateMany(
+      { contractId: c._id, direction: 'CHARGE', status: 'PENDING' },
+      { $set: { status: 'CANCELLED' }, $push: { statusHistory: { from: 'PENDING', to: 'CANCELLED', at: now, reason: 'Hợp đồng đóng do hàng bỏ lại — tất toán bằng tiền cọc' } } },
+      { session },
+    );
+
+    c.transitionTo('ABANDONED', { actor: user.role, by: user._id, reason: `Khóa truy cập ${daysLocked} ngày, khách không liên hệ` });
+    c.closedAt = now;
+    c.deposit.refundedAmount = 0;
+    c.deposit.status = 'FORFEITED';
+    c.balance.outstanding = 0; // Cọc mất coi như tất toán — không truy thu thêm qua hệ thống.
+    c.delinquency = null;
+    await c.save({ session });
+
+    unit.transitionTo('PENDING_INSPECTION', { actor: user.role, by: user._id, reason: 'Xử lý hàng bỏ lại' });
+    unit.transitionTo('AVAILABLE', { actor: user.role, by: user._id });
+    unit.currentContractId = null;
+    unit.overlockActive = false;
+    await unit.save({ session });
+
+    const r = await ReservationModel.findById(c.reservationId).session(session);
+    if (r && r.status === 'CHECKED_IN') { r.transitionTo('COMPLETED', { actor: 'SYSTEM' }); await r.save({ session }); }
+
+    await audit({ action: 'contract.abandonment', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { daysLocked, itemCount: input.items.length, disposalMethod: input.disposalMethod } } }, session);
     return { inspection, contract: c };
   });
 }

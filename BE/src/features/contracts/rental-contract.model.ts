@@ -108,7 +108,7 @@ schema.pre('validate', function () {
   if ((s === 'DELINQUENT' || s === 'LOCKED_OUT') && !this.delinquency) this.invalidate('delinquency', `required when ${s}`);
   if (s === 'LOCKED_OUT' && !this.delinquency?.lockedOutAt) this.invalidate('delinquency.lockedOutAt', 'required when LOCKED_OUT');
   if (s === 'MOVE_OUT_PENDING' && !this.moveOut) this.invalidate('moveOut', 'required when MOVE_OUT_PENDING');
-  if (s === 'CLOSED' && !this.closedAt) this.invalidate('closedAt', 'required when CLOSED');
+  if ((s === 'CLOSED' || s === 'ABANDONED') && !this.closedAt) this.invalidate('closedAt', `required when ${s}`);
   if (this.deposit.refundedAmount > this.deposit.amount) this.invalidate('deposit.refundedAmount', 'exceeds deposit');
 });
 

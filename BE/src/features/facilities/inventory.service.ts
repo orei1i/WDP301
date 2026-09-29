@@ -34,7 +34,10 @@ export async function facilityDetailPublic(id: string, period: RentalPeriod = 'M
   }));
   return {
     facility: f, unitTypes,
-    policy: { version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes, cancellation: policy.cancellation, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods },
+    policy: {
+      version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes,
+      cancellation: policy.cancellation, earlyTermination: policy.earlyTermination, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
+    },
   };
 }
 

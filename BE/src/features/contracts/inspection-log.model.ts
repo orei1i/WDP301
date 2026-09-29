@@ -1,5 +1,5 @@
 import { Schema, model } from 'mongoose';
-import { enumValues, InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, type InspectionLog } from '@ssm/shared';
+import { AbandonedItemsDisposal, enumValues, InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, type InspectionLog } from '@ssm/shared';
 import { baseOptions, enumOf, maxLen, money, refOpt, refReq, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../../shared/db/plugins';
 
@@ -33,6 +33,20 @@ const schema = new Schema<InspectionDoc>({
       depositHeld: money(), deductions: money(), refundAmount: money(),
       refundPaymentId: refOpt('PaymentTransaction'), damagePaymentId: refOpt('PaymentTransaction'),
       approvedBy: refOpt('User'), approvedAt: { type: Date, default: null },
+      earlyTermination: {
+        type: new Schema({ elapsedPct: { type: Number, required: true, min: 0, max: 100 }, refundCapPct: { type: Number, required: true, min: 0, max: 100 } }, subOptions),
+        default: null,
+      },
+    }, subOptions),
+    default: null,
+  },
+  abandonment: {
+    type: new Schema({
+      items: {
+        type: [new Schema({ description: { type: String, required: true, maxlength: 300 }, quantity: { type: Number, required: true, min: 1 } }, subOptions)],
+        default: [], validate: maxLen(200),
+      },
+      disposalMethod: enumOf(enumValues(AbandonedItemsDisposal)),
     }, subOptions),
     default: null,
   },
@@ -44,16 +58,18 @@ schema.plugin(appendOnlyPlugin, { allowUpdates: true });
 
 schema.pre('validate', function () {
   this.totalDamageFee = this.damages.reduce((sum, d) => sum + d.cost, 0);
-  if (this.type === 'MOVE_OUT' && !this.contractId) this.invalidate('contractId', 'MOVE_OUT requires contract');
+  if ((this.type === 'MOVE_OUT' || this.type === 'ABANDONMENT') && !this.contractId) this.invalidate('contractId', `${this.type} requires contract`);
+  if (this.type === 'ABANDONMENT' && !this.abandonment?.items.length) this.invalidate('abandonment', 'requires at least one item');
   if (this.status !== 'DRAFT' && !this.outcome) this.invalidate('outcome', 'required once submitted');
   const ds = this.depositSettlement;
   if (ds && ds.deductions + ds.refundAmount !== ds.depositHeld) this.invalidate('depositSettlement', 'deductions + refund must equal deposit held');
   if (this.type === 'MOVE_OUT' && this.status === 'APPROVED' && !ds?.approvedBy) this.invalidate('depositSettlement', 'approved move-out needs settlement');
+  if (this.type === 'ABANDONMENT' && this.status === 'APPROVED' && !ds?.approvedBy) this.invalidate('depositSettlement', 'approved abandonment needs settlement');
 });
 
 schema.index({ facilityId: 1, performedAt: -1 });
 schema.index({ facilityId: 1, status: 1, performedAt: -1 });
 schema.index({ unitId: 1, performedAt: -1 });
-schema.index({ contractId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: 'MOVE_OUT', contractId: { $type: 'objectId' } } });
+schema.index({ contractId: 1, type: 1 }, { unique: true, partialFilterExpression: { type: { $in: ['MOVE_OUT', 'ABANDONMENT'] }, contractId: { $type: 'objectId' } } });
 
 export const InspectionModel = model<InspectionDoc>('InspectionLog', schema);

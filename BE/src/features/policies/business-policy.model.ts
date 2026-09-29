@@ -22,12 +22,16 @@ const schema = new Schema<PolicyDoc>({
   noShowAfterHours: int(1, 168),
   gracePeriodDays: int(0, 60),
   lockoutAfterDays: int(1, 180),
+  abandonAfterLockedOutDays: int(1, 365),
   lateFees: rule(new Schema({
     afterDays: { type: Number, required: true, min: 0 }, kind: { type: String, enum: ['FIXED', 'PERCENT_OF_RENT'], required: true },
     value: { type: Number, required: true, min: 0 }, recurringEveryDays: { type: Number, default: null, min: 1 },
   }, subOptions)),
   cancellation: rule(new Schema({
     minHoursBeforeStart: { type: Number, required: true, min: 0 }, depositRefundPct: { type: Number, required: true, min: 0, max: 100 },
+  }, subOptions)),
+  earlyTermination: rule(new Schema({
+    maxElapsedPct: { type: Number, required: true, min: 0, max: 100 }, depositRefundPct: { type: Number, required: true, min: 0, max: 100 },
   }, subOptions)),
   minPeriods: int(1, 60),
   maxPeriods: int(1, 365),

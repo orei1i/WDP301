@@ -52,7 +52,11 @@ export async function runBilling() {
       const start = c.billing.nextBillingDate;
       const period = c.billing.rentalPeriod;
       const end = addDays(addPeriodsUTC(start, period, 1), -1);
-      if (start >= c.endDate && !c.autoRenew) return; // lease ends; move-out handled by staff
+      // Hết hạn (start >= endDate) mà chưa autoRenew VÀ khách chưa đăng ký trả kho (contract này vẫn nằm
+      // trong { ACTIVE, DELINQUENT, LOCKED_OUT } — MOVE_OUT_PENDING đã bị loại khỏi `due` ở trên) — vẫn
+      // giữ đồ trong kho nên tiếp tục tính tiền thuê theo đúng giá cũ (holdover), KHÔNG tự gia hạn cam kết
+      // (endDate giữ nguyên, không push vào `renewals`) để phân biệt với autoRenew thật. Nếu sau đó khách
+      // không đóng tiền, luồng DELINQUENT → LOCKED_OUT bên dưới tự xử lý như nợ thông thường.
       await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount: c.billing.rate, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
       c.balance.outstanding += c.billing.rate;
       c.billing.nextBillingDate = addPeriodsUTC(start, period, 1);

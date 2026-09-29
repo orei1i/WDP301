@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, ContractStatus, ItemCondition, PaymentMethod } from '@ssm/shared';
+import { enumValues, AbandonedItemsDisposal, ContractStatus, ItemCondition, PaymentMethod } from '@ssm/shared';
 import { InspectionModel, PaymentModel, RentalContractModel } from '../../shared/db/models';
 import { NotFound } from '../../shared/core/errors';
 import { authenticate } from '../../shared/http/authenticate';
@@ -8,7 +8,7 @@ import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../../shared/http/validate';
 import {
-  extendContract, lockout, payBalance, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  extendContract, lockout, payBalance, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
@@ -92,6 +92,14 @@ contractsRouter.post('/:id/inspection', authorize('STAFF', 'FACILITY_MANAGER'), 
   notes: z.string().max(2000).optional(),
 }) }), async (req, res) => {
   res.status(201).json(await submitMoveOutInspection(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+// ---- hàng bỏ lại khi LOCKED_OUT quá lâu (FM) — kiểm kê + phương án xử lý, mất cọc, đóng hợp đồng
+contractsRouter.post('/:id/abandonment', authorize('FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+  items: z.array(z.object({ description: z.string().min(1).max(300), quantity: z.number().int().min(1) })).min(1).max(200),
+  disposalMethod: z.enum(enumValues(AbandonedItemsDisposal) as [string, ...string[]]),
+  notes: z.string().max(2000).optional(),
+}) }), async (req, res) => {
+  res.status(201).json(await processAbandonment(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
 // ---- inspections history

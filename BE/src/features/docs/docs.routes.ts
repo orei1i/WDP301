@@ -199,7 +199,7 @@ export const API_GROUPS: Group[] = [
   },
   {
     name: 'Hợp đồng thuê',
-    blurb: 'Vòng đời: ACTIVE → (OVERDUE → LOCKED_OUT) → PENDING_MOVE_OUT → CLOSED. Mọi khoản tiền là số nguyên VND.',
+    blurb: 'Vòng đời: ACTIVE → (DELINQUENT → LOCKED_OUT) → MOVE_OUT_PENDING → CLOSED, hoặc LOCKED_OUT → ABANDONED nếu khách bỏ hàng không liên hệ. Mọi khoản tiền là số nguyên VND.',
     routes: [
       {
         method: 'GET', path: '/contracts', auth: 'ANY', summary: 'Danh sách hợp đồng, ưu tiên hiển thị nợ quá hạn lâu nhất.',
@@ -239,6 +239,18 @@ export const API_GROUPS: Group[] = [
           { name: 'notes', type: 'string ≤2000' },
         ],
         notes: ['Kết thúc: hợp đồng CLOSED, đặt chỗ COMPLETED, ô kho về AVAILABLE (hoặc MAINTENANCE nếu có hư hỏng nặng).'],
+      },
+      {
+        method: 'POST', path: '/contracts/:id/abandonment', auth: R.FM, summary: 'Xử lý đồ đạc bỏ lại khi hợp đồng LOCKED_OUT quá lâu → mất cọc, đóng hợp đồng, giải phóng ô.',
+        body: [
+          { name: 'items[]', type: '{ description, quantity } 1..200', required: true },
+          { name: 'disposalMethod', type: 'AUCTION | DONATE | DISCARD', required: true },
+          { name: 'notes', type: 'string ≤2000' },
+        ],
+        notes: [
+          'Chỉ gọi được khi status = LOCKED_OUT và đã khóa đủ policy.abandonAfterLockedOutDays ngày, ngược lại 422.',
+          'Không theo dõi tiền bán thanh lý — mất toàn bộ tiền cọc (FORFEITED) coi như tất toán, không truy thu thêm.',
+        ],
       },
       {
         method: 'GET', path: '/inspections', auth: ['STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'], summary: '100 biên bản kiểm tra gần nhất của một chi nhánh.',
@@ -310,13 +322,15 @@ export const API_GROUPS: Group[] = [
           { name: 'facilityId', type: 'ObjectId | null', required: true, note: 'null = chính sách toàn chuỗi' },
           { name: 'patch.gracePeriodDays', type: 'int 0..60' },
           { name: 'patch.lockoutAfterDays', type: 'int 1..180' },
+          { name: 'patch.abandonAfterLockedOutDays', type: 'int 1..365', note: 'sau bao lâu LOCKED_OUT thì FM được xử lý hàng bỏ lại' },
           { name: 'patch.reservationHoldMinutes', type: 'int 5..1440' },
           { name: 'patch.allocationLeadDays', type: 'int 0..60' },
           { name: 'patch.noShowAfterHours', type: 'int 1..168' },
           { name: 'patch.minRentalMonths / maxRentalMonths', type: 'int' },
           { name: 'patch.deposit', type: "{ mode: 'MONTHS_OF_RENT' | 'FIXED', value }" },
           { name: 'patch.lateFees[]', type: '{ afterDays, kind, value, recurringEveryDays } ≤10' },
-          { name: 'patch.cancellation[]', type: '{ minHoursBeforeStart, depositRefundPct } ≤10' },
+          { name: 'patch.cancellation[]', type: '{ minHoursBeforeStart, depositRefundPct } ≤10', note: 'huỷ Reservation trước khi nhận kho' },
+          { name: 'patch.earlyTermination[]', type: '{ maxElapsedPct, depositRefundPct } ≤10', note: 'trả kho sớm khi hợp đồng đang OCCUPIED, trần hoàn cọc theo % thời gian kỳ hạn đã dùng' },
           { name: 'patch.discounts[]', type: '{ code, kind, value, minMonths, validFrom, validTo, requiresApprovalRole } ≤20' },
         ],
         notes: ['patch là strict: gửi field lạ sẽ bị 400 UNKNOWN_FIELD.'],

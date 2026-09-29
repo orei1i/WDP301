@@ -30,6 +30,7 @@ export async function createClaim(user: UserHydrated, input: {
   if (incidentAt > now) throw Unprocessable('Thời điểm sự cố không được ở tương lai');
   if (incidentAt < c.startDate) throw Unprocessable('Thời điểm sự cố trước ngày bắt đầu thuê kho');
   if (daysBetween(incidentAt, now) > CLAIM_WINDOW_DAYS) throw Unprocessable(`Chỉ nhận yêu cầu trong ${CLAIM_WINDOW_DAYS} ngày kể từ khi xảy ra sự cố`);
+  if (c.status === 'ABANDONED') throw Unprocessable('Hợp đồng đã đóng do hàng bỏ lại (đã thanh lý), không nhận yêu cầu bồi thường');
   if (c.status === 'CLOSED' && c.closedAt && daysBetween(c.closedAt, now) > CLAIM_WINDOW_DAYS) {
     throw Unprocessable(`Hợp đồng đã kết thúc quá ${CLAIM_WINDOW_DAYS} ngày, không còn nhận yêu cầu bồi thường`);
   }
