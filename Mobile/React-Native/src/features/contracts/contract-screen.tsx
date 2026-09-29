@@ -3,7 +3,7 @@ import { StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
-  ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
+  ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
   addDays, addPeriods, fmtDate, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
@@ -97,6 +97,7 @@ export default function ContractScreen() {
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Đăng ký trả kho</Text>
           <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền cọc hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
+          <Text style={st.hint}>Trả kho trước hạn hợp đồng còn bị giới hạn % hoàn cọc theo thời gian đã sử dụng — dùng trên 50% kỳ hạn sẽ không được hoàn cọc.</Text>
           <DateStepper label="Ngày trả kho dự kiến" value={moveOutDate} onChange={setMoveOutDate} min={todayISO()} />
           <Button
             title="Đăng ký trả kho"
@@ -136,7 +137,7 @@ export default function ContractScreen() {
         </Card>
       )}
 
-      {c.status !== 'CLOSED' && (
+      {OPEN_CONTRACT_STATUSES.includes(c.status) && (
         <Card style={{ marginTop: S.md }}>
           <Button
             title="Báo sự cố"

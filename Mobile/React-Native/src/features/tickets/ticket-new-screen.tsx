@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { TICKET_CATEGORY, TICKET_PRIORITY, TicketCategory, TicketPriority, enumValues } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, TICKET_CATEGORY, TICKET_PRIORITY, TicketCategory, TicketPriority, enumValues } from '@ssm/shared';
 import { facilityName, unitLabel, useStore } from '../../shared/store/store';
 import { Button, Card, Chips, EmptyState, Field, Input, Screen, ScreenHeader } from '../../shared/ui';
 import { S } from '../../shared/ui/theme';
@@ -14,7 +14,7 @@ export default function TicketNewScreen() {
   const { db, user, run } = useStore();
   const router = useRouter();
 
-  const contracts = user ? db.contracts.filter((c) => c.customerId === user._id && c.status !== 'CLOSED') : [];
+  const contracts = user ? db.contracts.filter((c) => c.customerId === user._id && OPEN_CONTRACT_STATUSES.includes(c.status)) : [];
   const [contractId, setContractId] = useState(contract && contracts.some((c) => c._id === contract) ? contract : (contracts[0]?._id ?? ''));
   const [category, setCategory] = useState<TicketCategory>('MAINTENANCE');
   const [priority, setPriority] = useState<TicketPriority>('MEDIUM');

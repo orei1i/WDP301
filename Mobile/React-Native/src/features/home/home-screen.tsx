@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CONTRACT_STATUS, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, fmtDate, relativeDay, todayISO, vnd } from '@ssm/shared';
+import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, fmtDate, relativeDay, todayISO, vnd } from '@ssm/shared';
 import { facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, EmptyState, H1, KV, Muted, Skeleton, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
@@ -40,7 +40,7 @@ export default function HomeScreen() {
     .filter((r) => r.status === 'CONFIRMED' || r.status === 'ALLOCATED')
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
   const pending = db.reservations.filter((r) => r.status === 'PENDING');
-  const contracts = db.contracts.filter((c) => c.status !== 'CLOSED');
+  const contracts = db.contracts.filter((c) => OPEN_CONTRACT_STATUSES.includes(c.status));
 
   const overdueTotal = contracts.reduce((s, c) => s + c.balance.outstanding, 0);
 
