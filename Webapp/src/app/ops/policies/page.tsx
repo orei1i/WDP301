@@ -24,10 +24,11 @@ export default function Policies() {
   const publish = () => run('publishPolicy', {
     facilityId,
     patch: {
-      gracePeriodDays: draft.grace, lockoutAfterDays: draft.lockout, reservationHoldMinutes: draft.hold,
+      gracePeriodDays: draft.grace, lockoutAfterDays: draft.lockout, abandonAfterLockedOutDays: draft.abandonAfter, reservationHoldMinutes: draft.hold,
       deposit: { mode: 'PERIODS_OF_RENT', value: draft.depositPeriods },
       lateFees: [{ afterDays: draft.grace, kind: 'PERCENT_OF_RENT', value: draft.latePct, recurringEveryDays: null }, { afterDays: draft.lockout, kind: 'FIXED', value: draft.lateFixed, recurringEveryDays: 30 }],
       cancellation: [{ minHoursBeforeStart: 72, depositRefundPct: draft.refund72 }, { minHoursBeforeStart: 24, depositRefundPct: draft.refund24 }, { minHoursBeforeStart: 0, depositRefundPct: 0 }],
+      earlyTermination: [{ maxElapsedPct: 25, depositRefundPct: draft.earlyRefund25 }, { maxElapsedPct: 50, depositRefundPct: draft.earlyRefund50 }, { maxElapsedPct: 100, depositRefundPct: 0 }],
       discounts: [
         { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
         { code: 'DAI_HAN_12', kind: 'PERCENT', value: draft.disc12, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
@@ -73,12 +74,22 @@ export default function Policies() {
                 {num('latePct', 'Phí trễ (sau ân hạn)', 'Trên tiền thuê tháng', '%')}
                 {num('lateFixed', 'Phí cố định (khi khóa)', undefined, '₫')}
               </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-4">
+                {num('abandonAfter', 'Xử lý hàng bỏ lại sau', 'Kể từ khi khóa truy cập, khách vẫn không đóng tiền/liên hệ', 'ngày')}
+              </div>
             </section>
             <section>
               <h4 className="mb-3 text-sm font-semibold">Hủy đặt chỗ — hoàn cọc</h4>
               <div className="grid gap-4 sm:grid-cols-3">
                 {num('refund72', 'Hủy trước ≥ 72 giờ', undefined, '%')}
                 {num('refund24', 'Hủy trước ≥ 24 giờ', 'Dưới 24 giờ: không hoàn', '%')}
+              </div>
+            </section>
+            <section>
+              <h4 className="mb-3 text-sm font-semibold">Trả kho sớm khi đang thuê — hoàn cọc</h4>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {num('earlyRefund25', 'Đã dùng ≤ 25% kỳ hạn', undefined, '%')}
+                {num('earlyRefund50', 'Đã dùng ≤ 50% kỳ hạn', 'Trên 50% kỳ hạn: không hoàn', '%')}
               </div>
             </section>
             <section>
@@ -110,10 +121,12 @@ function toDraft(p: BusinessPolicy) {
   const pctFee = p.lateFees.find((f) => f.kind === 'PERCENT_OF_RENT');
   const fixed = p.lateFees.find((f) => f.kind === 'FIXED');
   return {
-    hold: p.reservationHoldMinutes, depositPeriods: p.deposit.value, grace: p.gracePeriodDays, lockout: p.lockoutAfterDays,
+    hold: p.reservationHoldMinutes, depositPeriods: p.deposit.value, grace: p.gracePeriodDays, lockout: p.lockoutAfterDays, abandonAfter: p.abandonAfterLockedOutDays,
     latePct: pctFee?.value ?? 0, lateFixed: fixed?.value ?? 0,
     refund72: p.cancellation.find((c) => c.minHoursBeforeStart === 72)?.depositRefundPct ?? 100,
     refund24: p.cancellation.find((c) => c.minHoursBeforeStart === 24)?.depositRefundPct ?? 50,
+    earlyRefund25: p.earlyTermination.find((t) => t.maxElapsedPct === 25)?.depositRefundPct ?? 100,
+    earlyRefund50: p.earlyTermination.find((t) => t.maxElapsedPct === 50)?.depositRefundPct ?? 50,
     disc6: p.discounts.find((d) => d.minPeriods === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minPeriods === 12)?.value ?? 0,
   };
 }

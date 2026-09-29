@@ -119,7 +119,7 @@ export function createSeed(): DB {
   const policyBody = {
     deposit: { mode: 'PERIODS_OF_RENT' as const, value: 1 },
     reservationHoldMinutes: 30, allocationLeadDays: 3, noShowAfterHours: 24,
-    gracePeriodDays: 5, lockoutAfterDays: 15,
+    gracePeriodDays: 5, lockoutAfterDays: 15, abandonAfterLockedOutDays: 30,
     lateFees: [
       { afterDays: 5, kind: 'PERCENT_OF_RENT' as const, value: 5, recurringEveryDays: null },
       { afterDays: 15, kind: 'FIXED' as const, value: 200_000, recurringEveryDays: 30 },
@@ -128,6 +128,11 @@ export function createSeed(): DB {
       { minHoursBeforeStart: 72, depositRefundPct: 100 },
       { minHoursBeforeStart: 24, depositRefundPct: 50 },
       { minHoursBeforeStart: 0, depositRefundPct: 0 },
+    ],
+    earlyTermination: [
+      { maxElapsedPct: 25, depositRefundPct: 100 },
+      { maxElapsedPct: 50, depositRefundPct: 50 },
+      { maxElapsedPct: 100, depositRefundPct: 0 },
     ],
     minPeriods: 1, maxPeriods: 36,
     surcharges: [{ code: 'CLIMATE', label: 'Kho điều hòa nhiệt độ', kind: 'PERCENT' as const, value: 10, categories: ['SMALL', 'MEDIUM', 'LARGE', 'XL'] as UnitCategory[] }],
@@ -256,6 +261,8 @@ export function createSeed(): DB {
   let poolIdx = 0;
   const occupied = units.filter((u) => u.status === 'OCCUPIED');
   const specialByFacility: Record<string, { delinquent: number; locked: boolean; moveOut: boolean }> = {};
+  // Đúng một hợp đồng LOCKED_OUT trong demo bị khóa đủ lâu để "Xử lý hàng bỏ lại" bấm được ngay sau seed.
+  let abandonDemoUsed = false;
   for (const u of occupied) {
     const ut = typeOf(u.unitTypeId);
     const sp = (specialByFacility[u.facilityId] ??= { delinquent: 0, locked: false, moveOut: false });
@@ -289,7 +296,10 @@ export function createSeed(): DB {
     else if (!isDemoM && !sp.locked && rand() < 0.1) { status = 'LOCKED_OUT'; sp.locked = true; }
     else if (!isDemoM && sp.delinquent < 3 && rand() < 0.12) { status = 'DELINQUENT'; sp.delinquent++; }
 
-    const overdueDays = status === 'LOCKED_OUT' ? int(16, 24) : status === 'DELINQUENT' ? int(6, 13) : 0;
+    const abandonDemo = status === 'LOCKED_OUT' && !abandonDemoUsed;
+    if (abandonDemo) abandonDemoUsed = true;
+    const lockedOutDaysAgo = abandonDemo ? int(31, 35) : 1;
+    const overdueDays = status === 'LOCKED_OUT' ? (abandonDemo ? int(40, 50) : int(16, 24)) : status === 'DELINQUENT' ? int(6, 13) : 0;
     const paidThrough = overdueDays ? addDays(T, -overdueDays - 1) : addDays(nextBilling, -1);
     const lateFee = overdueDays ? Math.round(q.rate * 0.05) + (overdueDays >= 15 ? 200_000 : 0) : 0;
     const cid = nid('ctr');
@@ -328,8 +338,8 @@ export function createSeed(): DB {
       billing: { currency: 'VND', rentalPeriod: period, rate: q.firstPeriodRent, nextBillingDate: nextBilling, paidThrough },
       deposit: { amount: q.depositAmount, status: 'HELD', paymentId: deposit._id, refundedAmount: 0 },
       balance: { outstanding: overdueDays ? q.firstPeriodRent + lateFee : 0, lastPaymentAt: addDays(paidThrough, -28) },
-      delinquency: overdueDays ? { since: addDays(T, -overdueDays), daysOverdue: overdueDays, lateFeesAccrued: lateFee, lockedOutAt: status === 'LOCKED_OUT' ? addDays(T, -1) : null } : null,
-      access: { method: access, keyTag: access === 'PHYSICAL_KEY' ? `K-${u.unitNumber}` : null, credentialHash: access === 'PHYSICAL_KEY' ? null : 'sha256:••••', issuedAt: start, issuedBy: null, suspendedAt: status === 'LOCKED_OUT' ? addDays(T, -1) : null, revokedAt: null },
+      delinquency: overdueDays ? { since: addDays(T, -overdueDays), daysOverdue: overdueDays, lateFeesAccrued: lateFee, lockedOutAt: status === 'LOCKED_OUT' ? addDays(T, -lockedOutDaysAgo) : null } : null,
+      access: { method: access, keyTag: access === 'PHYSICAL_KEY' ? `K-${u.unitNumber}` : null, credentialHash: access === 'PHYSICAL_KEY' ? null : 'sha256:••••', issuedAt: start, issuedBy: null, suspendedAt: status === 'LOCKED_OUT' ? addDays(T, -lockedOutDaysAgo) : null, revokedAt: null },
       terms: { policyId: q.policyId, policyVersion: q.policyVersion, gracePeriodDays: 5, lockoutAfterDays: 15, signedAt: start, signatureRef: 'esign-demo' },
       renewals,
       moveOut: status === 'MOVE_OUT_PENDING' ? { requestedAt: addDays(T, -1), scheduledFor: T, completedAt: null, inspectionId: null } : null,

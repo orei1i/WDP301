@@ -5,7 +5,7 @@ import { ClipboardCheck, KeyRound, Plus, Trash2 } from 'lucide-react';
 import type { InspectionLog, ItemCondition, RentalContract } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { INSPECTION_OUTCOME } from '@/shared/lib/labels';
-import { byId, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { byId, earlyTerminationCap, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatusBadge, Table, cx, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
@@ -27,7 +27,9 @@ export default function MoveOutPage() {
   const c = active ? db.contracts.find((x) => x._id === active._id) ?? null : null;
   const unit = c ? byId(db.units, c.unitId) : undefined;
   const damageTotal = damages.reduce((s, d) => s + (d.cost || 0), 0);
-  const deductions = c ? Math.min(c.deposit.amount, damageTotal + c.balance.outstanding) : 0;
+  const earlyTermination = c ? earlyTerminationCap(db, c) : null;
+  const normalRefund = c ? c.deposit.amount - Math.min(c.deposit.amount, damageTotal + c.balance.outstanding) : 0;
+  const refundAmount = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
 
   const start = (x: RentalContract) => { setActive(x); setChecklist(Object.fromEntries(ITEMS.map((i) => [i, 'OK']))); setDamages([]); setNotes(''); };
   const submit = async () => {
@@ -122,7 +124,13 @@ export default function MoveOutPage() {
                       <div className="flex justify-between"><dt className="text-stone-500">Tiền cọc đang giữ</dt><dd className="tabular-nums">{vnd(c.deposit.amount)}</dd></div>
                       <div className="flex justify-between"><dt className="text-stone-500">Chi phí hư hại</dt><dd className="tabular-nums">−{vnd(damageTotal)}</dd></div>
                       {c.balance.outstanding > 0 && <div className="flex justify-between"><dt className="text-stone-500">Công nợ còn lại</dt><dd className="tabular-nums">−{vnd(c.balance.outstanding)}</dd></div>}
-                      <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(c.deposit.amount - deductions)}</dd></div>
+                      {earlyTermination && (
+                        <div className="flex justify-between text-amber-800">
+                          <dt>Trả kho sớm (đã dùng {earlyTermination.elapsedPct}% kỳ hạn)</dt>
+                          <dd className="tabular-nums">trần {earlyTermination.refundCapPct}% cọc</dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(refundAmount)}</dd></div>
                     </dl>
                     {damageTotal + c.balance.outstanding > c.deposit.amount && <p className="mt-2 text-xs text-amber-800">Chi phí vượt tiền cọc — phần chênh lệch cần thu thêm từ khách.</p>}
                   </section>
@@ -142,7 +150,7 @@ export default function MoveOutPage() {
         <Table rows={history} rowKey={(i) => i._id} columns={[
           { key: 't', header: 'Thời gian', cell: (i) => fmtDateTime(i.performedAt) },
           { key: 'u', header: 'Kho', cell: (i) => unitLabel(db, i.unitId) },
-          { key: 'k', header: 'Loại', cell: (i) => ({ MOVE_IN: 'Nhận kho', MOVE_OUT: 'Trả kho', ROUTINE: 'Định kỳ', MAINTENANCE: 'Bảo trì' })[i.type] },
+          { key: 'k', header: 'Loại', cell: (i) => ({ MOVE_IN: 'Nhận kho', MOVE_OUT: 'Trả kho', ROUTINE: 'Định kỳ', MAINTENANCE: 'Bảo trì', ABANDONMENT: 'Hàng bỏ lại' })[i.type] },
           { key: 'by', header: 'Người kiểm tra', cell: (i) => userName(db, i.inspectorId) },
           { key: 'o', header: 'Kết quả', cell: (i) => (i.outcome ? <StatusBadge map={INSPECTION_OUTCOME} value={i.outcome} /> : '—') },
           { key: 'f', header: 'Hư hại', className: 'text-right tabular-nums', cell: (i) => vnd(i.totalDamageFee) },

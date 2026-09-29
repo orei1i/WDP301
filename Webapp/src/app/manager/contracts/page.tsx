@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeftRight, Banknote, BadgePercent, Lock } from 'lucide-react';
-import type { RentalContract } from '@ssm/shared';
+import { ArrowLeftRight, Banknote, BadgePercent, Lock, PackageX, Plus, Trash2 } from 'lucide-react';
+import type { AbandonedItemsDisposal, RentalContract } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { PERIOD_UNIT } from '@ssm/shared';
-import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
+import { OPEN_CONTRACT_STATUSES, PERIOD_UNIT } from '@ssm/shared';
+import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, DISPOSAL_METHOD, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
 import { effectivePolicy, typeName, unitLabel, userName } from '@/shared/lib/domain';
-import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
+import { addDays, daysBetween, fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 type Tab = 'overdue' | 'expiring' | 'moveout' | 'all';
+type AbandonItem = { description: string; quantity: number };
 
 export default function Contracts() {
   const { db, run } = useStore();
@@ -24,9 +25,13 @@ export default function Contracts() {
   const [reason, setReason] = useState('');
   const [swap, setSwap] = useState<RentalContract | null>(null);
   const [swapForm, setSwapForm] = useState({ toUnitId: '', reason: '', keyTag: '', fee: 0 });
+  const [abandon, setAbandon] = useState<RentalContract | null>(null);
+  const [abandonItems, setAbandonItems] = useState<AbandonItem[]>([]);
+  const [disposalMethod, setDisposalMethod] = useState<AbandonedItemsDisposal>('DISCARD');
+  const [abandonNotes, setAbandonNotes] = useState('');
   const T = todayISO();
 
-  const open = db.contracts.filter((c) => c.facilityId === fid && c.status !== 'CLOSED');
+  const open = db.contracts.filter((c) => c.facilityId === fid && OPEN_CONTRACT_STATUSES.includes(c.status));
   const groups: Record<Tab, RentalContract[]> = {
     overdue: open.filter((c) => c.status === 'DELINQUENT' || c.status === 'LOCKED_OUT').sort((a, b) => (b.delinquency?.daysOverdue ?? 0) - (a.delinquency?.daysOverdue ?? 0)),
     expiring: open.filter((c) => c.status === 'ACTIVE' && c.endDate <= addDays(T, 30) && !c.autoRenew).sort((a, b) => a.endDate.localeCompare(b.endDate)),
@@ -44,6 +49,11 @@ export default function Contracts() {
   const openSwap = (x: RentalContract) => { setSwapForm({ toUnitId: '', reason: '', keyTag: '', fee: 0 }); setSwap(x); };
   const canSwap = (x: RentalContract) => x.status === 'ACTIVE' && x.balance.outstanding === 0;
 
+  /** LOCKED_OUT đủ lâu (policy.abandonAfterLockedOutDays) mà khách vẫn không đóng tiền/liên hệ. */
+  const lockedOutDays = (x: RentalContract) => (x.delinquency?.lockedOutAt ? daysBetween(x.delinquency.lockedOutAt, T) : 0);
+  const canAbandon = (x: RentalContract) => x.status === 'LOCKED_OUT' && lockedOutDays(x) >= policy.abandonAfterLockedOutDays;
+  const openAbandon = (x: RentalContract) => { setAbandonItems([{ description: '', quantity: 1 }]); setDisposalMethod('DISCARD'); setAbandonNotes(''); setAbandon(x); };
+
   return (
     <>
       <PageHeader title="Hợp đồng & công nợ" description={`Ân hạn ${policy.gracePeriodDays} ngày · khóa truy cập khi quá hạn trên ${policy.gracePeriodDays} ngày (tự động sau ${policy.lockoutAfterDays} ngày).`} actions={<FacilityPicker scope={scope} />} />
@@ -57,7 +67,13 @@ export default function Contracts() {
           { key: 'k', header: 'Khách hàng', cell: (x) => <div><p>{userName(db, x.customerId)}</p><p className="font-mono text-[11px] text-stone-500">{x.contractNumber}</p></div> },
           { key: 'e', header: 'Hết hạn', cell: (x) => <div><p>{fmtDate(x.endDate)}</p><p className="text-xs text-stone-500">{x.autoRenew ? 'Tự gia hạn' : 'Không tự gia hạn'}</p></div> },
           { key: 'r', header: 'Giá thuê', className: 'tabular-nums', cell: (x) => `${vnd(x.billing.rate)}/${PERIOD_UNIT[x.billing.rentalPeriod]}` },
-          { key: 'o', header: 'Công nợ', className: 'tabular-nums', cell: (x) => <div><p className={cx(x.balance.outstanding > 0 && 'font-medium text-red-700')}>{vnd(x.balance.outstanding)}</p>{x.delinquency && <p className="text-xs text-stone-500">quá hạn {x.delinquency.daysOverdue} ngày</p>}</div> },
+          { key: 'o', header: 'Công nợ', className: 'tabular-nums', cell: (x) => (
+            <div>
+              <p className={cx(x.balance.outstanding > 0 && 'font-medium text-red-700')}>{vnd(x.balance.outstanding)}</p>
+              {x.delinquency && <p className="text-xs text-stone-500">quá hạn {x.delinquency.daysOverdue} ngày</p>}
+              {x.status === 'LOCKED_OUT' && <p className={cx('text-xs', canAbandon(x) ? 'font-medium text-red-700' : 'text-stone-500')}>khóa {lockedOutDays(x)}/{policy.abandonAfterLockedOutDays} ngày</p>}
+            </div>
+          ) },
           { key: 's', header: 'Trạng thái', cell: (x) => <StatusBadge map={CONTRACT_STATUS} value={x.status} /> },
           { key: 'a', header: '', className: 'text-right', cell: (x) => (
             <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
@@ -65,6 +81,7 @@ export default function Contracts() {
               {x.balance.outstanding > 0 && <Button size="sm" variant="secondary" onClick={() => run('payBalance', { contractId: x._id, method: 'CASH' }, (v) => `Đã thu ${vnd(v)} tại quầy`)}><Banknote className="size-3.5" />Thu tại quầy</Button>}
               {canSwap(x) && <Button size="sm" variant="secondary" onClick={() => openSwap(x)}><ArrowLeftRight className="size-3.5" />Đổi ô</Button>}
               {(x.delinquency?.lateFeesAccrued ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={() => { setWaive(x); setReason(''); }}><BadgePercent className="size-3.5" />Miễn phí trễ</Button>}
+              {canAbandon(x) && <Button size="sm" variant="danger" onClick={() => openAbandon(x)}><PackageX className="size-3.5" />Xử lý hàng bỏ lại</Button>}
             </div>
           ) },
         ]} />
@@ -165,6 +182,53 @@ export default function Contracts() {
                 </ol>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={!!abandon} onClose={() => setAbandon(null)} size="lg"
+        title="Xử lý hàng bỏ lại" description={abandon ? `${userName(db, abandon.customerId)} · kho ${unitLabel(db, abandon.unitId)} · đã khóa ${lockedOutDays(abandon)} ngày` : ''}
+        footer={
+          <Button variant="danger" disabled={abandonItems.length === 0 || abandonItems.some((it) => !it.description.trim())}
+            onClick={() => abandon && void run('processAbandonment', { contractId: abandon._id, items: abandonItems, disposalMethod, notes: abandonNotes },
+              'Đã xử lý hàng bỏ lại — hợp đồng đóng, ô kho đã giải phóng', () => setAbandon(null))}>
+            Xác nhận xử lý
+          </Button>
+        }>
+        {abandon && (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-900 ring-1 ring-red-200">
+              Khách đã bị khóa truy cập {lockedOutDays(abandon)} ngày, vượt ngưỡng {policy.abandonAfterLockedOutDays} ngày mà không đóng tiền/liên hệ.
+              Xác nhận sẽ <b>mất toàn bộ tiền cọc {vnd(abandon.deposit.amount)}</b> để tất toán công nợ, đóng hợp đồng và giải phóng ô kho — không thể hoàn tác.
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <h4 className="text-sm font-semibold">Danh sách vật dụng</h4>
+                <Button size="sm" variant="secondary" onClick={() => setAbandonItems((arr) => [...arr, { description: '', quantity: 1 }])}><Plus className="size-3.5" />Thêm</Button>
+              </div>
+              <div className="space-y-2">
+                {abandonItems.map((it, i) => (
+                  <div key={i} className="grid gap-2 sm:grid-cols-[1fr_100px_auto]">
+                    <input className={inputCls} placeholder="Mô tả vật dụng" value={it.description}
+                      onChange={(e) => setAbandonItems((arr) => arr.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
+                    <input className={inputCls} type="number" min={1} step={1} placeholder="SL" value={it.quantity}
+                      onChange={(e) => setAbandonItems((arr) => arr.map((x, j) => (j === i ? { ...x, quantity: Math.max(1, Math.round(Number(e.target.value) || 1)) } : x)))} />
+                    <Button variant="ghost" size="sm" onClick={() => setAbandonItems((arr) => arr.filter((_, j) => j !== i))} aria-label="Xóa"><Trash2 className="size-4" /></Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <Field label="Phương án xử lý">
+              <select className={inputCls} value={disposalMethod} onChange={(e) => setDisposalMethod(e.target.value as AbandonedItemsDisposal)}>
+                {(Object.keys(DISPOSAL_METHOD) as AbandonedItemsDisposal[]).map((k) => <option key={k} value={k}>{DISPOSAL_METHOD[k]}</option>)}
+              </select>
+            </Field>
+
+            <Field label="Ghi chú" hint="Không bắt buộc">
+              <textarea className={inputCls} rows={2} value={abandonNotes} onChange={(e) => setAbandonNotes(e.target.value)} />
+            </Field>
           </div>
         )}
       </Modal>

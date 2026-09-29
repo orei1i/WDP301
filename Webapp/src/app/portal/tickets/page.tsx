@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { MessageSquare, Plus } from 'lucide-react';
-import type { SupportTicket, TicketCategory, TicketPriority } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, type SupportTicket, type TicketCategory, type TicketPriority } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { TICKET_CATEGORY, TICKET_PRIORITY, TICKET_STATUS } from '@/shared/lib/labels';
 import { byId, facilityName, unitLabel } from '@/shared/lib/domain';
@@ -17,7 +17,7 @@ function TicketsInner() {
   const presetContract = sp.get('contract');
   const [open, setOpen] = useState(!!presetContract);
   const [view, setView] = useState<SupportTicket | null>(null);
-  const contracts = user ? db.contracts.filter((c) => c.customerId === user._id && c.status !== 'CLOSED') : [];
+  const contracts = user ? db.contracts.filter((c) => c.customerId === user._id && OPEN_CONTRACT_STATUSES.includes(c.status)) : [];
   const [contractId, setContractId] = useState(presetContract ?? contracts[0]?._id ?? '');
   const [category, setCategory] = useState<TicketCategory>('ACCESS');
   const [priority, setPriority] = useState<TicketPriority>('MEDIUM');

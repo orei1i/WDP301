@@ -27,8 +27,9 @@ export default function MyClaims() {
   if (!user) return null;
 
   // Chỉ hợp đồng còn mở, hoặc vừa kết thúc trong hạn khiếu nại, mới gửi được yêu cầu.
+  // ABANDONED (hàng bỏ lại, đã thanh lý) không có quy trình khiếu nại — loại hẳn, không tính hạn khiếu nại.
   const eligible = db.contracts.filter((c) =>
-    c.customerId === user._id && (c.status !== 'CLOSED' || (c.closedAt ?? '') >= addDays(todayISO(), -CLAIM_WINDOW_DAYS)));
+    c.customerId === user._id && c.status !== 'ABANDONED' && (c.status !== 'CLOSED' || (c.closedAt ?? '') >= addDays(todayISO(), -CLAIM_WINDOW_DAYS)));
   const claims = db.claims.filter((c) => c.customerId === user._id);
   const total = claimTotal(form.items);
   const valid = form.contractId && form.description.trim().length >= 10 && total > 0

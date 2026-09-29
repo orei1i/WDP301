@@ -19,7 +19,7 @@ type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability
 interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods'>;
 }
 /** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
 interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; useAirConditioning: boolean; quote: PriceQuote }
@@ -289,6 +289,8 @@ export default function FacilityDetail() {
             <p className="mt-3 text-xs leading-relaxed text-stone-500">
               Giữ chỗ {policy.reservationHoldMinutes} phút để thanh toán cọc. Hủy trước {policy.cancellation[0]?.minHoursBeforeStart} giờ được hoàn {policy.cancellation[0]?.depositRefundPct}% cọc,
               trước {policy.cancellation[1]?.minHoursBeforeStart} giờ hoàn {policy.cancellation[1]?.depositRefundPct}%. Tiền thuê kỳ đầu thanh toán khi nhận kho.
+              Nếu trả kho sớm khi đang thuê: dùng ≤{policy.earlyTermination[0]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[0]?.depositRefundPct}% cọc,
+              dùng ≤{policy.earlyTermination[1]?.maxElapsedPct}% hoàn {policy.earlyTermination[1]?.depositRefundPct}%, dùng quá {policy.earlyTermination[1]?.maxElapsedPct}% thời hạn không hoàn cọc.
             </p>
           </Card>
           {q && ut && (

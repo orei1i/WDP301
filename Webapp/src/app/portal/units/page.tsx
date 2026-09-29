@@ -5,9 +5,9 @@ import { HandCoins, KeyRound, LifeBuoy, Lock, PackageOpen, RefreshCw, Repeat } f
 import type { PaymentMethod, RentalContract, SwapMethod } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
-import { byId, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
+import { byId, earlyTerminationPreview, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
-import { addPeriods, OPEN_SWAP_STATUSES, PERIOD_UNIT, periodLabel } from '@ssm/shared';
+import { addPeriods, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PERIOD_UNIT, periodLabel } from '@ssm/shared';
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { api } from '@/shared/api/client';
@@ -26,7 +26,8 @@ export default function MyUnits() {
   const [swapMethod, setSwapMethod] = useState<SwapMethod>('SELF');
   const [swapReason, setSwapReason] = useState('');
   if (!user) return null;
-  const contracts = db.contracts.filter((c) => c.customerId === user._id).sort((a, b) => (a.status === 'CLOSED' ? 1 : 0) - (b.status === 'CLOSED' ? 1 : 0));
+  const contracts = db.contracts.filter((c) => c.customerId === user._id)
+    .sort((a, b) => (OPEN_CONTRACT_STATUSES.includes(a.status) ? 0 : 1) - (OPEN_CONTRACT_STATUSES.includes(b.status) ? 0 : 1));
   const close = () => setDlg(null);
 
   // Sơ đồ ô trống cùng loại — tải khi mở dialog đổi ô, không tải sẵn cho mọi hợp đồng.
@@ -70,7 +71,7 @@ export default function MyUnits() {
                 const openSwap = db.swapRequests.find((s) => s.contractId === c._id && (OPEN_SWAP_STATUSES as readonly string[]).includes(s.status));
                 return (
                   <>
-                    {c.status !== 'CLOSED' && (
+                    {OPEN_CONTRACT_STATUSES.includes(c.status) && (
                       <div className="mt-5 flex flex-wrap gap-2 border-t border-stone-100 pt-4">
                         {c.balance.outstanding > 0 && <Button size="sm" onClick={() => setDlg({ kind: 'pay', c })}>Thanh toán {vnd(c.balance.outstanding)}</Button>}
                         {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'extend', c })}><RefreshCw className="size-3.5" />Gia hạn</Button>}
@@ -120,6 +121,15 @@ export default function MyUnits() {
         <Field label="Ngày trả kho dự kiến" hint="Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền cọc hoàn sau khi trừ chi phí hư hại (nếu có).">
           <input type="date" className={inputCls} min={todayISO().slice(0, 10)} value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
+        {dlg && (() => {
+          const preview = earlyTerminationPreview(db, dlg.c, `${date}T00:00:00.000Z`);
+          return preview && (
+            <p className={cx('mt-3 rounded-lg p-3 text-xs leading-relaxed', preview.refundCapPct === 0 ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900')}>
+              Trả kho sớm — đến ngày này bạn đã dùng {preview.elapsedPct}% kỳ hạn thuê, tiền cọc chỉ được hoàn tối đa <strong>{preview.refundCapPct}%</strong>
+              {preview.refundCapPct === 0 ? ' (không hoàn cọc)' : ''}, chưa kể trừ chi phí hư hại nếu có.
+            </p>
+          );
+        })()}
       </Modal>
 
       <Modal open={dlg?.kind === 'swap'} onClose={close} size="lg" title="Yêu cầu đổi ô kho"

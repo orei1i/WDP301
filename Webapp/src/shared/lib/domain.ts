@@ -1,5 +1,6 @@
-import type { BusinessPolicy, Facility, PriceQuote, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
+import type { BusinessPolicy, Facility, PriceQuote, RentalContract, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
+import { OPEN_CONTRACT_STATUSES } from '@ssm/shared';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
 export class DomainError extends Error {
@@ -76,12 +77,37 @@ export function cancellationRefund(db: DB, r: Reservation, nowIso = new Date().t
   return { pct, amount: Math.round((r.quote.depositAmount * pct) / 100) };
 }
 
+/** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. Cùng công thức với BE. */
+export function elapsedTermPct(startDate: string, endDate: string, scheduledFor: string) {
+  const span = new Date(endDate).getTime() - new Date(startDate).getTime();
+  if (span <= 0) return 100;
+  return Math.min(100, Math.max(0, ((new Date(scheduledFor).getTime() - new Date(startDate).getTime()) / span) * 100));
+}
+
+/**
+ * TRẦN % hoàn cọc nếu trả kho vào ngày `scheduledForIso` — dùng để xem trước lúc khách CHỌN NGÀY
+ * (chưa gửi đăng ký) lẫn lúc nhân viên quyết toán (contract đã có `moveOut.scheduledFor`). Trả kho
+ * đúng/quá hạn (scheduledFor >= endDate) không bị phạt — trả về null. Cùng công thức với BE
+ * (`earlyTerminationRefundPct` ở BE/src/features/policies/pricing.ts) để hai bên khớp nhau.
+ */
+export function earlyTerminationPreview(db: DB, c: Pick<RentalContract, 'facilityId' | 'startDate' | 'endDate'>, scheduledForIso: string): { elapsedPct: number; refundCapPct: number } | null {
+  if (scheduledForIso >= c.endDate) return null;
+  const policy = effectivePolicy(db, c.facilityId);
+  const elapsedPct = elapsedTermPct(c.startDate, c.endDate, scheduledForIso);
+  const tier = [...policy.earlyTermination].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct).find((t) => elapsedPct <= t.maxElapsedPct);
+  return { elapsedPct: Math.round(elapsedPct), refundCapPct: tier?.depositRefundPct ?? 0 };
+}
+
+export function earlyTerminationCap(db: DB, c: RentalContract): { elapsedPct: number; refundCapPct: number } | null {
+  return c.moveOut?.scheduledFor ? earlyTerminationPreview(db, c, c.moveOut.scheduledFor) : null;
+}
+
 export function facilityStats(db: DB, facilityId: string) {
   const units = db.units.filter((u) => u.facilityId === facilityId && !u.isDeleted);
   const count = (s: StorageUnit['status']) => units.filter((u) => u.status === s).length;
   const rentable = units.length - count('MAINTENANCE');
   const occupied = count('OCCUPIED') + count('PENDING_INSPECTION');
-  const contracts = db.contracts.filter((c) => c.facilityId === facilityId && c.status !== 'CLOSED');
+  const contracts = db.contracts.filter((c) => c.facilityId === facilityId && OPEN_CONTRACT_STATUSES.includes(c.status));
   const mrr = contracts.reduce((s, c) => s + c.billing.rate, 0);
   const overdue = contracts.reduce((s, c) => s + c.balance.outstanding, 0);
   const area = units.reduce((s, u) => s + (byId(db.unitTypes, u.unitTypeId)?.areaM2 ?? 0), 0);

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { CalendarCheck, CreditCard, QrCode, TriangleAlert, Warehouse } from 'lucide-react';
 import { useStore } from '@/shared/store/store';
-import { PERIOD_UNIT } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, PERIOD_UNIT } from '@ssm/shared';
 import { CONTRACT_STATUS, RESERVATION_STATUS } from '@/shared/lib/labels';
 import { facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { fmtDate, relativeDay, vnd } from '@/shared/lib/format';
@@ -12,7 +12,7 @@ import { ButtonLink, Card, CardHeader, EmptyState, PageHeader, Stat, StatusBadge
 export default function PortalHome() {
   const { db, user } = useStore();
   if (!user) return null;
-  const contracts = db.contracts.filter((c) => c.customerId === user._id && c.status !== 'CLOSED');
+  const contracts = db.contracts.filter((c) => c.customerId === user._id && OPEN_CONTRACT_STATUSES.includes(c.status));
   const upcoming = db.reservations.filter((r) => r.customerId === user._id && ['PENDING', 'CONFIRMED', 'ALLOCATED'].includes(r.status)).sort((a, b) => a.startDate.localeCompare(b.startDate));
   const debt = contracts.reduce((s, c) => s + c.balance.outstanding, 0);
   const nextBill = contracts.filter((c) => c.status === 'ACTIVE').sort((a, b) => a.billing.nextBillingDate.localeCompare(b.billing.nextBillingDate))[0];
