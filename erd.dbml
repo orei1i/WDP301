@@ -79,6 +79,7 @@ Enum contract_status {
   DELINQUENT
   LOCKED_OUT
   MOVE_OUT_PENDING
+  ABANDONED
   CLOSED
 }
 Enum deposit_status {
@@ -288,11 +289,12 @@ Table inspection_logs {
   unit_id objectid
   contract_id objectid
   inspector_id objectid
-  type varchar [note: 'MOVE_IN | MOVE_OUT | ROUTINE | MAINTENANCE']
+  type varchar [note: 'MOVE_IN | MOVE_OUT | ROUTINE | MAINTENANCE | ABANDONMENT']
   performed_at datetime
   total_damage_fee int
   "deposit_settlement.refund_amount" int
   "deposit_settlement.deductions" int
+  "abandonment.disposal_method" varchar [note: 'AUCTION | DONATE | DISCARD — chỉ có khi type = ABANDONMENT']
 }
 
 Table support_tickets {
@@ -340,6 +342,7 @@ Table business_policies {
   reservation_hold_minutes int
   grace_period_days int
   lockout_after_days int
+  abandon_after_locked_out_days int [note: 'sau bao lâu LOCKED_OUT thì FM được xử lý hàng bỏ lại']
   min_periods int
   max_periods int
 
