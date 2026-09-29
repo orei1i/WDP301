@@ -1,5 +1,5 @@
 import type {
-  AccessMethod, AuditResult, CancellationReason, CheckInShift, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
+  AbandonedItemsDisposal, AccessMethod, AuditResult, CancellationReason, CheckInShift, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
   InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, RentalPeriod,
   ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
   UnitStatus, UserStatus,
@@ -296,7 +296,11 @@ export interface InspectionLog<I = ID, D = string> extends BaseEntity<I, D> {
   depositSettlement?: {
     depositHeld: number; deductions: number; refundAmount: number;
     refundPaymentId?: I | null; damagePaymentId?: I | null; approvedBy?: I | null; approvedAt?: D | null;
+    /** Chỉ có khi trả kho SỚM (trước endDate của kỳ hạn) — % thời gian kỳ hạn đã dùng và trần hoàn cọc theo đó. */
+    earlyTermination?: { elapsedPct: number; refundCapPct: number } | null;
   } | null;
+  /** Chỉ có khi type = ABANDONMENT — danh sách đồ đạc khách bỏ lại và phương án xử lý (LOCKED_OUT quá lâu). */
+  abandonment?: { items: { description: string; quantity: number }[]; disposalMethod: AbandonedItemsDisposal } | null;
   notes?: string;
 }
 
@@ -374,8 +378,17 @@ export interface BusinessPolicy<I = ID, D = string> extends BaseEntity<I, D> {
   noShowAfterHours: number;
   gracePeriodDays: number;
   lockoutAfterDays: number;
+  /** Số ngày kể từ khi LOCKED_OUT mà khách vẫn không đóng tiền/liên hệ thì FM được xử lý đồ bỏ lại (kiểm kê + thanh lý). */
+  abandonAfterLockedOutDays: number;
   lateFees: { afterDays: number; kind: 'FIXED' | 'PERCENT_OF_RENT'; value: number; recurringEveryDays?: number | null }[];
   cancellation: { minHoursBeforeStart: number; depositRefundPct: number }[];
+  /**
+   * Phạt trả kho sớm khi hợp đồng đang OCCUPIED (huỷ trước ngày hết hạn kỳ hạn hiện tại `endDate`),
+   * theo % thời gian đã dùng trên kỳ hạn (elapsed = (scheduledFor − startDate) / (endDate − startDate)).
+   * Tier có `maxElapsedPct` nhỏ nhất mà elapsed% vẫn ≤ nó sẽ được áp dụng; dùng làm TRẦN hoàn cọc
+   * (kết hợp min() với phần hoàn còn lại sau khi trừ hư hỏng/công nợ) — không cộng dồn phạt.
+   */
+  earlyTermination: { maxElapsedPct: number; depositRefundPct: number }[];
   minPeriods: number;
   maxPeriods: number;
   surcharges: { code: string; label: string; kind: 'FIXED' | 'PERCENT'; value: number; categories: UnitCategory[] }[];

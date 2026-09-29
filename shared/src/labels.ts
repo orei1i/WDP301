@@ -1,5 +1,5 @@
 import type {
-  AccessMethod, CheckInShift, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
+  AbandonedItemsDisposal, AccessMethod, CheckInShift, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
   RentalPeriod, ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority,
   TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus,
 } from './enums';
@@ -37,7 +37,12 @@ export const CONTRACT_STATUS: LabelMap<ContractStatus> = {
   DELINQUENT: { label: 'Quá hạn thanh toán', tone: 'amber' },
   LOCKED_OUT: { label: 'Đã khóa truy cập', tone: 'red' },
   MOVE_OUT_PENDING: { label: 'Chờ trả kho', tone: 'violet' },
+  ABANDONED: { label: 'Hàng bỏ lại — đã xử lý', tone: 'red' },
   CLOSED: { label: 'Đã kết thúc', tone: 'gray' },
+};
+
+export const DISPOSAL_METHOD: Record<AbandonedItemsDisposal, string> = {
+  AUCTION: 'Thanh lý / bán', DONATE: 'Quyên tặng', DISCARD: 'Tiêu hủy',
 };
 
 export const DEPOSIT_STATUS: LabelMap<DepositStatus> = {

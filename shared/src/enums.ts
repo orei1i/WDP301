@@ -30,7 +30,7 @@ export type ReservationStatus = (typeof ReservationStatus)[keyof typeof Reservat
 export const CancellationReason = { CUSTOMER_REQUEST: 'CUSTOMER_REQUEST', HOLD_EXPIRED: 'HOLD_EXPIRED', PAYMENT_FAILED: 'PAYMENT_FAILED', NO_SHOW: 'NO_SHOW', FACILITY_UNAVAILABLE: 'FACILITY_UNAVAILABLE', ADMIN_OVERRIDE: 'ADMIN_OVERRIDE' } as const;
 export type CancellationReason = (typeof CancellationReason)[keyof typeof CancellationReason];
 
-export const ContractStatus = { ACTIVE: 'ACTIVE', DELINQUENT: 'DELINQUENT', LOCKED_OUT: 'LOCKED_OUT', MOVE_OUT_PENDING: 'MOVE_OUT_PENDING', CLOSED: 'CLOSED' } as const;
+export const ContractStatus = { ACTIVE: 'ACTIVE', DELINQUENT: 'DELINQUENT', LOCKED_OUT: 'LOCKED_OUT', MOVE_OUT_PENDING: 'MOVE_OUT_PENDING', ABANDONED: 'ABANDONED', CLOSED: 'CLOSED' } as const;
 export type ContractStatus = (typeof ContractStatus)[keyof typeof ContractStatus];
 export const OPEN_CONTRACT_STATUSES: readonly ContractStatus[] = ['ACTIVE', 'DELINQUENT', 'LOCKED_OUT', 'MOVE_OUT_PENDING'];
 
@@ -77,7 +77,7 @@ export type PaymentStatus = (typeof PaymentStatus)[keyof typeof PaymentStatus];
 export const PaymentMethod = { CARD: 'CARD', BANK_TRANSFER: 'BANK_TRANSFER', VNPAY: 'VNPAY', MOMO: 'MOMO', CASH: 'CASH', INTERNAL: 'INTERNAL' } as const;
 export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
-export const InspectionType = { MOVE_IN: 'MOVE_IN', MOVE_OUT: 'MOVE_OUT', ROUTINE: 'ROUTINE', MAINTENANCE: 'MAINTENANCE' } as const;
+export const InspectionType = { MOVE_IN: 'MOVE_IN', MOVE_OUT: 'MOVE_OUT', ROUTINE: 'ROUTINE', MAINTENANCE: 'MAINTENANCE', ABANDONMENT: 'ABANDONMENT' } as const;
 export type InspectionType = (typeof InspectionType)[keyof typeof InspectionType];
 
 export const InspectionOutcome = { PASS: 'PASS', PASS_WITH_DAMAGE: 'PASS_WITH_DAMAGE', MAINTENANCE_REQUIRED: 'MAINTENANCE_REQUIRED' } as const;
@@ -85,6 +85,10 @@ export type InspectionOutcome = (typeof InspectionOutcome)[keyof typeof Inspecti
 
 export const InspectionStatus = { DRAFT: 'DRAFT', SUBMITTED: 'SUBMITTED', APPROVED: 'APPROVED' } as const;
 export type InspectionStatus = (typeof InspectionStatus)[keyof typeof InspectionStatus];
+
+/** Phương án xử lý đồ đạc khách bỏ lại khi hợp đồng bị đánh dấu ABANDONED (LOCKED_OUT quá lâu). */
+export const AbandonedItemsDisposal = { AUCTION: 'AUCTION', DONATE: 'DONATE', DISCARD: 'DISCARD' } as const;
+export type AbandonedItemsDisposal = (typeof AbandonedItemsDisposal)[keyof typeof AbandonedItemsDisposal];
 
 export const ItemCondition = { OK: 'OK', DAMAGED: 'DAMAGED', MISSING: 'MISSING' } as const;
 export type ItemCondition = (typeof ItemCondition)[keyof typeof ItemCondition];

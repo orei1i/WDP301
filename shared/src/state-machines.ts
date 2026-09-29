@@ -30,8 +30,9 @@ export const UNIT_MACHINE = {
 export const CONTRACT_MACHINE = {
   ACTIVE:           { DELINQUENT: [SYS], MOVE_OUT_PENDING: [CU, ST, FM] },
   DELINQUENT:       { ACTIVE: [SYS], LOCKED_OUT: [FM, SYS], MOVE_OUT_PENDING: [FM] },
-  LOCKED_OUT:       { ACTIVE: [SYS, FM], MOVE_OUT_PENDING: [FM] },       // paid in full -> access restored
+  LOCKED_OUT:       { ACTIVE: [SYS, FM], MOVE_OUT_PENDING: [FM], ABANDONED: [FM] }, // paid in full -> access restored | khách bỏ hàng, không liên hệ
   MOVE_OUT_PENDING: { CLOSED: [ST, FM], ACTIVE: [FM] },                  // settled | move-out cancelled
+  ABANDONED:        {},
   CLOSED:           {},
 } as const satisfies StateMachine<ContractStatus>;
 
