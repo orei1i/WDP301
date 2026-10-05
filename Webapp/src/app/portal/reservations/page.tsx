@@ -34,7 +34,7 @@ export default function MyReservations() {
           { key: 'status', header: 'Trạng thái', cell: (r) => <div><StatusBadge map={RESERVATION_STATUS} value={r.status} />{r.cancellation && <p className="mt-1 text-xs text-stone-500">{CANCELLATION_REASON[r.cancellation.reason]}</p>}</div> },
           { key: 'act', header: '', className: 'text-right', cell: (r) => (
             <div className="flex justify-end gap-2">
-              {live.includes(r) && <ButtonLink href={`/booking/${r._id}`} size="sm" variant={r.status === 'PENDING' ? 'primary' : 'secondary'}>{r.status === 'PENDING' ? 'Đặt cọc' : 'Mã QR'}</ButtonLink>}
+              {live.includes(r) && <ButtonLink href={`/booking/${r._id}`} size="sm" variant={r.status === 'PENDING' || !r.signature ? 'primary' : 'secondary'}>{r.status === 'PENDING' ? 'Đặt cọc' : !r.signature ? 'Ký hợp đồng' : 'Mã QR'}</ButtonLink>}
               {live.includes(r) && <Button size="sm" variant="ghost" onClick={() => setCancel(r)}>Hủy</Button>}
             </div>
           ) },

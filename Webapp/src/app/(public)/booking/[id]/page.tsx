@@ -11,6 +11,8 @@ import { byId, cancellationRefund, facilityName, typeName, unitLabel } from '@/s
 import { fmtDate, minutesLeft, vnd } from '@/shared/lib/format';
 import { Button, ButtonLink, Card, EmptyState, KV, StatusBadge, cx } from '@/shared/ui';
 import { FakeQr } from '@/features/reservations/qr';
+import { ContractSignForm } from '@/features/contracts/contract-sign-form';
+import { SignatureInfo } from '@/features/contracts/contract-document';
 
 const METHODS: PaymentMethod[] = ['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'];
 
@@ -66,11 +68,21 @@ export default function BookingPage() {
       )}
 
       {(r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && (
+        <Card className="mt-4 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Bước 2 — Ký hợp đồng</h2>
+            {r.signature ? <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Đã ký</span> : <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">Chưa ký — cần ký trước khi nhận kho</span>}
+          </div>
+          <div className="mt-4">{r.signature ? <SignatureInfo signature={r.signature} /> : <ContractSignForm reservation={r} />}</div>
+        </Card>
+      )}
+
+      {(r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && (
         <Card className="mt-4 grid gap-6 p-5 sm:grid-cols-[auto_1fr]">
           <div className="mx-auto text-center"><FakeQr value={qrPayload ?? r.code} /><p className="mt-2 font-mono text-xs text-stone-500">{r.code}</p></div>
           <div>
             <p className="flex items-center gap-2 font-semibold text-emerald-700"><CircleCheck className="size-5" />Đặt chỗ đã được xác nhận</p>
-            <p className="mt-2 text-sm text-stone-600">Đưa mã QR này cho nhân viên tại quầy vào ngày <b>{fmtDate(r.startDate)}</b>. Nhân viên sẽ xác minh và bàn giao chìa khóa / mã PIN.</p>
+            <p className="mt-2 text-sm text-stone-600">Đưa mã QR này cho nhân viên tại quầy vào ngày <b>{fmtDate(r.startDate)}</b>. Nhân viên sẽ xác minh và bàn giao chìa khóa / mã PIN.{!r.signature && ' Bạn cần ký hợp đồng ở trên trước khi nhận kho.'}</p>
             <p className="mt-3 text-sm">Kho được phân: <b>{r.unitId ? unitLabel(db, r.unitId) : 'Chi nhánh sẽ phân kho trước ngày nhận'}</b></p>
             <p className="mt-1 flex items-center gap-1.5 text-xs text-stone-500"><Clock className="size-3.5" />Nếu hủy bây giờ: hoàn {refund.pct}% tiền cọc ({vnd(refund.amount)})</p>
             <div className="mt-4 flex flex-wrap gap-2">

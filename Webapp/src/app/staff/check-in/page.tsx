@@ -13,6 +13,8 @@ import { fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { QrScanButton } from '@/features/reservations/qr-scanner';
+import { ContractSignForm } from '@/features/contracts/contract-sign-form';
+import { SignatureInfo } from '@/features/contracts/contract-document';
 
 function CheckInInner() {
   const { db, user, run, refresh } = useStore();
@@ -101,10 +103,16 @@ function CheckInInner() {
                   ['Ca dự kiến đến', <StatusBadge key="shift" map={CHECK_IN_SHIFT} value={r.preferredCheckInShift} />],
                   ['Thời hạn', periodLabel(r.quote.rentalPeriod, r.periods)], ['Tiền cọc', r.depositPaymentId ? `${vnd(r.quote.depositAmount)} · đã thu` : 'Chưa thu'],
                 ]} />
-                {blockers.length > 0 ? (
+                {blockers.length === 0 && !r.signature ? (
+                  <div className="mt-5 border-t border-stone-100 pt-5">
+                    <p className="mb-3 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><TriangleAlert className="mt-0.5 size-4 shrink-0" />Khách chưa ký hợp đồng — cho khách đọc và ký ngay trên màn hình này trước khi bàn giao kho.</p>
+                    <ContractSignForm reservation={r} onBehalf />
+                  </div>
+                ) : blockers.length > 0 ? (
                   <div className="mt-5 space-y-1 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{blockers.map((b) => <p key={b} className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0" />{b}</p>)}</div>
                 ) : (
                   <div className="mt-6 grid gap-5 border-t border-stone-100 pt-5 md:grid-cols-2">
+                    {r.signature && <div className="md:col-span-2"><SignatureInfo signature={r.signature} /></div>}
                     <div className="space-y-4">
                       <Field label="Hình thức truy cập (theo loại kho)">
                         <div className="flex items-center gap-2 rounded-lg bg-stone-50 px-3 py-2.5 text-sm ring-1 ring-inset ring-stone-200">
