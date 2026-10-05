@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Camera, Clock, KeyRound, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
-import { AccessMethod, enumValues, periodLabel, STAFF_SHIFTS } from '@ssm/shared';
+import { AccessMethod, enumValues, periodLabel, STAFF_SHIFTS, withPolicyDefaults } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, RENTAL_PERIOD, UNIT_CATEGORY } from '@/shared/lib/labels';
@@ -76,7 +76,7 @@ export default function FacilityDetail() {
   useEffect(() => {
     let alive = true;
     api.get<Detail>(`/facilities/public/${id}?period=${period}&periods=${periods}&ac=${useAirConditioning}`)
-      .then((d) => { if (!alive) return; setDetail(d); setError(''); setTypeId((cur) => cur || d.unitTypes.find((t) => t.availability.available > 0)?._id || ''); })
+      .then((d) => { if (!alive) return; setDetail({ ...d, policy: withPolicyDefaults(d.policy) }); setError(''); setTypeId((cur) => cur || d.unitTypes.find((t) => t.availability.available > 0)?._id || ''); })
       .catch((e: Error) => alive && setError(e.message));
     return () => { alive = false; };
   }, [id, period, periods, useAirConditioning]);
