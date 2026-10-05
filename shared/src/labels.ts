@@ -1,7 +1,7 @@
 import type {
   AbandonedItemsDisposal, AccessMethod, CheckInShift, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
   RentalPeriod, ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority,
-  TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus, ServiceOrderStatus,
+  TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus, ServiceOrderStatus, AccessRequestStatus, AccessRequestType,
 } from './enums';
 
 export type Tone = 'gray' | 'green' | 'blue' | 'amber' | 'red' | 'violet' | 'teal';
@@ -63,6 +63,7 @@ export const PAYMENT_TYPE: LabelMap<PaymentType> = {
   WAIVER: { label: 'Miễn giảm', tone: 'gray' },
   COMPENSATION: { label: 'Bồi thường', tone: 'violet' },
   SERVICE: { label: 'Dịch vụ thêm', tone: 'teal' },
+  ACCESS_FEE: { label: 'Phí cấp lại mã/thẻ/chìa', tone: 'teal' },
 };
 
 export const CLAIM_STATUS: LabelMap<ClaimStatus> = {
@@ -137,6 +138,21 @@ export const SERVICE_ORDER_STATUS: LabelMap<ServiceOrderStatus> = {
   REQUESTED: { label: 'Chờ thực hiện', tone: 'amber' },
   DONE: { label: 'Đã hoàn thành', tone: 'green' },
   CANCELLED: { label: 'Đã huỷ', tone: 'gray' },
+};
+
+export const ACCESS_REQUEST_STATUS: LabelMap<AccessRequestStatus> = {
+  REQUESTED: { label: 'Chờ quản lý duyệt', tone: 'amber' },
+  APPROVED: { label: 'Đã duyệt — chờ bàn giao', tone: 'blue' },
+  DONE: { label: 'Đã hoàn tất', tone: 'green' },
+  REJECTED: { label: 'Bị từ chối', tone: 'red' },
+  CANCELLED: { label: 'Đã huỷ', tone: 'gray' },
+};
+
+/** Tên yêu cầu theo loại; `short` dùng cho nút, `title` cho tiêu đề. */
+export const ACCESS_REQUEST_TYPE: Record<AccessRequestType, { title: string; button: string; what: string }> = {
+  PIN_RESET: { title: 'Đặt lại mật khẩu kho', button: 'Xin đặt lại mật khẩu', what: 'mật khẩu mới' },
+  CARD_REISSUE: { title: 'Làm lại thẻ khoá', button: 'Xin làm lại thẻ', what: 'thẻ khoá mới' },
+  KEY_REISSUE: { title: 'Cấp lại chìa khoá', button: 'Xin cấp lại chìa', what: 'chìa khoá mới' },
 };
 
 export const FACILITY_STATUS: LabelMap<FacilityStatus> = {

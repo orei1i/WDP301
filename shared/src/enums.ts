@@ -75,11 +75,28 @@ export const ServiceOrderStatus = {
 export type ServiceOrderStatus = (typeof ServiceOrderStatus)[keyof typeof ServiceOrderStatus];
 export const OPEN_SERVICE_ORDER_STATUSES: readonly ServiceOrderStatus[] = ['REQUESTED'];
 
+/**
+ * Yêu cầu cấp lại phương tiện vào kho (khách gửi, Quản lý chi nhánh duyệt). Loại yêu cầu do HÌNH THỨC KHOÁ của ô quyết định:
+ * mật khẩu → đặt lại; thẻ khoá → làm lại thẻ (có phí); chìa khoá → cấp lại chìa.
+ */
+export const AccessRequestType = { PIN_RESET: 'PIN_RESET', CARD_REISSUE: 'CARD_REISSUE', KEY_REISSUE: 'KEY_REISSUE' } as const;
+export type AccessRequestType = (typeof AccessRequestType)[keyof typeof AccessRequestType];
+
+export const AccessRequestStatus = {
+  REQUESTED: 'REQUESTED',   // khách đã gửi (và trả phí nếu có), chờ Quản lý chi nhánh duyệt
+  APPROVED: 'APPROVED',     // đã duyệt — thẻ/chìa chờ nhân viên làm và bàn giao
+  DONE: 'DONE',             // mật khẩu mới đã cấp / thẻ-chìa đã bàn giao
+  REJECTED: 'REJECTED',     // bị từ chối — hoàn phí
+  CANCELLED: 'CANCELLED',   // khách (hoặc chi nhánh) huỷ trước khi hoàn tất — hoàn phí
+} as const;
+export type AccessRequestStatus = (typeof AccessRequestStatus)[keyof typeof AccessRequestStatus];
+export const OPEN_ACCESS_REQUEST_STATUSES: readonly AccessRequestStatus[] = ['REQUESTED', 'APPROVED'];
+
 /** Cách ký xác nhận hợp đồng: vẽ tay trên màn hình, hoặc gõ họ tên rồi tích đồng ý. */
 export const SignatureMethod = { DRAWN: 'DRAWN', TYPED: 'TYPED' } as const;
 export type SignatureMethod = (typeof SignatureMethod)[keyof typeof SignatureMethod];
 
-export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION', SERVICE: 'SERVICE' } as const;
+export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION', SERVICE: 'SERVICE', ACCESS_FEE: 'ACCESS_FEE' } as const;
 export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
 /** Tiền đi RA khỏi doanh nghiệp → direction = 'REFUND'. COMPENSATION không có refundOf vì không hoàn lại khoản thu nào. */
 export const OUTBOUND_PAYMENT_TYPES: readonly PaymentType[] = ['REFUND', 'COMPENSATION'];

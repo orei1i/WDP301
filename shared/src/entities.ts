@@ -1,7 +1,7 @@
 import type {
   AbandonedItemsDisposal, AccessMethod, AuditResult, CancellationReason, CheckInShift, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
   InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, RentalPeriod,
-  ReservationStatus, Role, ServiceOrderStatus, SignatureMethod, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
+  ReservationStatus, Role, ServiceOrderStatus, AccessRequestStatus, AccessRequestType, SignatureMethod, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
   UnitStatus, UserStatus,
 } from './enums';
 
@@ -219,7 +219,10 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   access: {
     method: AccessMethod;
     keyTag?: string | null;               // physical key label
-    credentialHash?: string | null;       // PIN/card: hash or provider ref only, never plaintext
+    // KHÔNG BAO GIỜ gửi ra client: credentialHash / credentialEnc (mật khẩu mã hoá) ở BE chỉ đọc khi chủ hợp đồng
+    // gọi GET /contracts/:id/access. Kiểu dưới đây chỉ để mô tả document.
+    credentialHash?: string | null;       // PIN: hash để so khớp; thẻ: tham chiếu nhà cung cấp
+    credentialEnc?: string | null;        // PIN mã hoá AES-GCM để chủ hợp đồng xem lại được
     issuedAt?: D | null; issuedBy?: I | null;
     suspendedAt?: D | null; revokedAt?: D | null;
   };
@@ -268,6 +271,33 @@ export interface ServiceOrder<I = ID, D = string> extends BaseEntity<I, D> {
   completedBy?: I | null;
   cancelReason?: string | null;
   statusHistory: StatusChange<ServiceOrderStatus, I, D>[];
+}
+
+// ---------- AccessRequest (xin đặt lại mật khẩu / làm lại thẻ / cấp lại chìa) ----------
+export interface AccessRequest<I = ID, D = string> extends BaseEntity<I, D> {
+  requestNumber: string;                  // "ACC-261005-7K2Q9M"
+  facilityId: I;
+  customerId: I;
+  contractId: I;
+  unitId: I;
+  type: AccessRequestType;
+  /** Hình thức khoá của ô tại lúc gửi — quyết định `type`. */
+  accessMethod: AccessMethod;
+  reason?: string;                        // khách ghi: "mất thẻ", "quên mật khẩu"...
+  /** Phí chốt lúc gửi (theo chính sách) — trả ngay khi gửi, hoàn đủ nếu bị từ chối/huỷ. 0 = miễn phí. */
+  fee: number;
+  status: AccessRequestStatus;
+  paymentId?: I | null;
+  refundPaymentId?: I | null;
+  decidedBy?: I | null;
+  decidedAt?: D | null;
+  decisionNote?: string | null;           // lý do từ chối
+  completedAt?: D | null;
+  completedBy?: I | null;
+  /** Số thẻ/mã chìa mới nhân viên ghi khi bàn giao (thẻ & chìa). */
+  newKeyTag?: string | null;
+  cancelReason?: string | null;
+  statusHistory: StatusChange<AccessRequestStatus, I, D>[];
 }
 
 // ---------- ContractSignature (chữ ký xác nhận hợp đồng, lưu trên Reservation) ----------
@@ -452,6 +482,8 @@ export interface BusinessPolicy<I = ID, D = string> extends BaseEntity<I, D> {
   surcharges: { code: string; label: string; kind: 'FIXED' | 'PERCENT'; value: number; categories: UnitCategory[] }[];
   discounts: { code: string; kind: 'FIXED' | 'PERCENT'; value: number; minPeriods: number; validFrom?: D | null; validTo?: D | null; requiresApprovalRole?: Role | null }[];
   waiverLimits: { role: Role; maxAmount: number }[];
+  /** Phí cấp lại phương tiện vào kho theo loại yêu cầu (VND, 0 = miễn phí). Thiếu → DEFAULT_ACCESS_FEES. */
+  accessFees?: Record<AccessRequestType, number>;
 }
 
 // ---------- AuditLog (append-only) ----------
