@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
   ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
-  addDays, addPeriods, fmtDate, periodLabel, todayISO, vnd,
+  addDays, addPeriods, fmtDate, paymentDueDate, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, DateStepper, EmptyState, KV, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
@@ -51,7 +51,8 @@ export default function ContractScreen() {
           ['Chi nhánh', facilityName(db, c.facilityId)],
           ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`],
           ['Tiền thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
-          ['Kỳ thanh toán tới', fmtDate(c.billing.nextBillingDate)],
+          ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)} · ${vnd(c.billing.rate)}`],
+          ['Hạn trả tiền kỳ tới', `${fmtDate(paymentDueDate(c.billing.nextBillingDate, c.terms.gracePeriodDays))} — quá hạn bị tính phí trễ`],
           ['Phương thức truy cập', ACCESS_METHOD[c.access.method]],
           ['Tiền cọc', `${vnd(c.deposit.amount)} · ${DEPOSIT_STATUS[c.deposit.status].label}`],
           ['Công nợ', c.balance.outstanding > 0
