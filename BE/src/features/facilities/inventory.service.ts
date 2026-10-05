@@ -46,7 +46,7 @@ export async function facilityDetailPublic(id: string, period: RentalPeriod = 'M
   return {
     facility: f, unitTypes, services,
     policy: {
-      version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes,
+      version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes, gracePeriodDays: policy.gracePeriodDays,
       cancellation: policy.cancellation, earlyTermination: earlyTerminationOf(policy), minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
       // Bậc giảm giá theo số tháng — web/app dùng để hiện nhãn "Tiết kiệm x%" trên bộ chọn thời gian thuê.
       discounts: policy.discounts.map((d) => ({ code: d.code, kind: d.kind, value: d.value, minPeriods: d.minPeriods, validFrom: d.validFrom, validTo: d.validTo, requiresApprovalRole: d.requiresApprovalRole })),

@@ -67,6 +67,8 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
       termsVersion: { type: String, required: true, maxlength: 20 },
       privacyVersion: { type: String, required: true, maxlength: 20 },
       acceptedAt: { type: Date, required: true },
+      // Lúc khách xác nhận đã được báo trước lịch thanh toán (cọc hôm nay + tiền thuê kỳ đầu khi nhận kho). null với dữ liệu cũ.
+      paymentScheduleAckAt: { type: Date, default: null },
       ip: { type: String, default: null, maxlength: 64 },
       userAgent: { type: String, default: null, maxlength: 300 },
     }, subOptions),

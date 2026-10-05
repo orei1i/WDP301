@@ -81,7 +81,7 @@ async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSe
     // Ô đã được chọn đúng lúc đặt — không còn bước "Quản lý chi nhánh phân kho" riêng như thiết kế cũ.
     allocation: { allocatedAt: now, allocatedBy: null },
     depositPaymentId: deposit._id, source: input.source, idempotencyKey: input.idempotencyKey ?? null,
-    consent: { ...input.consent, acceptedAt: now },
+    consent: { ...input.consent, acceptedAt: now, paymentScheduleAckAt: now }, // route đã bắt buộc xác nhận lịch thanh toán
   }], { session });
   await audit({
     action: 'reservation.create', entityType: 'Reservation', entityId: id, facilityId: facility._id,

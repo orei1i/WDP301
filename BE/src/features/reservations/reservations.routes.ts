@@ -54,10 +54,15 @@ const bookingItemBody = z.object({
 });
 // Bắt buộc: không có chấp thuận thì không tạo được đặt chỗ. Client chỉ gửi số phiên bản,
 // thời điểm và IP do server tự đóng dấu để khách không tự khai được.
-const consentBody = z.object({ termsVersion: z.string().min(1).max(20), privacyVersion: z.string().min(1).max(20) });
+const consentBody = z.object({
+  termsVersion: z.string().min(1).max(20), privacyVersion: z.string().min(1).max(20),
+  // Khách phải xác nhận đã được báo trước KHOẢN THỨ HAI (tiền thuê kỳ đầu, trả THÊM khi nhận kho) — tránh tranh chấp
+  // "không được báo". Chỉ dùng để chặn ở API; thời điểm xác nhận do server đóng dấu (consent.paymentScheduleAckAt).
+  paymentScheduleAck: z.literal(true, { errorMap: () => ({ message: 'Cần xác nhận đã đọc lịch thanh toán: tiền cọc hôm nay + tiền thuê kỳ đầu trả thêm khi nhận kho' }) }),
+});
 
 reservationsRouter.post('/', authorize('CUSTOMER'), validate({ body: bookingItemBody.extend({ consent: consentBody }) }), async (req, res) => {
-  const { consent, ...item } = req.valid.body;
+  const { consent: { paymentScheduleAck: _ack, ...consent }, ...item } = req.valid.body;
   res.status(201).json(await createReservation(req.auth!.user, {
     ...item,
     idempotencyKey: item.idempotencyKey ?? req.header('idempotency-key'),
@@ -70,7 +75,8 @@ reservationsRouter.post('/batch', authorize('CUSTOMER'), validate({ body: z.obje
   items: z.array(bookingItemBody).min(1).max(10),
   consent: consentBody,
 }) }), async (req, res) => {
-  const consent = { ...req.valid.body.consent, ip: req.ip ?? null, userAgent: req.header('user-agent')?.slice(0, 300) ?? null };
+  const { paymentScheduleAck: _ack, ...accepted } = req.valid.body.consent;
+  const consent = { ...accepted, ip: req.ip ?? null, userAgent: req.header('user-agent')?.slice(0, 300) ?? null };
   const items: BookingItem[] = req.valid.body.items.map((item: Omit<BookingItem, 'consent'>) => ({ ...item, consent }));
   res.status(201).json({ items: await createReservationsBatch(req.auth!.user, items) });
 });

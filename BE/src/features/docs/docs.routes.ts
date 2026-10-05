@@ -204,6 +204,7 @@ export const API_GROUPS: Group[] = [
           { name: 'months', type: 'int 1..60', required: true },
           { name: 'source', type: "'WEB' | 'MOBILE'", note: 'mặc định WEB' },
           { name: 'idempotencyKey', type: 'string 8..100', note: 'hoặc dùng header Idempotency-Key' },
+          { name: 'consent', type: '{ termsVersion, privacyVersion, paymentScheduleAck: true }', required: true, note: 'paymentScheduleAck = khách xác nhận đã đọc lịch thanh toán (cọc khi đặt + tiền thuê kỳ đầu trả THÊM khi nhận kho); thiếu → 400. Server đóng dấu consent.paymentScheduleAckAt.' },
         ],
         notes: [
           'Trả 201 với đặt chỗ ở trạng thái PENDING + payment DEPOSIT đang chờ.',
