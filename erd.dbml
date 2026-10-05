@@ -99,10 +99,23 @@ Enum payment_type {
   WAIVER
   COMPENSATION
   SERVICE
+  ACCESS_FEE
 }
 Enum service_order_status {
   REQUESTED
   DONE
+  CANCELLED
+}
+Enum access_request_type {
+  PIN_RESET
+  CARD_REISSUE
+  KEY_REISSUE
+}
+Enum access_request_status {
+  REQUESTED
+  APPROVED
+  DONE
+  REJECTED
   CANCELLED
 }
 Enum signature_method {
@@ -279,7 +292,8 @@ Table rental_contracts {
   "balance.outstanding" int
   "access.method" access_method
   "access.key_tag" varchar
-  "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash']
+  "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash (select:false)']
+  "access.credential_enc" varchar [note: 'PIN mã hoá AES-GCM để chủ hợp đồng xem lại (select:false, không ra bootstrap)']
   "terms.policy_id" objectid
   "terms.policy_version" int
   "terms.signer_name" varchar [note: 'chép từ reservations.signature lúc nhận kho']
@@ -361,6 +375,7 @@ Table business_policies {
   grace_period_days int
   lockout_after_days int
   abandon_after_locked_out_days int [note: 'sau bao lâu LOCKED_OUT thì FM được xử lý hàng bỏ lại']
+  access_fees json [note: '{PIN_RESET, CARD_REISSUE, KEY_REISSUE} VND — thiếu thì mặc định 0 / 50.000 / 0']
   min_periods int
   max_periods int
 
@@ -419,6 +434,26 @@ Table service_orders {
   payment_id objectid [note: 'khoản SERVICE trả ngay lúc đặt']
   refund_payment_id objectid [note: 'có khi huỷ — hoàn đủ']
   completed_at datetime
+}
+
+Table access_requests {
+  id objectid [pk]
+  request_number varchar [unique]
+  facility_id objectid
+  customer_id objectid
+  contract_id objectid
+  unit_id objectid
+  type access_request_type [note: 'do hình thức khoá của ô quyết định']
+  access_method access_method
+  reason varchar
+  fee int [note: 'chốt lúc gửi theo chính sách; 0 = miễn phí']
+  status access_request_status
+  payment_id objectid [note: 'khoản ACCESS_FEE trả ngay lúc gửi']
+  refund_payment_id objectid [note: 'có khi từ chối/huỷ — hoàn đủ']
+  decided_by objectid [note: 'Quản lý chi nhánh']
+  decision_note varchar [note: 'lý do từ chối']
+  completed_by objectid
+  new_key_tag varchar [note: 'số thẻ / mã chìa mới nhân viên ghi khi bàn giao']
 }
 
 Table audit_logs {
@@ -484,3 +519,8 @@ Ref: service_orders.customer_id > users.id
 Ref: service_orders.contract_id > rental_contracts.id
 Ref: service_orders.service_id > service_offerings.id
 Ref: service_orders.payment_id - payment_transactions.id
+Ref: access_requests.facility_id > facilities.id
+Ref: access_requests.customer_id > users.id
+Ref: access_requests.contract_id > rental_contracts.id
+Ref: access_requests.unit_id > storage_units.id
+Ref: access_requests.payment_id - payment_transactions.id

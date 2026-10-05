@@ -363,6 +363,48 @@ export const API_GROUPS: Group[] = [
     ],
   },
   {
+    name: 'Cấp lại mã / thẻ / chìa',
+    blurb: 'Khách xin đặt lại mật khẩu, làm lại thẻ khoá hoặc cấp lại chìa khoá; Quản lý chi nhánh xác nhận. Loại yêu cầu do hình thức khoá của ô quyết định. Danh sách đi qua GET /bootstrap. Phí cấp lại theo chính sách (accessFees), trả khi gửi và hoàn đủ nếu bị từ chối/huỷ.',
+    routes: [
+      {
+        method: 'GET', path: '/contracts/:id/access', auth: R.CUS, summary: 'Chủ hợp đồng xem phương tiện vào kho hiện tại (mật khẩu giải mã tại đây).',
+        notes: [
+          'Chỉ CHỦ hợp đồng — nhân viên/quản lý nhận 403, không ai ngoài chủ thấy mật khẩu. Mỗi lần giải mã ghi nhật ký contract.access_view.',
+          'Trả { method, keyTag, suspended, pin, reason }. reason = NOT_PIN (thẻ/chìa), SUSPENDED (đang bị khoá do công nợ) hoặc NOT_STORED (hợp đồng cũ chỉ có bản băm → xin đặt lại).',
+          'Mật khẩu lưu mã hoá AES-256-GCM (select:false) — không bao giờ có trong /bootstrap hay danh sách hợp đồng.',
+        ],
+      },
+      {
+        method: 'POST', path: '/access-requests', auth: R.CUS, summary: 'Gửi yêu cầu cấp lại (PIN_RESET / CARD_REISSUE / KEY_REISSUE) cho hợp đồng của mình.',
+        body: [
+          { name: 'contractId', type: 'ObjectId', required: true },
+          { name: 'reason', type: 'string ≤300', note: 'VD "mất thẻ"' },
+          { name: 'method', type: 'PaymentMethod (≠ INTERNAL, khách không dùng CASH)', note: 'bắt buộc khi phí > 0, ngược lại 422 PAYMENT_METHOD_REQUIRED' },
+        ],
+        notes: [
+          'Hợp đồng ACTIVE / DELINQUENT / MOVE_OUT_PENDING (không LOCKED_OUT). Mỗi hợp đồng chỉ một yêu cầu đang mở — gửi thêm: 409 REQUEST_PENDING.',
+          'Phí chốt theo chính sách lúc gửi (mặc định: mật khẩu 0, thẻ 50.000, chìa 0) → tạo khoản ACCESS_FEE.',
+        ],
+      },
+      {
+        method: 'POST', path: '/access-requests/:id/decide', auth: ['FACILITY_MANAGER'], summary: 'Quản lý chi nhánh duyệt hoặc từ chối.',
+        body: [{ name: 'approve', type: 'boolean', required: true }, { name: 'note', type: 'string ≤500', note: 'bắt buộc khi từ chối' }],
+        notes: [
+          'Duyệt PIN_RESET: cấp mật khẩu mới ngay (người duyệt không thấy mã) → DONE. Duyệt thẻ/chìa → APPROVED, chờ nhân viên bàn giao.',
+          'Từ chối: hoàn đủ phí (REFUND), yêu cầu REJECTED.',
+        ],
+      },
+      {
+        method: 'POST', path: '/access-requests/:id/complete', auth: R.STAFF, summary: 'Nhân viên/quản lý bàn giao thẻ hoặc chìa mới (APPROVED → DONE).',
+        body: [{ name: 'keyTag', type: 'string 1..40', required: true, note: 'số thẻ / mã chìa mới — cập nhật vào hợp đồng' }],
+      },
+      {
+        method: 'POST', path: '/access-requests/:id/cancel', auth: ['CUSTOMER', 'FACILITY_MANAGER'], summary: 'Huỷ yêu cầu chưa hoàn tất, hoàn đủ phí.',
+        body: [{ name: 'reason', type: 'string ≤500' }],
+      },
+    ],
+  },
+  {
     name: 'Thanh toán',
     blurb: 'Bản ghi tài chính chỉ ghi thêm (append-only) — không sửa, không xóa. Mọi số tiền là số nguyên VND.',
     routes: [
