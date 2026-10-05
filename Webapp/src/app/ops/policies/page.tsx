@@ -30,6 +30,7 @@ export default function Policies() {
       cancellation: [{ minHoursBeforeStart: 72, depositRefundPct: draft.refund72 }, { minHoursBeforeStart: 24, depositRefundPct: draft.refund24 }, { minHoursBeforeStart: 0, depositRefundPct: 0 }],
       surcharges: current.surcharges.map((x) => (x.code === 'CLIMATE' ? { ...x, value: draft.climatePct } : x)),
       earlyTermination: [{ maxElapsedPct: 25, depositRefundPct: draft.earlyRefund25 }, { maxElapsedPct: 50, depositRefundPct: draft.earlyRefund50 }, { maxElapsedPct: 100, depositRefundPct: 0 }],
+      accessFees: { PIN_RESET: draft.feePin, CARD_REISSUE: draft.feeCard, KEY_REISSUE: draft.feeKey },
       discounts: [
         { code: 'DAI_HAN_3', kind: 'PERCENT', value: draft.disc3, minPeriods: 3, validFrom: null, validTo: null, requiresApprovalRole: null },
         { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
@@ -96,6 +97,15 @@ export default function Policies() {
               </div>
             </section>
             <section>
+              <h4 className="mb-3 text-sm font-semibold">Phí cấp lại phương tiện vào kho</h4>
+              <p className="-mt-1 mb-3 text-xs text-stone-500">Khách trả khi gửi yêu cầu; bị từ chối hoặc huỷ thì hoàn đủ. 0 = miễn phí.</p>
+              <div className="grid gap-4 sm:grid-cols-3">
+                {num('feePin', 'Đặt lại mật khẩu', undefined, '₫')}
+                {num('feeCard', 'Làm lại thẻ khoá', undefined, '₫')}
+                {num('feeKey', 'Cấp lại chìa khoá', undefined, '₫')}
+              </div>
+            </section>
+            <section>
               <h4 className="mb-3 text-sm font-semibold">Ưu đãi thuê dài hạn</h4>
               <p className="-mt-1 mb-3 text-xs text-stone-500">Chỉ áp cho thuê theo THÁNG; khách chọn đủ số tháng sẽ hưởng bậc giảm cao nhất. Hiện thành nhãn &ldquo;Tiết kiệm x%&rdquo; ở bộ chọn thời gian thuê.</p>
               <div className="grid gap-4 sm:grid-cols-3">
@@ -132,6 +142,7 @@ function toDraft(p: BusinessPolicy) {
     refund24: p.cancellation.find((c) => c.minHoursBeforeStart === 24)?.depositRefundPct ?? 50,
     earlyRefund25: p.earlyTermination.find((t) => t.maxElapsedPct === 25)?.depositRefundPct ?? 100,
     earlyRefund50: p.earlyTermination.find((t) => t.maxElapsedPct === 50)?.depositRefundPct ?? 50,
+    feePin: p.accessFees?.PIN_RESET ?? 0, feeCard: p.accessFees?.CARD_REISSUE ?? 50_000, feeKey: p.accessFees?.KEY_REISSUE ?? 0,
     disc3: p.discounts.find((d) => d.minPeriods === 3)?.value ?? 0, disc6: p.discounts.find((d) => d.minPeriods === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minPeriods === 12)?.value ?? 0,
   };
 }

@@ -1,5 +1,5 @@
 import type {
-  AccessMethod, AuditLog, BusinessPolicy, ContractStatus, DamageClaim, Facility, InspectionLog, PaymentMethod,
+  AccessMethod, AccessRequest, AuditLog, BusinessPolicy, ContractStatus, DamageClaim, Facility, InspectionLog, PaymentMethod,
   PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, ServiceOffering, ServiceOrder, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
@@ -20,6 +20,7 @@ export interface DB {
   swapRequests: UnitSwapRequest[];
   services: ServiceOffering[];
   serviceOrders: ServiceOrder[];
+  accessRequests: AccessRequest[];
   policies: BusinessPolicy[];
   audit: AuditLog[];
 }
@@ -144,6 +145,8 @@ export function createSeed(): DB {
       { code: 'DAI_HAN_6', kind: 'PERCENT' as const, value: 15, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
       { code: 'DAI_HAN_12', kind: 'PERCENT' as const, value: 20, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
     ],
+    // Phí cấp lại mã/thẻ/chìa: mật khẩu miễn phí, thẻ 50.000đ, chìa miễn phí (Ops chỉnh ở trang Chính sách).
+    accessFees: { PIN_RESET: 0, CARD_REISSUE: 50_000, KEY_REISSUE: 0 },
     waiverLimits: [{ role: 'FACILITY_MANAGER' as const, maxAmount: 500_000 }, { role: 'OPS_MANAGER' as const, maxAmount: 5_000_000 }],
   };
   const policies: BusinessPolicy[] = [
@@ -613,5 +616,47 @@ export function createSeed(): DB {
   contracts.filter((c) => c.status === 'ACTIVE' && c._id !== demoM?._id).slice(0, 8)
     .forEach((c, i) => makeOrder(c, ORDER_CODES[i % ORDER_CODES.length], 1 + (i % 3), i % 3 === 0 ? 'DONE' : 'REQUESTED', i % 3 === 0 ? 6 : 1));
 
-  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies, audit };
+  // ---------- yêu cầu cấp lại mật khẩu / thẻ / chìa (khách gửi, Quản lý chi nhánh duyệt) ----------
+  const accessRequests: AccessRequest[] = [];
+  const makeAccessRequest = (c: RentalContract, status: AccessRequest['status'], daysAgo: number, reason: string, decisionNote?: string) => {
+    const type = c.access.method === 'PIN' ? 'PIN_RESET' as const : c.access.method === 'RFID_CARD' ? 'CARD_REISSUE' as const : 'KEY_REISSUE' as const;
+    const fee = type === 'CARD_REISSUE' ? 50_000 : 0;
+    const createdAt = addDays(NOW, -daysAgo);
+    const decidedAt = addDays(createdAt, 1);
+    const refunded = status === 'REJECTED' || status === 'CANCELLED';
+    let paymentId: string | null = null;
+    let refundPaymentId: string | null = null;
+    if (fee > 0) {
+      const paid = pay({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'ACCESS_FEE', amount: fee, status: refunded ? 'REFUNDED' : 'SUCCEEDED', paidAt: createdAt, refundedAmount: refunded ? fee : 0 });
+      payments.push(paid); paymentId = paid._id;
+      if (refunded) {
+        const refund = pay({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: fee, status: 'SUCCEEDED', paidAt: decidedAt, refundOf: paid._id, method: 'BANK_TRANSFER' });
+        payments.push(refund); refundPaymentId = refund._id;
+      }
+    }
+    const fm = c.facilityId === 'f-q7' ? DEMO_IDS.manager : null;
+    const trail: AccessRequest['statusHistory'] = [{ from: null, to: 'REQUESTED', at: createdAt }];
+    if (status === 'APPROVED' || status === 'DONE') trail.push({ from: 'REQUESTED', to: 'APPROVED', at: decidedAt });
+    if (status === 'DONE') trail.push({ from: 'APPROVED', to: 'DONE', at: decidedAt });
+    if (refunded) trail.push({ from: 'REQUESTED', to: status, at: decidedAt });
+    accessRequests.push({
+      ...base(nid('acr'), createdAt), requestNumber: makeCode('ACC'), facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, unitId: c.unitId,
+      type, accessMethod: c.access.method, reason, fee, status, paymentId, refundPaymentId,
+      decidedBy: status === 'REQUESTED' ? null : fm, decidedAt: status === 'REQUESTED' ? null : decidedAt, decisionNote: decisionNote ?? null,
+      completedAt: status === 'DONE' ? decidedAt : null, completedBy: status === 'DONE' && type !== 'PIN_RESET' ? fm : null,
+      newKeyTag: status === 'DONE' && type !== 'PIN_RESET' ? `${type === 'CARD_REISSUE' ? 'CARD' : 'KEY'}-R${(seq % 900) + 100}` : null,
+      cancelReason: null, statusHistory: trail,
+    });
+  };
+  const q7Active = contracts.filter((c) => c.facilityId === 'f-q7' && c.status === 'ACTIVE' && c._id !== demoM?._id);
+  const byMethod = (m: AccessMethod) => q7Active.filter((c) => c.access.method === m);
+  const [pinA] = byMethod('PIN');
+  const [cardA, cardB] = byMethod('RFID_CARD');
+  const [keyA] = byMethod('PHYSICAL_KEY');
+  if (pinA) makeAccessRequest(pinA, 'DONE', 12, 'Quên mật khẩu');
+  if (cardA) makeAccessRequest(cardA, 'REQUESTED', 1, 'Làm mất thẻ khoá');
+  if (cardB) makeAccessRequest(cardB, 'REJECTED', 5, 'Thẻ bị cong', 'Thẻ vẫn quẹt được, vui lòng ra quầy kiểm tra trực tiếp');
+  if (keyA) makeAccessRequest(keyA, 'APPROVED', 2, 'Làm mất chìa khoá');
+
+  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, accessRequests, policies, audit };
 }

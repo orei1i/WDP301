@@ -123,6 +123,13 @@ export const actions = {
 
   cancelServiceOrder: async (p: { orderId: string; reason?: string }) => { await api.post(`/services/orders/${p.orderId}/cancel`, { reason: p.reason || undefined }); },
 
+  // Yêu cầu cấp lại mật khẩu / thẻ / chìa — Quản lý chi nhánh duyệt, nhân viên bàn giao thẻ/chìa.
+  decideAccessRequest: async (p: { requestId: string; approve: boolean; note?: string }) => { await api.post(`/access-requests/${p.requestId}/decide`, { approve: p.approve, note: p.note || undefined }); },
+
+  completeAccessRequest: async (p: { requestId: string; keyTag: string }) => { await api.post(`/access-requests/${p.requestId}/complete`, { keyTag: p.keyTag }); },
+
+  cancelAccessRequest: async (p: { requestId: string; reason?: string }) => { await api.post(`/access-requests/${p.requestId}/cancel`, { reason: p.reason || undefined }); },
+
   emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),
 
   // ---- ký hợp đồng sau khi trả cọc (khách tự ký, hoặc nhân viên cho khách ký tại quầy)

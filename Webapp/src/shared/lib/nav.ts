@@ -1,6 +1,6 @@
 import type { Role } from '@ssm/shared';
 import {
-  Boxes, Building2, CalendarCheck, ClipboardList, ConciergeBell, CreditCard, FileText, HandCoins, LayoutDashboard, LayoutGrid, LifeBuoy,
+  Boxes, Building2, CalendarCheck, ClipboardList, ConciergeBell, CreditCard, FileText, HandCoins, KeyRound, LayoutDashboard, LayoutGrid, LifeBuoy,
   ListTodo, PackageOpen, PackagePlus, Repeat, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
 } from 'lucide-react';
 
@@ -29,6 +29,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/staff/units', label: 'Sơ đồ kho', icon: LayoutGrid },
       { href: '/staff/swaps', label: 'Yêu cầu đổi ô', icon: Repeat },
       { href: '/staff/services', label: 'Dịch vụ yêu cầu', icon: ConciergeBell },
+      { href: '/staff/access', label: 'Cấp lại mã / thẻ / chìa', icon: KeyRound },
       { href: '/staff/tasks', label: 'Công việc của tôi', icon: ListTodo },
     ],
   },
