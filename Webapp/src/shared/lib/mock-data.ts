@@ -1,9 +1,9 @@
 import type {
   AccessMethod, AuditLog, BusinessPolicy, ContractStatus, DamageClaim, Facility, InspectionLog, PaymentMethod,
-  PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, StorageUnit, SupportTicket,
+  PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, ServiceOffering, ServiceOrder, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { ACCESS_METHOD } from '@ssm/shared';
+import { ACCESS_METHOD, TERMS_VERSION } from '@ssm/shared';
 import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
@@ -18,6 +18,8 @@ export interface DB {
   tickets: SupportTicket[];
   claims: DamageClaim[];
   swapRequests: UnitSwapRequest[];
+  services: ServiceOffering[];
+  serviceOrders: ServiceOrder[];
   policies: BusinessPolicy[];
   audit: AuditLog[];
 }
@@ -257,6 +259,13 @@ export function createSeed(): DB {
     } as PaymentTransaction;
   };
 
+  // Chữ ký xác nhận hợp đồng (gõ họ tên) — đặt chỗ đã nhận kho luôn có; đặt chỗ chờ nhận kho có một phần,
+  // riêng khách demo cố ý CHƯA ký để thử luồng ký ngay trên web/mobile.
+  const signatureOf = (customerId: string, at: string, policyVersion: number): NonNullable<Reservation['signature']> => ({
+    signedAt: at, signerName: users.find((x) => x._id === customerId)?.fullName ?? 'Khách hàng', method: 'TYPED', image: null,
+    termsVersion: TERMS_VERSION, policyVersion, signedBy: customerId, onBehalf: false,
+  });
+
   // ---------- contracts for occupied units ----------
   let poolIdx = 0;
   const occupied = units.filter((u) => u.status === 'OCCUPIED');
@@ -313,6 +322,7 @@ export function createSeed(): DB {
       holdExpiresAt: null, depositPaymentId: null, allocation: { allocatedAt: addDays(start, -1), allocatedBy: null },
       checkIn: { qrTokenHash: null, qrExpiresAt: null, checkedInAt: start, checkedInBy: null }, cancellation: null,
       contractId: cid, source: pick(['WEB', 'MOBILE', 'WALK_IN'] as const), idempotencyKey: null,
+      signature: signatureOf(customer, addDays(start, -1), q.policyVersion),
       statusHistory: [{ from: null, to: 'PENDING', at: start }, { from: 'ALLOCATED', to: 'CHECKED_IN', at: start }],
     });
 
@@ -340,7 +350,7 @@ export function createSeed(): DB {
       balance: { outstanding: overdueDays ? q.firstPeriodRent + lateFee : 0, lastPaymentAt: addDays(paidThrough, -28) },
       delinquency: overdueDays ? { since: addDays(T, -overdueDays), daysOverdue: overdueDays, lateFeesAccrued: lateFee, lockedOutAt: status === 'LOCKED_OUT' ? addDays(T, -lockedOutDaysAgo) : null } : null,
       access: { method: access, keyTag: access === 'PHYSICAL_KEY' ? `K-${u.unitNumber}` : null, credentialHash: access === 'PHYSICAL_KEY' ? null : 'sha256:••••', issuedAt: start, issuedBy: null, suspendedAt: status === 'LOCKED_OUT' ? addDays(T, -lockedOutDaysAgo) : null, revokedAt: null },
-      terms: { policyId: q.policyId, policyVersion: q.policyVersion, gracePeriodDays: 5, lockoutAfterDays: 15, signedAt: start, signatureRef: 'esign-demo' },
+      terms: { policyId: q.policyId, policyVersion: q.policyVersion, gracePeriodDays: 5, lockoutAfterDays: 15, signedAt: addDays(start, -1), signatureRef: `esign-${rid}`, signerName: users.find((x) => x._id === customer)?.fullName ?? null },
       renewals,
       moveOut: status === 'MOVE_OUT_PENDING' ? { requestedAt: addDays(T, -1), scheduledFor: T, completedAt: null, inspectionId: null } : null,
       closedAt: null,
@@ -385,6 +395,7 @@ export function createSeed(): DB {
       depositPaymentId,
       checkIn: status === 'ALLOCATED' || status === 'CONFIRMED' ? { qrTokenHash: 'sha256:demo', qrExpiresAt: addDays(start, 2), checkedInAt: null, checkedInBy: null } : null,
       cancellation: null, contractId: null, source: pick(['WEB', 'MOBILE'] as const), idempotencyKey: null,
+      signature: (status === 'ALLOCATED' || status === 'CONFIRMED') && customerId !== DEMO_IDS.customer && rand() < 0.65 ? signatureOf(customerId, createdAt, q.policyVersion) : null,
       statusHistory: [{ from: null, to: 'PENDING', at: createdAt }, ...(status !== 'PENDING' ? [{ from: 'PENDING' as const, to: status, at: createdAt }] : [])],
       ...extra,
     });
@@ -546,5 +557,59 @@ export function createSeed(): DB {
     log(48, { action: 'facility.update', result: 'SUCCESS', actorId: DEMO_IDS.ops, actorRole: 'OPS_MANAGER', entityType: 'Facility', entityId: 'f-bt', changes: { after: { status: 'UNDER_CONSTRUCTION' } } }),
   ];
 
-  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, policies, audit };
+  // ---------- dịch vụ thêm sau khi thuê — danh mục và GIÁ riêng từng chi nhánh ----------
+  const SERVICE_DEFS: { code: string; name: string; desc: string; unitLabel: string; price: number; only: readonly string[] | null }[] = [
+    { code: 'PACK-BOX', name: 'Thùng carton đóng gói', desc: 'Thùng carton 5 lớp kèm băng keo, giao tận ô kho.', unitLabel: 'thùng', price: 15_000, only: null },
+    { code: 'PACK-SVC', name: 'Nhân viên đóng gói đồ đạc', desc: 'Đóng gói, chèn lót chống va đập trước khi cất vào kho.', unitLabel: 'giờ', price: 180_000, only: null },
+    { code: 'MOVE-CITY', name: 'Vận chuyển nội thành', desc: 'Xe tải nhỏ + 2 nhân viên bốc xếp, bán kính 10 km quanh chi nhánh.', unitLabel: 'chuyến', price: 650_000, only: null },
+    { code: 'CLEAN', name: 'Vệ sinh ô kho', desc: 'Quét dọn, lau sàn và xử lý côn trùng trong ô kho.', unitLabel: 'lần', price: 150_000, only: null },
+    { code: 'HUMID', name: 'Giám sát độ ẩm / nhiệt độ', desc: 'Gắn cảm biến theo dõi, báo ngay khi vượt ngưỡng an toàn cho hàng nhạy cảm.', unitLabel: 'tháng', price: 120_000, only: ['f-q7', 'f-tb'] },
+    { code: 'SHELF', name: 'Cho thuê kệ sắt 4 tầng', desc: 'Kệ sắt di động, tải trọng 200 kg mỗi tầng.', unitLabel: 'tháng', price: 90_000, only: ['f-q7', 'f-td'] },
+  ];
+  const SVC_FAC_PRICE: Record<string, number> = { 'f-q7': 1, 'f-td': 0.9, 'f-tb': 1.1 };
+  const services: ServiceOffering[] = [];
+  for (const f of facilities) {
+    if (f.status !== 'ACTIVE') continue; // chi nhánh đang xây chưa có danh mục — để demo Ops thiết lập
+    for (const d of SERVICE_DEFS) {
+      if (d.only && !d.only.includes(f._id)) continue;
+      services.push({
+        ...base(`svc-${f._id.slice(2)}-${d.code.toLowerCase()}`, f.createdAt), ...alive, facilityId: f._id, code: d.code, name: d.name,
+        description: d.desc, price: Math.round((d.price * SVC_FAC_PRICE[f._id]) / 1_000) * 1_000, unitLabel: d.unitLabel, isActive: true,
+      });
+    }
+  }
+
+  const serviceOrders: ServiceOrder[] = [];
+  const makeOrder = (c: RentalContract, code: string, quantity: number, status: ServiceOrder['status'], daysAgo: number, note?: string) => {
+    const svc = services.find((x) => x.facilityId === c.facilityId && x.code === code);
+    if (!svc) return;
+    const createdAt = addDays(NOW, -daysAgo);
+    const total = svc.price * quantity;
+    const paid = pay({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'SERVICE', amount: total, status: status === 'CANCELLED' ? 'REFUNDED' : 'SUCCEEDED', paidAt: createdAt, refundedAmount: status === 'CANCELLED' ? total : 0 });
+    payments.push(paid);
+    let refundPaymentId: string | null = null;
+    if (status === 'CANCELLED') {
+      const refund = pay({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: total, status: 'SUCCEEDED', paidAt: createdAt, refundOf: paid._id, method: 'BANK_TRANSFER' });
+      payments.push(refund); refundPaymentId = refund._id;
+    }
+    const doneAt = addDays(createdAt, 1);
+    serviceOrders.push({
+      ...base(nid('svo'), createdAt), orderNumber: makeCode('SVC'), facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, serviceId: svc._id,
+      serviceName: svc.name, unitPrice: svc.price, unitLabel: svc.unitLabel, quantity, total, preferredDate: addDays(createdAt, 2), note,
+      status, paymentId: paid._id, refundPaymentId,
+      completedAt: status === 'DONE' ? doneAt : null, completedBy: status === 'DONE' && c.facilityId === 'f-q7' ? DEMO_IDS.staff : null,
+      cancelReason: status === 'CANCELLED' ? 'Khách đổi lịch' : null,
+      statusHistory: [{ from: null, to: 'REQUESTED', at: createdAt }, ...(status !== 'REQUESTED' ? [{ from: 'REQUESTED' as const, to: status, at: doneAt }] : [])],
+    });
+  };
+  if (demoM && demoM.status === 'ACTIVE') {
+    makeOrder(demoM, 'CLEAN', 1, 'DONE', 9);
+    makeOrder(demoM, 'PACK-BOX', 10, 'REQUESTED', 1, 'Giao thùng vào sáng thứ Bảy');
+    makeOrder(demoM, 'MOVE-CITY', 1, 'CANCELLED', 4, 'Chuyển đồ sang kho mới');
+  }
+  const ORDER_CODES = ['PACK-SVC', 'CLEAN', 'HUMID', 'PACK-BOX', 'SHELF', 'MOVE-CITY'];
+  contracts.filter((c) => c.status === 'ACTIVE' && c._id !== demoM?._id).slice(0, 8)
+    .forEach((c, i) => makeOrder(c, ORDER_CODES[i % ORDER_CODES.length], 1 + (i % 3), i % 3 === 0 ? 'DONE' : 'REQUESTED', i % 3 === 0 ? 6 : 1));
+
+  return { users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies, audit };
 }
