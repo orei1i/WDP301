@@ -27,6 +27,12 @@ export function addMonths(iso: string, months: number): string {
 export const addPeriods = (iso: string, period: 'DAY' | 'WEEK' | 'MONTH', n: number) =>
   period === 'MONTH' ? addMonths(iso, n) : addDays(iso, period === 'WEEK' ? 7 * n : n);
 
+/**
+ * Hạn chót trả tiền một kỳ: hoá đơn xuất vào đầu kỳ (`periodStart`), khách có thêm `graceDays` ngày ân hạn —
+ * quá ngày này mới bị tính phí trễ. Khớp đúng điều kiện của job tính nợ quá hạn ở BE (`days > gracePeriodDays`).
+ */
+export const paymentDueDate = (periodStart: string, graceDays: number) => addDays(periodStart, graceDays);
+
 export const daysBetween = (a: string, b: string) => Math.round((new Date(b).getTime() - new Date(a).getTime()) / DAY);
 export const monthKey = (iso: string) => iso.slice(0, 7);
 
