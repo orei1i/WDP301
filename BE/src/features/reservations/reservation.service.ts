@@ -330,6 +330,8 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
       facilityId: r.facilityId, customerId: r.customerId, contractId, reservationId: r._id, type: 'RENT',
       amount: r.quote.firstPeriodRent, status: 'SUCCEEDED', method: input.payMethod,
       recordedBy: input.payMethod === 'CASH' ? user._id : null, period: { start: today, end: periodEnd },
+      // Mỗi đặt chỗ chỉ có đúng một khoản thu tiền thuê kỳ đầu — bấm nhận kho hai lần cũng không thu thêm được.
+      idempotencyKey: `checkin-rent-${r._id}`,
     }, session);
 
     const [contract] = await RentalContractModel.create([{
