@@ -434,7 +434,7 @@ export const API_GROUPS: Group[] = [
           { name: 'patch.lateFees[]', type: '{ afterDays, kind, value, recurringEveryDays } ≤10' },
           { name: 'patch.cancellation[]', type: '{ minHoursBeforeStart, depositRefundPct } ≤10', note: 'huỷ Reservation trước khi nhận kho' },
           { name: 'patch.earlyTermination[]', type: '{ maxElapsedPct, depositRefundPct } ≤10', note: 'trả kho sớm khi hợp đồng đang OCCUPIED, trần hoàn cọc theo % thời gian kỳ hạn đã dùng' },
-          { name: 'patch.discounts[]', type: '{ code, kind, value, minMonths, validFrom, validTo, requiresApprovalRole } ≤20' },
+          { name: 'patch.discounts[]', type: '{ code, kind, value, minPeriods (số THÁNG tối thiểu, chỉ áp cho chu kỳ MONTH; khách hưởng bậc giảm cao nhất đủ điều kiện), validFrom, validTo, requiresApprovalRole } ≤20' },
         ],
         notes: ['patch là strict: gửi field lạ sẽ bị 400 UNKNOWN_FIELD.'],
       },

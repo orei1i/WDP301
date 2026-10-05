@@ -1,5 +1,5 @@
 import type { ClientSession, Types } from 'mongoose';
-import { earlyTerminationOf, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
+import { earlyTerminationOf, pickDiscount, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
 import { FacilityModel, PolicyModel, type PolicyDoc, type UnitTypeDoc, type ReservationDoc } from '../../shared/db/models';
 
 /** Facility override if active, otherwise the active GLOBAL policy. */
@@ -38,17 +38,15 @@ export function quote(
   const surcharge = policy.surcharges
     .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || useAirConditioning))
     .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((rate * s.value) / 100) : s.value), 0);
-  const now = new Date();
-  const eligible = policy.discounts
-    .filter((d) => periods >= d.minPeriods && !d.requiresApprovalRole && (!d.validFrom || d.validFrom <= now) && (!d.validTo || d.validTo >= now))
-    .sort((a, b) => b.minPeriods - a.minPeriods)[0];
   const gross = rate + surcharge;
-  const discountAmount = eligible ? (eligible.kind === 'PERCENT' ? Math.round((gross * eligible.value) / 100) : eligible.value) : 0;
+  // Ưu đãi thuê dài hạn theo số THÁNG — chỉ chu kỳ THÁNG được hưởng (xem pickDiscount trong @ssm/shared).
+  const picked = pickDiscount(policy.discounts, period, periods, gross);
+  const discountAmount = picked?.amount ?? 0;
   // Cọc = value chu kỳ tiền thuê (mặc định 1 chu kỳ) hoặc số tiền cố định, hoặc override theo loại kho.
   const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value : Math.round(gross * policy.deposit.value));
   return {
     currency: 'VND', rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount: surcharge,
-    appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(eligible ? [eligible.code] : [])],
+    appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
     firstPeriodRent: gross - discountAmount, totalDueAtBooking: depositAmount,
     policyId: policy._id, policyVersion: policy.version,
   };
