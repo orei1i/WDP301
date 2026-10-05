@@ -12,6 +12,7 @@ import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHead
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { api } from '@/shared/api/client';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
+import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
 type Dialog = { kind: 'pay' | 'extend' | 'moveout' | 'swap'; c: RentalContract } | null;
 
@@ -68,6 +69,7 @@ export default function MyUnits() {
                 ['Công nợ', <span key="o" className={c.balance.outstanding ? 'text-red-700' : ''}>{vnd(c.balance.outstanding)}</span>],
                 ['Hợp đồng đã ký', `${c.terms.signerName ?? '—'} · ${fmtDate(c.terms.signedAt)}`],
               ]} /></div>
+              {(() => { const rsv = db.reservations.find((x) => x.contractId === c._id); return rsv ? <ContractFileActions reservation={rsv} /> : null; })()}
               {(() => {
                 const openSwap = db.swapRequests.find((s) => s.contractId === c._id && (OPEN_SWAP_STATUSES as readonly string[]).includes(s.status));
                 return (

@@ -14,6 +14,7 @@ import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadg
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { QrScanButton } from '@/features/reservations/qr-scanner';
 import { ContractSignForm } from '@/features/contracts/contract-sign-form';
+import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 import { SignatureInfo } from '@/features/contracts/contract-document';
 
 function CheckInInner() {
@@ -112,7 +113,7 @@ function CheckInInner() {
                   <div className="mt-5 space-y-1 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{blockers.map((b) => <p key={b} className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0" />{b}</p>)}</div>
                 ) : (
                   <div className="mt-6 grid gap-5 border-t border-stone-100 pt-5 md:grid-cols-2">
-                    {r.signature && <div className="md:col-span-2"><SignatureInfo signature={r.signature} /></div>}
+                    {r.signature && <div className="md:col-span-2"><SignatureInfo signature={r.signature} /><ContractFileActions reservation={r} /></div>}
                     <div className="space-y-4">
                       <Field label="Hình thức truy cập (theo loại kho)">
                         <div className="flex items-center gap-2 rounded-lg bg-stone-50 px-3 py-2.5 text-sm ring-1 ring-inset ring-stone-200">

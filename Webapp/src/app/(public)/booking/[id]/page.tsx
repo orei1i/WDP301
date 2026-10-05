@@ -13,6 +13,7 @@ import { Button, ButtonLink, Card, EmptyState, KV, StatusBadge, cx } from '@/sha
 import { FakeQr } from '@/features/reservations/qr';
 import { ContractSignForm } from '@/features/contracts/contract-sign-form';
 import { SignatureInfo } from '@/features/contracts/contract-document';
+import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
 const METHODS: PaymentMethod[] = ['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'];
 
@@ -73,7 +74,7 @@ export default function BookingPage() {
             <h2 className="font-semibold">Bước 2 — Ký hợp đồng</h2>
             {r.signature ? <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">Đã ký</span> : <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">Chưa ký — cần ký trước khi nhận kho</span>}
           </div>
-          <div className="mt-4">{r.signature ? <SignatureInfo signature={r.signature} /> : <ContractSignForm reservation={r} />}</div>
+          <div className="mt-4">{r.signature ? <><SignatureInfo signature={r.signature} /><ContractFileActions reservation={r} /></> : <ContractSignForm reservation={r} />}</div>
         </Card>
       )}
 
