@@ -1,5 +1,5 @@
 import type {
-  CheckInShift, ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, RentalPeriod, Reservation, ServiceOrder, SignatureMethod, StorageUnit,
+  AccessRequest, CheckInShift, ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, RentalPeriod, Reservation, ServiceOrder, SignatureMethod, StorageUnit,
   SupportTicket, SwapMethod, TicketCategory, TicketPriority, TicketStatus, UnitSwapRequest,
 } from '@ssm/shared';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
@@ -89,6 +89,14 @@ export const actions = {
 
   cancelServiceOrder: async (p: { orderId: string }) => {
     await api.post(`/services/orders/${p.orderId}/cancel`, {});
+  },
+
+  // ---- xin cấp lại mật khẩu / thẻ / chìa (Quản lý chi nhánh xác nhận; làm lại thẻ có phí)
+  requestAccess: async (p: { contractId: string; reason?: string; method?: PaymentMethod }) =>
+    api.post<AccessRequest>('/access-requests', { contractId: p.contractId, reason: p.reason || undefined, method: p.method }),
+
+  cancelAccessRequest: async (p: { requestId: string }) => {
+    await api.post(`/access-requests/${p.requestId}/cancel`, {});
   },
 
   emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),

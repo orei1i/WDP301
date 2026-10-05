@@ -4,7 +4,7 @@ import {
   signInWithEmailAndPassword, signOut, updateProfile,
 } from 'firebase/auth';
 import type {
-  BusinessPolicy, DamageClaim, Facility, PaymentTransaction, RentalContract, Reservation, ServiceOffering, ServiceOrder,
+  AccessRequest, BusinessPolicy, DamageClaim, Facility, PaymentTransaction, RentalContract, Reservation, ServiceOffering, ServiceOrder,
   StorageUnit, SupportTicket, UnitCategory, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
 import { PRIVACY_VERSION, TERMS_VERSION, withPolicyDefaults } from '@ssm/shared';
@@ -31,12 +31,13 @@ export interface DB {
   swapRequests: UnitSwapRequest[];
   services: ServiceOffering[];
   serviceOrders: ServiceOrder[];
+  accessRequests: AccessRequest[];
   policies: BusinessPolicy[];
 }
 
 const EMPTY_DB: DB = {
   users: [], facilities: [], unitTypes: [], units: [], reservations: [],
-  contracts: [], payments: [], tickets: [], claims: [], swapRequests: [], services: [], serviceOrders: [], policies: [],
+  contracts: [], payments: [], tickets: [], claims: [], swapRequests: [], services: [], serviceOrders: [], accessRequests: [], policies: [],
 };
 
 export interface PublicFacility extends Facility {

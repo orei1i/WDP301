@@ -7,6 +7,7 @@ import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATU
 import { facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, EmptyState, H1, KV, Muted, Skeleton, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
+import { QuickActions } from './quick-actions';
 
 /** Sắp hết hạn = còn <= 7 ngày. Đủ sớm để khách xoay xở, không sớm tới mức thành tiếng ồn. */
 const SOON_DAYS = 7;
@@ -168,6 +169,8 @@ export default function HomeScreen() {
                     </Text>
                   </View>
                 )}
+
+                <QuickActions contract={c} />
 
                 <Button
                   title="Chi tiết hợp đồng"
