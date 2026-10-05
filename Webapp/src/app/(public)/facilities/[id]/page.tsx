@@ -19,6 +19,7 @@ type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability
 interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
+  services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
   policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods'>;
 }
 /** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
@@ -96,7 +97,7 @@ export default function FacilityDetail() {
   if (error) return <main className="mx-auto max-w-7xl p-8"><EmptyState title="Không tải được chi nhánh" description={error} action={<ButtonLink href="/facilities">Quay lại</ButtonLink>} /></main>;
   if (!detail) return <main className="mx-auto max-w-7xl p-16 text-center text-sm text-stone-500">Đang tải…</main>;
 
-  const { facility: f, unitTypes: types, policy } = detail;
+  const { facility: f, unitTypes: types, policy, services } = detail;
   const ut = types.find((t) => t._id === typeId);
   const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
@@ -304,6 +305,20 @@ export default function FacilityDetail() {
                 <div className="flex justify-between"><dt className="text-stone-500">Tổng {periodLabel(period, periods)}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
                 <div className="mt-1 flex justify-between rounded-lg bg-brand-50 px-3 py-2.5 font-semibold text-brand-900"><dt>Đặt cọc</dt><dd className="tabular-nums">{vnd(q.depositAmount)}</dd></div>
               </dl>
+            </Card>
+          )}
+          {services.length > 0 && (
+            <Card className="p-5">
+              <h3 className="text-sm font-semibold">Dịch vụ thêm sau khi thuê</h3>
+              <p className="mt-1 text-xs text-stone-500">Tuỳ chọn, đặt trong tài khoản khi đã nhận kho — giá riêng của chi nhánh này.</p>
+              <ul className="mt-3 divide-y divide-stone-100 text-sm">
+                {services.map((s) => (
+                  <li key={s._id} className="flex items-start justify-between gap-3 py-2">
+                    <div><p className="font-medium">{s.name}</p>{s.description && <p className="text-xs text-stone-500">{s.description}</p>}</div>
+                    <p className="shrink-0 tabular-nums">{vnd(s.price)}<span className="text-xs text-stone-500"> / {s.unitLabel}</span></p>
+                  </li>
+                ))}
+              </ul>
             </Card>
           )}
           <p className="flex items-center gap-1.5 px-1 text-xs text-stone-500"><Camera className="size-3.5" />Chính sách áp dụng: phiên bản v{policy.version} ({policy.scope === 'FACILITY' ? 'riêng chi nhánh' : 'toàn chuỗi'})</p>
