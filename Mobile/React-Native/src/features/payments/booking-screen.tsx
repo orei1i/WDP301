@@ -6,6 +6,7 @@ import { PAYMENT_METHOD, RESERVATION_STATUS, fmtDate, minutesLeft, periodLabel, 
 import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
 import { Button, Card, Chips, EmptyState, KV, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
+import { ContractSignCard } from '../contracts/contract-sign-card';
 
 const METHODS: { value: PaymentMethod; label: string }[] = (['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'] as PaymentMethod[])
   .map((v) => ({ value: v, label: PAYMENT_METHOD[v] }));
@@ -64,7 +65,7 @@ export default function BookingScreen() {
           <Button
             title={`Thanh toán cọc ${vnd(r.quote.depositAmount)}`}
             style={{ marginTop: S.lg }}
-            onPress={() => void run('payDeposit', { reservationId: r._id, method }, 'Thanh toán cọc thành công', () => router.replace(`/qr/${r._id}`))}
+            onPress={() => void run('payDeposit', { reservationId: r._id, method }, 'Thanh toán cọc thành công — ký hợp đồng để nhận kho')}
           />
           <Button
             title="Hủy giữ chỗ"
@@ -75,11 +76,13 @@ export default function BookingScreen() {
         </Card>
       )}
 
+      {(r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && <ContractSignCard reservation={r} />}
+
       {(r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && (
         <Card style={{ marginTop: S.md }}>
           <Text style={{ color: C.green, fontWeight: '700' }}>Đặt chỗ đã được xác nhận</Text>
           <Muted style={{ marginTop: 6 } as never}>
-            Đưa mã QR cho nhân viên tại quầy vào ngày {fmtDate(r.startDate)} để nhận kho.
+            Đưa mã QR cho nhân viên tại quầy vào ngày {fmtDate(r.startDate)} để nhận kho.{r.signature ? '' : ' Bạn cần ký hợp đồng ở trên trước khi nhận kho.'}
           </Muted>
           <Button title="Xem mã nhận kho" icon="qr-code-outline" style={{ marginTop: S.lg }} onPress={() => router.push(`/qr/${r._id}`)} />
           <Button

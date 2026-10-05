@@ -89,6 +89,7 @@ export default function QrScreen() {
         <StatusBadge map={RESERVATION_STATUS} value={r.status} />
       </View>
       <Muted style={{ textAlign: 'center', marginTop: 4 } as never}>Đưa màn hình này cho nhân viên tại quầy</Muted>
+      {!r.signature && <Text style={st.unsigned}>Bạn chưa ký hợp đồng — hãy ký ở màn Đặt chỗ trước khi nhận kho.</Text>}
 
       <View style={st.qrBox}>
         {loading ? (
@@ -142,6 +143,7 @@ const st = StyleSheet.create({
   title: { fontSize: 20, fontWeight: '700', color: C.ink },
   qrBox: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: S.xl, marginTop: S.xl },
   qrPlaceholder: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center', gap: S.sm },
+  unsigned: { fontSize: 13, color: C.amber, textAlign: 'center', marginTop: S.sm, fontWeight: '600' },
   errText: { fontSize: 13, color: C.amber, textAlign: 'center', paddingHorizontal: S.md },
   codeBox: { alignItems: 'center', marginTop: S.lg, gap: 2 },
   code: { fontSize: 22, fontWeight: '800', color: C.ink, letterSpacing: 2 },
