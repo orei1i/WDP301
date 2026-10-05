@@ -30,6 +30,10 @@ const schema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   MAIL_FROM: z.string().optional(),
+  // Kênh gửi email thay cho SMTP khi host chặn cổng SMTP (Railway Free/Hobby): URL + khoá của Google Apps Script
+  // relay (src/shared/mail/gmail-relay.gs). Có đủ hai biến này thì ưu tiên dùng kênh này.
+  MAIL_RELAY_URL: z.string().url().optional(),
+  MAIL_RELAY_SECRET: z.string().min(8).optional(),
 });
 
 const parsed = schema.safeParse(process.env);
