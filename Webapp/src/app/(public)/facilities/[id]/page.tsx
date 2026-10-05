@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Camera, Clock, KeyRound, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
-import { AccessMethod, enumValues, periodLabel, STAFF_SHIFTS, withPolicyDefaults } from '@ssm/shared';
+import { AccessMethod, buildPaymentSchedule, enumValues, paymentAckText, periodLabel, STAFF_SHIFTS, withPolicyDefaults } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, UNIT_CATEGORY } from '@/shared/lib/labels';
@@ -14,6 +14,7 @@ import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/shared/ui';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
 import { DurationPicker } from '@/features/facilities/duration-picker';
+import { PaymentSchedule } from '@/features/payments/payment-schedule';
 
 // acEligible: loại kho này có tuỳ chọn điều hòa (add-on) hay không, theo policy.surcharges[CLIMATE].
 type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability: { total: number; free: number; available: number } };
@@ -21,7 +22,7 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods' | 'discounts'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'>;
 }
 /** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
 interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; useAirConditioning: boolean; quote: PriceQuote }
@@ -70,6 +71,8 @@ export default function FacilityDetail() {
   const [cart, setCart] = useState<CartLine[]>([]);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
+  // Xác nhận đã đọc lịch thanh toán gắn với ĐÚNG số tiền đang hiển thị — giỏ đổi (số tiền đổi) thì phải xác nhận lại.
+  const [ackedPayment, setAckedPayment] = useState('');
 
   // Khách tự chọn chu kỳ (ngày/tuần/tháng) + số chu kỳ + có dùng điều hòa không — server tính lại giá
   // theo đúng combo này (ac bị bỏ qua cho loại kho không hợp lệ, xem TypeRow.acEligible).
@@ -92,7 +95,9 @@ export default function FacilityDetail() {
     return () => { alive = false; };
   }, [id, typeId]);
 
-  const cartTotal = useMemo(() => cart.reduce((s, l) => s + l.quote.depositAmount, 0), [cart]);
+  const schedule = useMemo(() => (cart.length ? buildPaymentSchedule(cart.map((l) => l.quote)) : null), [cart]);
+  const ackKey = schedule ? `${schedule.payNow}:${schedule.payAtCheckIn}` : '';
+  const agreePayment = !!schedule && ackedPayment === ackKey;
 
   if (error) return <main className="mx-auto max-w-7xl p-8"><EmptyState title="Không tải được chi nhánh" description={error} action={<ButtonLink href="/facilities">Quay lại</ButtonLink>} /></main>;
   if (!detail) return <main className="mx-auto max-w-7xl p-16 text-center text-sm text-stone-500">Đang tải…</main>;
@@ -119,7 +124,8 @@ export default function FacilityDetail() {
     if (!user) { router.push(`/login?next=${encodeURIComponent(`/facilities/${f._id}`)}`); return; }
     if (user.role !== 'CUSTOMER') { toast('Đặt chỗ dành cho tài khoản khách hàng', 'error'); return; }
     if (cart.length === 0) return;
-    const consent = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION };
+    if (!agreePayment) { toast('Vui lòng xác nhận đã đọc lịch thanh toán trước khi giữ chỗ', 'error'); return; }
+    const consent = { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, paymentScheduleAck: true as const };
     const startDate = `${start}T00:00:00.000Z`;
     if (cart.length === 1) {
       const line = cart[0];
@@ -243,7 +249,7 @@ export default function FacilityDetail() {
                   <li key={l.key} className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-sm">
                     <div className="min-w-0">
                       <p className="truncate font-medium">{l.typeName} · ô {l.unitNumber}</p>
-                      <p className="text-xs text-stone-500">Cọc {vnd(l.quote.depositAmount)}</p>
+                      <p className="text-xs text-stone-500">Cọc {vnd(l.quote.depositAmount)} hôm nay · thuê {PERIOD_UNIT[period]} đầu {vnd(l.quote.firstPeriodRent)} khi nhận kho</p>
                     </div>
                     <button type="button" aria-label="Bỏ khỏi giỏ" onClick={() => removeFromCart(l.key)} className="grid size-7 shrink-0 place-items-center rounded-md text-stone-400 hover:bg-stone-200 hover:text-red-600"><Trash2 className="size-4" /></button>
                   </li>
@@ -251,10 +257,16 @@ export default function FacilityDetail() {
               </ul>
             )}
             {cart.length > 0 && (
-              <div className="mt-3 flex justify-between rounded-lg bg-brand-50 px-3 py-2.5 text-sm font-semibold text-brand-900"><span>Tổng tiền cọc</span><span className="tabular-nums">{vnd(cartTotal)}</span></div>
+              <PaymentSchedule quotes={cart.map((l) => l.quote)} graceDays={policy.gracePeriodDays} compact className="mt-3" />
             )}
 
             <div className="mt-5 space-y-2.5 border-t border-dashed border-stone-200 pt-4">
+              {schedule && (
+                <label className="flex cursor-pointer gap-2.5 rounded-lg bg-amber-50 p-2.5 text-xs font-medium leading-relaxed text-amber-950 ring-1 ring-inset ring-amber-200">
+                  <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={agreePayment} onChange={(e) => setAckedPayment(e.target.checked ? ackKey : '')} />
+                  <span>{paymentAckText(schedule)}</span>
+                </label>
+              )}
               <label className="flex cursor-pointer gap-2.5 text-xs leading-relaxed text-stone-700">
                 <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={agreeTerms} onChange={(e) => setAgreeTerms(e.target.checked)} />
                 <span>Tôi đã đọc và đồng ý với <Link href="/dieu-khoan" target="_blank" className="font-medium text-brand-700 hover:underline">Điều khoản thuê kho (v{TERMS_VERSION})</Link></span>
@@ -264,7 +276,7 @@ export default function FacilityDetail() {
                 <span>Tôi đồng ý cho KhoAn xử lý dữ liệu cá nhân theo <Link href="/bao-mat" target="_blank" className="font-medium text-brand-700 hover:underline">Chính sách bảo mật (v{PRIVACY_VERSION})</Link></span>
               </label>
             </div>
-            <Button size="lg" className="mt-4 w-full" onClick={() => void book()} disabled={cart.length === 0 || !bookable || !agreeTerms || !agreePrivacy}>
+            <Button size="lg" className="mt-4 w-full" onClick={() => void book()} disabled={cart.length === 0 || !bookable || !agreeTerms || !agreePrivacy || !agreePayment}>
               {bookable ? `Giữ chỗ & đặt cọc${cart.length > 1 ? ` (${cart.length} kho)` : ''}` : 'Chi nhánh chưa nhận đặt chỗ'}
             </Button>
             <p className="mt-3 text-xs leading-relaxed text-stone-500">
@@ -283,9 +295,8 @@ export default function FacilityDetail() {
                 {q.discountAmount > 0 && <div className="flex justify-between text-emerald-700"><dt>Ưu đãi thuê {periodLabel(period, periods)} (−{discountPct}%)</dt><dd className="tabular-nums">−{vnd(q.discountAmount)}</dd></div>}
                 <div className="flex justify-between font-medium"><dt>Tiền thuê mỗi {PERIOD_UNIT[period]}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent)}</dd></div>
                 <div className="flex justify-between"><dt className="text-stone-500">Tổng giá trị {periodLabel(period, periods)} <span className="text-xs">(trả từng {PERIOD_UNIT[period]})</span></dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
-                <div className="mt-1 flex justify-between rounded-lg bg-brand-50 px-3 py-2.5 font-semibold text-brand-900"><dt>Đặt cọc</dt><dd className="tabular-nums">{vnd(q.depositAmount)}</dd></div>
               </dl>
-              <p className="mt-3 text-xs leading-relaxed text-stone-500">Chỉ trả cọc khi đặt chỗ (giữ đến lúc trả kho, không trừ vào tiền thuê). Tiền thuê {PERIOD_UNIT[period]} đầu trả khi nhận kho, các {PERIOD_UNIT[period]} sau trả theo từng kỳ — không phải trả trước toàn bộ.</p>
+              <PaymentSchedule quotes={[q]} graceDays={policy.gracePeriodDays} className="mt-4" />
             </Card>
           )}
           {services.length > 0 && (

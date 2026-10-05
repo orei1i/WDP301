@@ -30,7 +30,8 @@ export default function MyReservations() {
           { key: 'code', header: 'Mã', cell: (r) => <span className="font-mono text-xs">{r.code}</span> },
           { key: 'what', header: 'Kho', cell: (r) => <div><p className="font-medium">{typeName(db, r.unitTypeId)}</p><p className="text-xs text-stone-500">{facilityName(db, r.facilityId)} · {unitLabel(db, r.unitId)}</p></div> },
           { key: 'date', header: 'Ngày nhận', cell: (r) => <div><p>{fmtDate(r.startDate)}</p><p className="text-xs text-stone-500">{periodLabel(r.quote.rentalPeriod, r.periods)}</p></div> },
-          { key: 'deposit', header: 'Cọc', cell: (r) => vnd(r.quote.depositAmount), className: 'tabular-nums' },
+          { key: 'deposit', header: 'Cọc (khi đặt)', cell: (r) => vnd(r.quote.depositAmount), className: 'tabular-nums' },
+          { key: 'atCheckIn', header: 'Trả thêm khi nhận kho', cell: (r) => (live.includes(r) ? <span className="font-medium text-amber-800">{vnd(r.quote.firstPeriodRent)}</span> : <span className="text-stone-400">—</span>), className: 'tabular-nums' },
           { key: 'status', header: 'Trạng thái', cell: (r) => <div><StatusBadge map={RESERVATION_STATUS} value={r.status} />{r.cancellation && <p className="mt-1 text-xs text-stone-500">{CANCELLATION_REASON[r.cancellation.reason]}</p>}</div> },
           { key: 'act', header: '', className: 'text-right', cell: (r) => (
             <div className="flex justify-end gap-2">

@@ -6,7 +6,7 @@ import { CircleCheck, Clock, Timer } from 'lucide-react';
 import type { PaymentMethod } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { PAYMENT_METHOD, RESERVATION_STATUS } from '@/shared/lib/labels';
-import { periodLabel } from '@ssm/shared';
+import { PERIOD_UNIT, periodLabel } from '@ssm/shared';
 import { byId, cancellationRefund, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { fmtDate, minutesLeft, vnd } from '@/shared/lib/format';
 import { Button, ButtonLink, Card, EmptyState, KV, StatusBadge, cx } from '@/shared/ui';
@@ -14,6 +14,7 @@ import { FakeQr } from '@/features/reservations/qr';
 import { ContractSignForm } from '@/features/contracts/contract-sign-form';
 import { SignatureInfo } from '@/features/contracts/contract-document';
 import { ContractFileActions } from '@/features/contracts/contract-file-actions';
+import { PaymentSchedule } from '@/features/payments/payment-schedule';
 
 const METHODS: PaymentMethod[] = ['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'];
 
@@ -43,9 +44,10 @@ export default function BookingPage() {
         <KV items={[
           ['Chi nhánh', facilityName(db, r.facilityId)], ['Loại kho', typeName(db, r.unitTypeId)],
           ['Ngày nhận kho', fmtDate(r.startDate)], ['Thời hạn', `${periodLabel(r.quote.rentalPeriod, r.periods)} (đến ${fmtDate(r.endDate)})`],
-          ['Tiền thuê / tháng', vnd(r.quote.firstPeriodRent)], ['Tiền cọc', vnd(r.quote.depositAmount)],
+          [`Tiền thuê / ${PERIOD_UNIT[r.quote.rentalPeriod]}`, vnd(r.quote.firstPeriodRent)], ['Tiền cọc (trả khi đặt chỗ)', vnd(r.quote.depositAmount)],
         ]} />
       </Card>
+      {(r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && <PaymentSchedule quotes={[r.quote]} className="mt-4" />}
 
       {r.status === 'PENDING' && (
         <Card className="mt-4 p-5">

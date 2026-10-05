@@ -33,6 +33,7 @@ export const TERMS: LegalSection[] = [
     body: [
       'Thời hạn thuê tối thiểu và tối đa theo chính sách đang áp dụng tại thời điểm ký.',
       'Giá thuê và toàn bộ điều khoản được chốt tại thời điểm xác nhận hợp đồng. KhoAn điều chỉnh bảng giá không làm thay đổi hợp đồng đang có hiệu lực.',
+      'Trước khi sử dụng kho, khách hàng thanh toán hai khoản riêng biệt: (1) tiền cọc, trả khi đặt chỗ; (2) tiền thuê kỳ đầu, trả thêm khi nhận kho. Số tiền từng khoản được hiển thị trên màn hình đặt chỗ và ghi trong hợp đồng; khách hàng xác nhận đã đọc trước khi giữ chỗ. Các kỳ sau thanh toán theo từng kỳ vào đầu mỗi kỳ.',
       'Tiền cọc được hoàn khi trả kho, sau khi trừ dư nợ và chi phí khắc phục hư hỏng nếu có.',
       'Thanh toán chậm phát sinh phí trễ hạn theo biểu phí trong chính sách.',
     ],
