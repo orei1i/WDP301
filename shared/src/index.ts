@@ -8,4 +8,5 @@ export * from './labels';
 export * from './legal';
 export * from './policy-defaults';
 export * from './contract-text';
+export * from './duration';
 export * from './inventory-rules';
