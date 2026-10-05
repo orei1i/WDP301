@@ -132,12 +132,12 @@ export function Skeleton({ className }: { className?: string }) {
 }
 
 export const inputCls = 'block w-full rounded-lg border-0 bg-white px-3 py-2 text-sm text-ink ring-1 ring-inset ring-stone-300 placeholder:text-stone-400 focus:ring-2 focus:ring-brand-600 disabled:bg-stone-50';
-export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
+export function Field({ label, hint, error, children, className }: { label: string; hint?: ReactNode; error?: string; children: ReactNode; className?: string }) {
   return (
     <label className={cx('block', className)}>
       <span className="mb-1.5 block text-xs font-medium text-stone-700">{label}</span>
       {children}
-      {hint && <span className="mt-1 block text-xs text-stone-500">{hint}</span>}
+      {error ? <span role="alert" className="mt-1 block text-xs font-medium text-red-600">{error}</span> : hint && <span className="mt-1 block text-xs text-stone-500">{hint}</span>}
     </label>
   );
 }
