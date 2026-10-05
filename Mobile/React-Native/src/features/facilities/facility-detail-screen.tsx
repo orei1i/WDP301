@@ -5,13 +5,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
 import {
   ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, CHECK_IN_SHIFT, enumValues, LEGAL_EFFECTIVE, PERIOD_UNIT,
-  PRIVACY_VERSION, RENTAL_PERIOD, STAFF_SHIFTS, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
+  PRIVACY_VERSION, STAFF_SHIFTS, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { api } from '../../shared/api/client';
 import { useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, DateStepper, EmptyState, Input, KV, Muted, Screen, ScreenHeader, Skeleton } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
 import { FloorPlanPicker, type FloorPlanUnit } from './floor-plan-picker';
+import { DurationPicker } from './duration-picker';
 
 const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://wdp-301-webapp.vercel.app';
 
@@ -21,10 +22,9 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods' | 'discounts'>;
 }
 
-const RENTAL_PERIODS: { value: RentalPeriod; label: string }[] = (['DAY', 'WEEK', 'MONTH'] as const).map((p) => ({ value: p, label: RENTAL_PERIOD[p] }));
 // Nhãn ngắn trên chip ("Ca 1"), thời gian đầy đủ chỉ hiện ở dòng chú thích bên dưới khi đã chọn — đỡ rối mắt.
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const]
   .map((s) => ({ value: s, label: s === 'UNKNOWN' ? 'Chưa rõ' : `Ca ${s.slice(-1)}` }));
@@ -121,7 +121,6 @@ export default function FacilityDetailScreen() {
   const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
   const periodsNum = Math.max(1, Math.min(365, Number(periods) || 1));
-  const step = (delta: number) => setPeriods(String(Math.max(1, Math.min(365, (Number(periods) || 1) + delta))));
   const canBook = !!ut && !!unitId && ut.availability.available > 0 && agreeTerms && agreePrivacy;
 
   return (
@@ -131,20 +130,10 @@ export default function FacilityDetailScreen() {
       <Card>
         <DateStepper label="Ngày bắt đầu" value={start} onChange={setStart} min={todayISO()} max={addDays(todayISO(), 60)} presets={[0, 3, 7, 14]} />
 
-        <View style={{ marginTop: S.md, flexDirection: 'row', gap: S.md }}>
-          <View style={{ flex: 1 }}>
-            <Muted>Chu kỳ thuê</Muted>
-            <View style={{ marginTop: S.sm }}><Chips options={RENTAL_PERIODS} value={period} onChange={setPeriod} columns={3} /></View>
-          </View>
-        </View>
-
         <View style={{ marginTop: S.md }}>
-          <Muted>Số chu kỳ ({PERIOD_UNIT[period]})</Muted>
-          <View style={{ marginTop: S.sm, flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-            <Pressable onPress={() => step(-1)} style={st.stepBtn} hitSlop={8}><Ionicons name="remove" size={18} color={C.ink} /></Pressable>
-            <Input style={st.stepInput} keyboardType="number-pad" value={periods} onChangeText={setPeriods} />
-            <Pressable onPress={() => step(1)} style={st.stepBtn} hitSlop={8}><Ionicons name="add" size={18} color={C.ink} /></Pressable>
-            <Muted>{PERIOD_UNIT[period]} — chạm số để tự nhập</Muted>
+          <Muted>Bạn sẽ gửi trong bao lâu?</Muted>
+          <View style={{ marginTop: S.sm }}>
+            <DurationPicker period={period} periods={periodsNum} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(String(n)); }} />
           </View>
         </View>
 
@@ -266,8 +255,6 @@ export default function FacilityDetailScreen() {
 const st = StyleSheet.create({
   section: { fontSize: 12, fontWeight: '700', color: C.faint, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: S.lg, marginBottom: S.sm },
   filterRow: { marginTop: S.sm, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: S.sm },
-  stepBtn: { width: 36, height: 36, borderRadius: 10, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' },
-  stepInput: { width: 56, textAlign: 'center', paddingHorizontal: 0 },
   rowBetween: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: S.md },
   typeCard: { borderWidth: 1.5 },
   typeCardSelected: { borderColor: C.brand600, backgroundColor: C.brand50 },
