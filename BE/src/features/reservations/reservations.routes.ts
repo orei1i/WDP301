@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { CancellationReason, CheckInShift, enumValues, PaymentMethod, RentalPeriod, ReservationStatus } from '@ssm/shared';
+import { CancellationReason, CheckInShift, enumValues, PaymentMethod, RentalPeriod, ReservationStatus, SignatureMethod } from '@ssm/shared';
 import { ReservationModel } from '../../shared/db/models';
 import { NotFound } from '../../shared/core/errors';
 import { authenticate } from '../../shared/http/authenticate';
@@ -9,7 +9,7 @@ import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/h
 import { idParams, paging, validate, zDate, zId } from '../../shared/http/validate';
 import {
   allocate, cancelReservation, checkIn, createReservation, createReservationsBatch, lookupForCheckIn, payDeposit,
-  reissueCheckInQr, unallocate, type BookingItem,
+  reissueCheckInQr, signContract, unallocate, type BookingItem,
 } from './reservation.service';
 
 const e = <T extends string>(o: Record<string, T>) => z.enum(enumValues(o) as [T, ...T[]]);
@@ -76,6 +76,16 @@ reservationsRouter.post('/batch', authorize('CUSTOMER'), validate({ body: z.obje
 
 reservationsRouter.post('/:id/pay-deposit', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ method: onlinePay }) }), async (req, res) => {
   res.json(await payDeposit(req.auth!.user, req.valid.params.id, req.valid.body.method));
+});
+
+/**
+ * Ký xác nhận hợp đồng sau khi trả cọc. Khách tự ký, hoặc nhân viên cho khách ký trên thiết bị tại quầy
+ * (đánh dấu onBehalf). Ảnh chữ ký vẽ tay là PNG data URL nhỏ (≤ ~60KB).
+ */
+reservationsRouter.post('/:id/sign', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+  signerName: z.string().min(2).max(100), method: e(SignatureMethod), image: z.string().max(80_000).nullable().optional(),
+}) }), async (req, res) => {
+  res.json(await signContract(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
 /** Cấp lại mã QR nhận kho cho app mobile. Mỗi lần gọi vô hiệu hoá mã đã cấp trước đó. */

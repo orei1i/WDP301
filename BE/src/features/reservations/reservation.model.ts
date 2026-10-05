@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { CancellationReason, CheckInShift, enumValues, RentalPeriod, RESERVATION_MACHINE, ReservationStatus, type PriceQuote, type Reservation } from '@ssm/shared';
+import { CancellationReason, CheckInShift, enumValues, RentalPeriod, RESERVATION_MACHINE, ReservationStatus, SignatureMethod, type PriceQuote, type Reservation } from '@ssm/shared';
 import { baseOptions, enumOf, humanCode, maxLen, money, refOpt, refReq, statusHistorySchema, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
@@ -72,6 +72,20 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
     }, subOptions),
     default: null,
     immutable: true, // bằng chứng đã ghi thì không sửa
+  },
+  // Chữ ký xác nhận hợp đồng — khách ký sau khi trả cọc, trước khi nhận kho. Đã ký thì không sửa.
+  signature: {
+    type: new Schema({
+      signedAt: { type: Date, required: true },
+      signerName: { type: String, required: true, trim: true, minlength: 2, maxlength: 100 },
+      method: enumOf(enumValues(SignatureMethod)),
+      image: { type: String, default: null, maxlength: 80_000 },
+      termsVersion: { type: String, required: true, maxlength: 20 },
+      policyVersion: { type: Number, required: true, min: 1 },
+      signedBy: refOpt('User'),
+      onBehalf: { type: Boolean, default: false },
+    }, subOptions),
+    default: null,
   },
   statusHistory: { type: [statusHistorySchema(enumValues(ReservationStatus))], default: [], validate: maxLen(30) },
 }, {

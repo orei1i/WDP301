@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from 'mongoose';
-import { PERIOD_UNIT, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation } from '@ssm/shared';
+import { PERIOD_UNIT, TERMS_VERSION, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation, type SignatureMethod } from '@ssm/shared';
 import {
   FacilityModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, UserModel,
   type ReservationHydrated, type UserHydrated,
@@ -262,12 +262,38 @@ export async function lookupForCheckIn(user: UserHydrated, codeOrQr: string) {
   return { reservation: r, customer, qrValid: tokenValid };
 }
 
+// ---------------------------------------------------------------- ký hợp đồng (CUSTOMER chủ đặt chỗ; STAFF/FM cho khách ký tại quầy)
+/**
+ * Khách ký xác nhận hợp đồng SAU khi đã trả cọc (CONFIRMED/ALLOCATED) và TRƯỚC khi nhận kho — check-in
+ * bị chặn nếu chưa ký. Ký bằng cách vẽ tay (ảnh PNG nhỏ) hoặc gõ họ tên; nhân viên thao tác hộ tại quầy
+ * thì đánh dấu onBehalf để về sau biết ai đã bấm. Mỗi đặt chỗ chỉ ký một lần, không sửa lại.
+ */
+export async function signContract(user: UserHydrated, id: string, input: { signerName: string; method: SignatureMethod; image?: string | null }) {
+  return withTxn(async (session) => {
+    const r = await loadReservation(id, session);
+    await assertCanAccess(user, r, 'reservation.sign');
+    if (r.status !== 'CONFIRMED' && r.status !== 'ALLOCATED') throw Unprocessable('Chỉ ký hợp đồng sau khi đã trả cọc và trước khi nhận kho');
+    if (r.signature) throw Conflict('Hợp đồng này đã được ký', 'ALREADY_SIGNED');
+    if (input.method === 'DRAWN' && !input.image) throw Unprocessable('Cần vẽ chữ ký');
+    if (input.image && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.image)) throw Unprocessable('Ảnh chữ ký không hợp lệ');
+    r.signature = {
+      signedAt: new Date(), signerName: input.signerName.trim(), method: input.method, image: input.method === 'DRAWN' ? input.image ?? null : null,
+      termsVersion: TERMS_VERSION, policyVersion: r.quote.policyVersion, signedBy: user._id, onBehalf: user.role !== 'CUSTOMER',
+    };
+    await r.save({ session });
+    await audit({ action: 'reservation.sign', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { method: input.method, onBehalf: user.role !== 'CUSTOMER' } } }, session);
+    return r;
+  });
+}
+
 // ---------------------------------------------------------------- check-in (STAFF, FM)
 export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: string; payMethod: PaymentMethod; qrToken?: string }) {
   return withTxn(async (session) => {
     const r = await loadReservation(id, session);
     await assertFacility(user, r.facilityId, 'reservation.check_in');
     if (r.startDate > todayUTC()) throw Unprocessable('Chưa đến ngày nhận kho theo lịch đặt');
+    // Thứ tự: đặt cọc → ký hợp đồng → nhận kho. Chưa ký thì chưa tạo hợp đồng.
+    if (!r.signature) throw Unprocessable('Khách chưa ký hợp đồng — cho khách ký xác nhận trước khi nhận kho', 'CONTRACT_NOT_SIGNED');
     if (input.qrToken && r.checkIn?.qrTokenHash !== sha256(input.qrToken)) throw Forbidden('Mã QR không hợp lệ', 'QR_INVALID');
     const customer = await UserModel.findById(r.customerId).session(session);
     if (!customer || customer.status === 'SUSPENDED') throw Unprocessable('Tài khoản khách đang bị tạm khóa');
@@ -306,7 +332,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
       deposit: { amount: r.quote.depositAmount, status: 'HELD', paymentId: r.depositPaymentId ?? null, refundedAmount: 0 },
       balance: { outstanding: 0, lastPaymentAt: now },
       access: { method: unit.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
-      terms: { policyId: policy._id, policyVersion: policy.version, gracePeriodDays: policy.gracePeriodDays, lockoutAfterDays: policy.lockoutAfterDays, signedAt: now, signatureRef: `esign-${contractId}` },
+      terms: { policyId: policy._id, policyVersion: policy.version, gracePeriodDays: policy.gracePeriodDays, lockoutAfterDays: policy.lockoutAfterDays, signedAt: r.signature.signedAt, signatureRef: `esign-${r._id}`, signerName: r.signature.signerName },
       statusHistory: [{ from: null, to: 'ACTIVE', at: now, by: user._id }],
     }], { session });
 

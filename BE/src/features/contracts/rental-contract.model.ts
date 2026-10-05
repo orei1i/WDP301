@@ -63,7 +63,7 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
     type: new Schema({
       policyId: refReq('BusinessPolicy'), policyVersion: { type: Number, required: true },
       gracePeriodDays: { type: Number, required: true, min: 0 }, lockoutAfterDays: { type: Number, required: true, min: 0 },
-      signedAt: { type: Date, required: true }, signatureRef: String,
+      signedAt: { type: Date, required: true }, signatureRef: String, signerName: { type: String, default: null },
     }, subOptions),
     required: true, immutable: true,
   },
