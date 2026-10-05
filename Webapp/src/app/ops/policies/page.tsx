@@ -31,6 +31,7 @@ export default function Policies() {
       surcharges: current.surcharges.map((x) => (x.code === 'CLIMATE' ? { ...x, value: draft.climatePct } : x)),
       earlyTermination: [{ maxElapsedPct: 25, depositRefundPct: draft.earlyRefund25 }, { maxElapsedPct: 50, depositRefundPct: draft.earlyRefund50 }, { maxElapsedPct: 100, depositRefundPct: 0 }],
       discounts: [
+        { code: 'DAI_HAN_3', kind: 'PERCENT', value: draft.disc3, minPeriods: 3, validFrom: null, validTo: null, requiresApprovalRole: null },
         { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
         { code: 'DAI_HAN_12', kind: 'PERCENT', value: draft.disc12, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
       ],
@@ -96,9 +97,11 @@ export default function Policies() {
             </section>
             <section>
               <h4 className="mb-3 text-sm font-semibold">Ưu đãi thuê dài hạn</h4>
+              <p className="-mt-1 mb-3 text-xs text-stone-500">Chỉ áp cho thuê theo THÁNG; khách chọn đủ số tháng sẽ hưởng bậc giảm cao nhất. Hiện thành nhãn &ldquo;Tiết kiệm x%&rdquo; ở bộ chọn thời gian thuê.</p>
               <div className="grid gap-4 sm:grid-cols-3">
+                {num('disc3', 'Từ 3 tháng', undefined, '%')}
                 {num('disc6', 'Từ 6 tháng', undefined, '%')}
-                {num('disc12', 'Từ 12 tháng', undefined, '%')}
+                {num('disc12', 'Từ 12 tháng (1+ năm)', undefined, '%')}
               </div>
             </section>
           </div>
@@ -129,6 +132,6 @@ function toDraft(p: BusinessPolicy) {
     refund24: p.cancellation.find((c) => c.minHoursBeforeStart === 24)?.depositRefundPct ?? 50,
     earlyRefund25: p.earlyTermination.find((t) => t.maxElapsedPct === 25)?.depositRefundPct ?? 100,
     earlyRefund50: p.earlyTermination.find((t) => t.maxElapsedPct === 50)?.depositRefundPct ?? 50,
-    disc6: p.discounts.find((d) => d.minPeriods === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minPeriods === 12)?.value ?? 0,
+    disc3: p.discounts.find((d) => d.minPeriods === 3)?.value ?? 0, disc6: p.discounts.find((d) => d.minPeriods === 6)?.value ?? 0, disc12: p.discounts.find((d) => d.minPeriods === 12)?.value ?? 0,
   };
 }

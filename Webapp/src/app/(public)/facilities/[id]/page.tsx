@@ -8,11 +8,12 @@ import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, 
 import { AccessMethod, enumValues, periodLabel, STAFF_SHIFTS, withPolicyDefaults } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
-import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, RENTAL_PERIOD, UNIT_CATEGORY } from '@/shared/lib/labels';
+import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, UNIT_CATEGORY } from '@/shared/lib/labels';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@/features/legal/legal-content';
 import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Badge, Button, ButtonLink, Card, CardHeader, EmptyState, Field, cx, inputCls } from '@/shared/ui';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
+import { DurationPicker } from '@/features/facilities/duration-picker';
 
 // acEligible: loại kho này có tuỳ chọn điều hòa (add-on) hay không, theo policy.surcharges[CLIMATE].
 type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability: { total: number; free: number; available: number } };
@@ -20,12 +21,11 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods' | 'discounts'>;
 }
 /** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
 interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; useAirConditioning: boolean; quote: PriceQuote }
 
-const PERIODS: RentalPeriod[] = ['DAY', 'WEEK', 'MONTH'];
 /** Ca giờ nhận kho — chọn ngay lúc đặt, cộng thêm "Chưa rõ giờ" cho khách chưa chắc lịch. */
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const].map((s) => ({ value: s, label: CHECK_IN_SHIFT[s].label }));
 /** Hình thức khoá — thuộc tính của TỪNG Ô (không phải loại kho); "Tất cả" = không lọc. */
@@ -214,28 +214,8 @@ export default function FacilityDetail() {
               <Field label="Ngày bắt đầu">
                 <input type="date" className={inputCls} min={todayISO().slice(0, 10)} max={addDays(todayISO(), 60).slice(0, 10)} value={start} onChange={(e) => setStart(e.target.value)} />
               </Field>
-              <Field label="Chu kỳ thuê">
-                <div className="grid grid-cols-3 gap-2">
-                  {PERIODS.map((p) => (
-                    <button key={p} type="button" onClick={() => setPeriod(p)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', period === p ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{RENTAL_PERIOD[p]}</button>
-                  ))}
-                </div>
-              </Field>
-              <Field label="Số chu kỳ">
-                <div className="grid grid-cols-4 gap-2">
-                  {[1, 3, 6, 12].map((m) => (
-                    <button key={m} type="button" onClick={() => setPeriods(m)} className={cx('rounded-lg py-2 text-sm font-medium ring-1 ring-inset', periods === m ? 'bg-ink text-white ring-ink' : 'ring-stone-300 hover:bg-stone-50')}>{m}</button>
-                  ))}
-                </div>
-                {/* Tự nhập ngày/tháng tuỳ ý thay vì chỉ chọn trong 4 mốc dựng sẵn. */}
-                <div className="mt-2 flex items-center gap-2">
-                  <input
-                    type="number" min={1} max={365} value={periods}
-                    onChange={(e) => setPeriods(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
-                    className={cx(inputCls, 'w-20')}
-                  />
-                  <span className="text-xs text-stone-500">{PERIOD_UNIT[period]} — tự nhập số bất kỳ</span>
-                </div>
+              <Field label="Bạn sẽ gửi trong bao lâu?">
+                <DurationPicker period={period} periods={periods} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(n); }} />
               </Field>
               {ut?.acEligible && (
                 <Field label="Điều hòa" hint="Cơ sở vật chất loại kho này đã có sẵn máy lạnh — bật thì cộng phụ phí, không bật thì không tính phí.">

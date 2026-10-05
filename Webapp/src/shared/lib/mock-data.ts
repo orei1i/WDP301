@@ -3,7 +3,7 @@ import type {
   PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, ServiceOffering, ServiceOrder, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { ACCESS_METHOD, TERMS_VERSION } from '@ssm/shared';
+import { ACCESS_METHOD, TERMS_VERSION, pickDiscount } from '@ssm/shared';
 import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
@@ -139,8 +139,10 @@ export function createSeed(): DB {
     minPeriods: 1, maxPeriods: 36,
     surcharges: [{ code: 'CLIMATE', label: 'Kho điều hòa nhiệt độ', kind: 'PERCENT' as const, value: 10, categories: ['SMALL', 'MEDIUM', 'LARGE', 'XL'] as UnitCategory[] }],
     discounts: [
-      { code: 'DAI_HAN_6', kind: 'PERCENT' as const, value: 5, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
-      { code: 'DAI_HAN_12', kind: 'PERCENT' as const, value: 10, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
+      // Ưu đãi thuê dài hạn theo số THÁNG (chỉ chu kỳ THÁNG): 3 tháng −10%, 6 tháng −15%, 1 năm trở lên −20%.
+      { code: 'DAI_HAN_3', kind: 'PERCENT' as const, value: 10, minPeriods: 3, validFrom: null, validTo: null, requiresApprovalRole: null },
+      { code: 'DAI_HAN_6', kind: 'PERCENT' as const, value: 15, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
+      { code: 'DAI_HAN_12', kind: 'PERCENT' as const, value: 20, minPeriods: 12, validFrom: null, validTo: null, requiresApprovalRole: null },
     ],
     waiverLimits: [{ role: 'FACILITY_MANAGER' as const, maxAmount: 500_000 }, { role: 'OPS_MANAGER' as const, maxAmount: 5_000_000 }],
   };
@@ -238,11 +240,11 @@ export function createSeed(): DB {
     const rate = ut.rates[period];
     const surchargeAmount = useAirConditioning && ut.category !== 'LOCKER' ? Math.round(rate * 0.1) : 0;
     const gross = rate + surchargeAmount;
-    const discountPct = periods >= 12 ? 10 : periods >= 6 ? 5 : 0;
-    const discountAmount = Math.round((gross * discountPct) / 100);
+    const picked = pickDiscount(policyBody.discounts, period, periods, gross);
+    const discountAmount = picked?.amount ?? 0;
     return {
       currency: 'VND' as const, rentalPeriod: period, rate, depositAmount: gross, discountAmount, surchargeAmount,
-      appliedRuleCodes: [...(surchargeAmount ? ['CLIMATE'] : []), ...(discountPct ? [discountPct === 10 ? 'DAI_HAN_12' : 'DAI_HAN_6'] : [])],
+      appliedRuleCodes: [...(surchargeAmount ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
       firstPeriodRent: gross - discountAmount, totalDueAtBooking: gross,
       policyId: ut.facilityId === 'f-td' ? 'pol-td-1' : 'pol-g-3', policyVersion: ut.facilityId === 'f-td' ? 1 : 3,
     };

@@ -1,6 +1,6 @@
 import type { BusinessPolicy, Facility, PriceQuote, RentalContract, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
-import { OPEN_CONTRACT_STATUSES } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, pickDiscount } from '@ssm/shared';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
 export class DomainError extends Error {
@@ -44,16 +44,16 @@ export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: numbe
   const surcharge = policy.surcharges
     .filter((s) => s.categories.includes(ut.category) && (s.code !== 'CLIMATE' || useAirConditioning))
     .reduce((sum, s) => sum + (s.kind === 'PERCENT' ? Math.round((rate * s.value) / 100) : s.value), 0);
-  const eligible = policy.discounts.filter((d) => periods >= d.minPeriods).sort((a, b) => b.minPeriods - a.minPeriods)[0];
   const gross = rate + surcharge;
-  const discountAmount = eligible ? (eligible.kind === 'PERCENT' ? Math.round((gross * eligible.value) / 100) : eligible.value) : 0;
+  const picked = pickDiscount(policy.discounts, period, periods, gross);
+  const discountAmount = picked?.amount ?? 0;
   const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value : Math.round(gross * policy.deposit.value));
   return {
     currency: 'VND', rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount: surcharge,
-    appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(eligible ? [eligible.code] : [])],
+    appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
     firstPeriodRent: gross - discountAmount, totalDueAtBooking: depositAmount,
     policyId: policy._id, policyVersion: policy.version,
-    discountPct: eligible?.kind === 'PERCENT' ? eligible.value : 0, periods,
+    discountPct: picked?.tier.kind === 'PERCENT' ? picked.tier.value : 0, periods,
   };
 }
 

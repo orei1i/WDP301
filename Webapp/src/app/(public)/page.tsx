@@ -80,7 +80,7 @@ export default function Home() {
 
       <section id="sizes" className="mx-auto max-w-7xl scroll-mt-20 px-4 pt-16 sm:px-6 lg:px-8">
         <h2 className="text-2xl font-semibold tracking-tight">Chọn kích thước phù hợp</h2>
-        <p className="mt-1 text-sm text-stone-500">Giá tham khảo theo tháng, chưa gồm ưu đãi thuê dài hạn (−5% từ 6 tháng, −10% từ 12 tháng).</p>
+        <p className="mt-1 text-sm text-stone-500">Giá tham khảo theo tháng, chưa gồm ưu đãi khi thuê dài hạn (từ 3 tháng) — chọn thời gian thuê ở trang chi nhánh để xem mức tiết kiệm.</p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {loading && Array.from({ length: 6 }).map((_, i) => (
             <Card key={i} className="flex gap-4 p-5"><Skeleton className="size-16 shrink-0" /><div className="flex-1 grid gap-2"><Skeleton className="h-3 w-16" /><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-full" /><Skeleton className="h-4 w-28" /></div></Card>
