@@ -1,4 +1,4 @@
-import type { AccessMethod, FacilityStatus, RentalPeriod, UnitCategory, UnitStatus } from '@ssm/shared';
+import { earlyTerminationOf, type AccessMethod, type FacilityStatus, type RentalPeriod, type UnitCategory, type UnitStatus } from '@ssm/shared';
 import { FacilityModel, RentalContractModel, ReservationModel, ServiceOfferingModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { withTxn } from '../../shared/db/txn';
 import { currentActorId } from '../../shared/core/request-context';
@@ -47,7 +47,7 @@ export async function facilityDetailPublic(id: string, period: RentalPeriod = 'M
     facility: f, unitTypes, services,
     policy: {
       version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes,
-      cancellation: policy.cancellation, earlyTermination: policy.earlyTermination, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
+      cancellation: policy.cancellation, earlyTermination: earlyTerminationOf(policy), minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
     },
   };
 }

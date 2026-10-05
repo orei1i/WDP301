@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from 'mongoose';
-import { PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
+import { abandonDaysOf, PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
 import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
@@ -329,7 +329,8 @@ export async function processAbandonment(
     if (!lockedOutAt) throw Conflict('Hợp đồng thiếu mốc thời gian khóa truy cập');
     const policy = await effectivePolicy(c.facilityId, session);
     const daysLocked = daysBetween(lockedOutAt, todayUTC());
-    if (daysLocked < policy.abandonAfterLockedOutDays) throw Unprocessable(`Chỉ xử lý được sau ${policy.abandonAfterLockedOutDays} ngày kể từ khi khóa truy cập (hiện ${daysLocked} ngày)`);
+    const abandonAfter = abandonDaysOf(policy);
+    if (daysLocked < abandonAfter) throw Unprocessable(`Chỉ xử lý được sau ${abandonAfter} ngày kể từ khi khóa truy cập (hiện ${daysLocked} ngày)`);
 
     const unit = await StorageUnitModel.findById(c.unitId).session(session);
     if (!unit) throw NotFound('kho');

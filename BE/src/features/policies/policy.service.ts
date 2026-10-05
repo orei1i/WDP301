@@ -1,4 +1,4 @@
-import type { BusinessPolicy } from '@ssm/shared';
+import { withPolicyDefaults, type BusinessPolicy } from '@ssm/shared';
 import { FacilityModel, PolicyModel } from '../../shared/db/models';
 import { NotFound, Unprocessable } from '../../shared/core/errors';
 import { effectivePolicy } from './pricing';
@@ -18,7 +18,8 @@ export async function publishPolicy(facilityId: string | null, patch: Patch) {
 
     const base = current.toObject() as unknown as Record<string, unknown>;
     for (const k of ['_id', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', '__v']) delete base[k];
-    const next = { ...base, ...patch };
+    // Bản cũ chưa có earlyTermination/abandonAfterLockedOutDays: điền mặc định để phiên bản mới luôn hợp lệ dù patch không nhắc tới.
+    const next = { ...withPolicyDefaults(base), ...patch };
     if ((next.lockoutAfterDays as number) <= (next.gracePeriodDays as number)) throw Unprocessable('Số ngày khóa truy cập phải lớn hơn thời gian ân hạn');
 
     const last = await PolicyModel.findOne({ scope, facilityId: facilityId ?? null }).sort({ version: -1 }).session(session);

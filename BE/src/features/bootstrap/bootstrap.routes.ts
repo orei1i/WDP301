@@ -3,6 +3,7 @@ import {
   AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel, RentalContractModel,
   ReservationModel, ServiceOfferingModel, ServiceOrderModel, StorageUnitModel, TicketModel, UnitSwapRequestModel, UnitTypeModel, UserModel,
 } from '../../shared/db/models';
+import { withPolicyDefaults } from '@ssm/shared';
 import { authenticate } from '../../shared/http/authenticate';
 import { isScoped } from '../../shared/http/scope';
 
@@ -44,7 +45,7 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
       PolicyModel.find({ $or: [{ isActive: true }, { _id: { $in: policyIds } }] }).lean(),
       UserModel.find({ _id: { $in: staffIds } }, PUBLIC_USER).lean(),
     ]);
-    return res.json({ ...empty, me, users: [me, ...others], facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies });
+    return res.json({ ...empty, me, users: [me, ...others], facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies: policies.map(withPolicyDefaults) });
   }
 
   if (me.role === 'ADMIN') {
@@ -54,7 +55,7 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
       PolicyModel.find({ isActive: true }).lean(),
       AuditLogModel.find({}).sort({ at: -1 }).limit(500).lean(),
     ]);
-    return res.json({ ...empty, me, users, facilities, policies, audit });
+    return res.json({ ...empty, me, users, facilities, policies: policies.map(withPolicyDefaults), audit });
   }
 
   // STAFF / FACILITY_MANAGER (scoped) and OPS_MANAGER (chain-wide)
@@ -86,5 +87,5 @@ bootstrapRouter.get('/', authenticate, async (req, res) => {
     }, { ...PUBLIC_USER, phone: 1, 'customerProfile.idNumberLast4': 1 }).lean()
     : await UserModel.find({}, { ...PUBLIC_USER, email: 1 }).lean();
 
-  res.json({ me, users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies, audit });
+  res.json({ me, users, facilities, unitTypes, units, reservations, contracts, payments, inspections, tickets, claims, swapRequests, services, serviceOrders, policies: policies.map(withPolicyDefaults), audit });
 });

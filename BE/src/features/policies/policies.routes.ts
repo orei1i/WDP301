@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, Role, UnitCategory } from '@ssm/shared';
+import { enumValues, Role, UnitCategory, withPolicyDefaults } from '@ssm/shared';
 import { PolicyModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
@@ -16,12 +16,13 @@ export const policiesRouter = Router();
 policiesRouter.use(authenticate);
 
 policiesRouter.get('/effective/:id', validate({ params: idParams }), async (req, res) => {
-  res.json(await effectivePolicy(req.valid.params.id));
+  res.json(withPolicyDefaults((await effectivePolicy(req.valid.params.id)).toJSON()));
 });
 policiesRouter.get('/', authorize('OPS_MANAGER', 'ADMIN', 'FACILITY_MANAGER'), validate({ query: z.object({ facilityId: zId.optional() }) }), async (req, res) => {
   const fid = req.valid.query.facilityId;
   if (fid) await assertFacility(req.auth!.user, fid);
-  res.json({ items: await PolicyModel.find(fid ? { scope: 'FACILITY', facilityId: fid } : { scope: 'GLOBAL' }).sort({ version: -1 }) });
+  const items = await PolicyModel.find(fid ? { scope: 'FACILITY', facilityId: fid } : { scope: 'GLOBAL' }).sort({ version: -1 });
+  res.json({ items: items.map((p) => withPolicyDefaults(p.toJSON())) });
 });
 
 const tier = z.object({ minHoursBeforeStart: z.number().min(0), depositRefundPct: z.number().min(0).max(100) });

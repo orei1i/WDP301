@@ -1,5 +1,5 @@
 import type { ClientSession, Types } from 'mongoose';
-import type { PriceQuote, RentalPeriod, UnitCategory } from '@ssm/shared';
+import { earlyTerminationOf, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
 import { FacilityModel, PolicyModel, type PolicyDoc, type UnitTypeDoc, type ReservationDoc } from '../../shared/db/models';
 
 /** Facility override if active, otherwise the active GLOBAL policy. */
@@ -77,6 +77,6 @@ export function elapsedTermPct(startDate: Date, endDate: Date, scheduledFor: Dat
  * là move-out bình thường, không bị phạt.
  */
 export function earlyTerminationRefundPct(policy: Pick<PolicyDoc, 'earlyTermination'>, elapsedPct: number) {
-  const tier = [...policy.earlyTermination].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct).find((t) => elapsedPct <= t.maxElapsedPct);
+  const tier = [...earlyTerminationOf(policy)].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct).find((t) => elapsedPct <= t.maxElapsedPct);
   return tier?.depositRefundPct ?? 0;
 }
