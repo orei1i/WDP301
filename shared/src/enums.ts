@@ -66,7 +66,20 @@ export const SwapRequestStatus = {
 export type SwapRequestStatus = (typeof SwapRequestStatus)[keyof typeof SwapRequestStatus];
 export const OPEN_SWAP_STATUSES: readonly SwapRequestStatus[] = ['SUBMITTED', 'APPROVED'];
 
-export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION' } as const;
+/** Dịch vụ thêm khách đặt sau khi thuê (đóng gói, vận chuyển, vệ sinh...). Trả tiền ngay lúc đặt. */
+export const ServiceOrderStatus = {
+  REQUESTED: 'REQUESTED',   // khách đã đặt và thanh toán, chờ chi nhánh thực hiện
+  DONE: 'DONE',             // nhân viên xác nhận đã thực hiện xong
+  CANCELLED: 'CANCELLED',   // huỷ trước khi thực hiện — hoàn tiền đủ
+} as const;
+export type ServiceOrderStatus = (typeof ServiceOrderStatus)[keyof typeof ServiceOrderStatus];
+export const OPEN_SERVICE_ORDER_STATUSES: readonly ServiceOrderStatus[] = ['REQUESTED'];
+
+/** Cách ký xác nhận hợp đồng: vẽ tay trên màn hình, hoặc gõ họ tên rồi tích đồng ý. */
+export const SignatureMethod = { DRAWN: 'DRAWN', TYPED: 'TYPED' } as const;
+export type SignatureMethod = (typeof SignatureMethod)[keyof typeof SignatureMethod];
+
+export const PaymentType = { DEPOSIT: 'DEPOSIT', RENT: 'RENT', RENEWAL: 'RENEWAL', LATE_FEE: 'LATE_FEE', DAMAGE_FEE: 'DAMAGE_FEE', PENALTY: 'PENALTY', REFUND: 'REFUND', WAIVER: 'WAIVER', COMPENSATION: 'COMPENSATION', SERVICE: 'SERVICE' } as const;
 export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
 /** Tiền đi RA khỏi doanh nghiệp → direction = 'REFUND'. COMPENSATION không có refundOf vì không hoàn lại khoản thu nào. */
 export const OUTBOUND_PAYMENT_TYPES: readonly PaymentType[] = ['REFUND', 'COMPENSATION'];

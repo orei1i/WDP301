@@ -1,7 +1,7 @@
 import type {
   AbandonedItemsDisposal, AccessMethod, CheckInShift, ClaimStatus, ClaimType, ContractStatus, FacilityStatus, PaymentMethod, PaymentStatus, PaymentType,
   RentalPeriod, ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority,
-  TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus,
+  TicketStatus, UnitCategory, UnitStatus, UserStatus, CancellationReason, InspectionOutcome, DepositStatus, ServiceOrderStatus,
 } from './enums';
 
 export type Tone = 'gray' | 'green' | 'blue' | 'amber' | 'red' | 'violet' | 'teal';
@@ -62,6 +62,7 @@ export const PAYMENT_TYPE: LabelMap<PaymentType> = {
   REFUND: { label: 'Hoàn tiền', tone: 'violet' },
   WAIVER: { label: 'Miễn giảm', tone: 'gray' },
   COMPENSATION: { label: 'Bồi thường', tone: 'violet' },
+  SERVICE: { label: 'Dịch vụ thêm', tone: 'teal' },
 };
 
 export const CLAIM_STATUS: LabelMap<ClaimStatus> = {
@@ -130,6 +131,12 @@ export const SWAP_REQUEST_STATUS: LabelMap<SwapRequestStatus> = {
   DONE: { label: 'Đã đổi ô', tone: 'green' },
   EXPIRED: { label: 'Hết hạn chuyển', tone: 'gray' },
   CANCELLED: { label: 'Khách đã rút', tone: 'gray' },
+};
+
+export const SERVICE_ORDER_STATUS: LabelMap<ServiceOrderStatus> = {
+  REQUESTED: { label: 'Chờ thực hiện', tone: 'amber' },
+  DONE: { label: 'Đã hoàn thành', tone: 'green' },
+  CANCELLED: { label: 'Đã huỷ', tone: 'gray' },
 };
 
 export const FACILITY_STATUS: LabelMap<FacilityStatus> = {

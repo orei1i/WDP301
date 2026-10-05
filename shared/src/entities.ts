@@ -1,7 +1,7 @@
 import type {
   AbandonedItemsDisposal, AccessMethod, AuditResult, CancellationReason, CheckInShift, ClaimStatus, ClaimType, ContractStatus, DepositStatus, FacilityStatus,
   InspectionOutcome, InspectionStatus, InspectionType, ItemCondition, PaymentMethod, PaymentStatus, PaymentType, RentalPeriod,
-  ReservationStatus, Role, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
+  ReservationStatus, Role, ServiceOrderStatus, SignatureMethod, SwapMethod, SwapRequestStatus, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory,
   UnitStatus, UserStatus,
 } from './enums';
 
@@ -188,6 +188,11 @@ export interface Reservation<I = ID, D = string> extends BaseEntity<I, D> {
     ip?: string | null;
     userAgent?: string | null;
   } | null;
+  /**
+   * Chữ ký xác nhận hợp đồng — khách ký SAU khi đã trả cọc và TRƯỚC khi nhận kho (check-in bị chặn nếu
+   * chưa ký). null = chưa ký (hoặc dữ liệu cũ tạo trước tính năng này).
+   */
+  signature?: ContractSignature<I, D> | null;
   statusHistory: StatusChange<ReservationStatus, I, D>[];
 }
 
@@ -216,7 +221,7 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
     issuedAt?: D | null; issuedBy?: I | null;
     suspendedAt?: D | null; revokedAt?: D | null;
   };
-  terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string };
+  terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string; signerName?: string | null };
   renewals: { previousEndDate: D; newEndDate: D; periods: number; paymentId?: I | null; at: D }[];
   /**
    * Lịch sử đổi ô kho (A1). Chỉ đổi được sang ô CÙNG loại (unitTypeId không đổi), nên
@@ -227,6 +232,54 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   moveOut?: { requestedAt: D; scheduledFor?: D | null; completedAt?: D | null; inspectionId?: I | null } | null;
   closedAt?: D | null;
   statusHistory: StatusChange<ContractStatus, I, D>[];
+}
+
+// ---------- ServiceOffering / ServiceOrder (dịch vụ thêm sau khi thuê — giá riêng từng chi nhánh) ----------
+export interface ServiceOffering<I = ID, D = string> extends BaseEntity<I, D>, SoftDeletable<I, D> {
+  facilityId: I;
+  code: string;                           // duy nhất trong chi nhánh, VD "PACK-BOX"
+  name: string;
+  description?: string;
+  price: number;                          // đơn giá một đơn vị (VND)
+  unitLabel: string;                      // "lần", "thùng", "giờ"... — tổng = đơn giá × số lượng
+  isActive: boolean;
+}
+
+export interface ServiceOrder<I = ID, D = string> extends BaseEntity<I, D> {
+  orderNumber: string;                    // "SVC-261005-7K2Q9M"
+  facilityId: I;
+  customerId: I;
+  contractId: I;
+  serviceId: I;
+  /** Chốt tại thời điểm đặt — đổi giá/tên dịch vụ sau đó không ảnh hưởng đơn đã đặt. */
+  serviceName: string;
+  unitPrice: number;
+  unitLabel: string;
+  quantity: number;
+  total: number;
+  preferredDate?: D | null;               // ngày khách muốn thực hiện
+  note?: string;
+  status: ServiceOrderStatus;
+  paymentId?: I | null;
+  refundPaymentId?: I | null;             // có khi huỷ — hoàn đủ tiền
+  completedAt?: D | null;
+  completedBy?: I | null;
+  cancelReason?: string | null;
+  statusHistory: StatusChange<ServiceOrderStatus, I, D>[];
+}
+
+// ---------- ContractSignature (chữ ký xác nhận hợp đồng, lưu trên Reservation) ----------
+export interface ContractSignature<I = ID, D = string> {
+  signedAt: D;
+  signerName: string;
+  method: SignatureMethod;
+  /** PNG data URL của chữ ký vẽ tay (method DRAWN) — nhỏ, chỉ để hiển thị lại trên bản hợp đồng. */
+  image?: string | null;
+  /** Phiên bản Điều khoản/chính sách mà khách đã xem lúc ký. */
+  termsVersion: string;
+  policyVersion: number;
+  signedBy?: I | null;                    // người thao tác: chính khách, hoặc nhân viên ký hộ tại quầy
+  onBehalf: boolean;                      // true = nhân viên cho khách ký trên thiết bị tại quầy
 }
 
 // ---------- UnitSwapRequest (đổi ô kho theo yêu cầu — A1b) ----------
