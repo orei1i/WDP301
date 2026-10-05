@@ -252,7 +252,9 @@ Table reservations {
   "signature.signer_name" varchar
   "signature.method" signature_method
   "signature.image" varchar [note: 'PNG data URL của chữ ký vẽ tay, ≤ ~60KB; null nếu gõ họ tên']
-  "signature.on_behalf" boolean [note: 'true = nhân viên cho khách ký tại quầy']
+  "signature.on_behalf" boolean [note: 'luôn false với chữ ký mới — nhân viên không ký thay; chỉ còn ở dữ liệu cũ']
+  "signature.emailed_at" datetime [note: 'lần gửi PDF hợp đồng đã ký tới email khách thành công gần nhất']
+  "signature.emailed_to" varchar [note: 'email đã che, VD a***@gmail.com']
 }
 
 Table rental_contracts {

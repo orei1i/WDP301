@@ -218,7 +218,7 @@ export const API_GROUPS: Group[] = [
         notes: ['Thành công → CONFIRMED và trả qrPayload dạng SSM:<code>:<token> đúng một lần; server chỉ lưu SHA-256 của token.'],
       },
       {
-        method: 'POST', path: '/reservations/:id/sign', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Ký xác nhận hợp đồng sau khi trả cọc, trước khi nhận kho.',
+        method: 'POST', path: '/reservations/:id/sign', auth: R.CUS, summary: 'Ký xác nhận hợp đồng sau khi trả cọc, trước khi nhận kho.',
         body: [
           { name: 'signerName', type: 'string 2..100', required: true },
           { name: 'method', type: 'DRAWN | TYPED', required: true, note: 'DRAWN = vẽ tay (cần image), TYPED = gõ họ tên' },
@@ -226,8 +226,17 @@ export const API_GROUPS: Group[] = [
         ],
         notes: [
           'Chỉ ký được khi đặt chỗ ở CONFIRMED/ALLOCATED và chưa ký; mỗi đặt chỗ ký một lần, không sửa.',
-          'Nhân viên cho khách ký tại quầy → onBehalf = true. Chưa ký thì check-in bị chặn (422 CONTRACT_NOT_SIGNED).',
+          'Chỉ chính khách ký trên tài khoản của họ — nhân viên/quản lý không ký thay (403). Chưa ký thì check-in bị chặn (422 CONTRACT_NOT_SIGNED).',
+          'Ký xong server tự dựng PDF hợp đồng đã ký và gửi tới email của khách (chờ tối đa 10 giây; chưa cấu hình SMTP thì bỏ qua, việc ký vẫn thành công). Kết quả nằm ở signature.emailedAt/emailedTo.',
         ],
+      },
+      {
+        method: 'GET', path: '/reservations/:id/contract.pdf', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Tải PDF hợp đồng đã ký (có chữ ký).',
+        notes: ['Cần đăng nhập (Bearer token) nên tải bằng fetch rồi lưu blob, không dùng thẻ <a href> trực tiếp. Chưa ký → 422.'],
+      },
+      {
+        method: 'POST', path: '/reservations/:id/contract/email', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Gửi lại PDF hợp đồng đã ký tới email của khách.',
+        notes: ['Tối thiểu 60 giây giữa hai lần (409 TOO_SOON). Chưa cấu hình SMTP → 503 MAIL_NOT_CONFIGURED; gửi lỗi → 502 MAIL_FAILED.'],
       },
       {
         method: 'POST', path: '/reservations/:id/cancel', auth: 'ANY', summary: 'Hủy đặt chỗ, hoàn cọc theo bậc trong chính sách.',
