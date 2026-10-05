@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { CircleCheck, KeyRound, RefreshCw, ScanLine, Search, TriangleAlert, Undo2 } from 'lucide-react';
 import type { CheckInShift, PaymentMethod, Reservation } from '@ssm/shared';
-import { periodLabel } from '@ssm/shared';
+import { addPeriods, paymentDueDate, periodLabel } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, RESERVATION_STATUS } from '@/shared/lib/labels';
@@ -137,7 +137,16 @@ function CheckInInner() {
                           <dd className="shrink-0 tabular-nums">{vnd(r.quote.firstPeriodRent)}</dd>
                         </div>
                       </dl>
-                      <p className="mt-2 text-xs text-stone-500">Các {PERIOD_UNIT[r.quote.rentalPeriod]} sau khách trả theo từng kỳ (hoá đơn xuất vào đầu mỗi kỳ).</p>
+                      {(() => {
+                        const grace = db.policies.find((p) => p._id === r.quote.policyId)?.gracePeriodDays;
+                        const next = addPeriods(todayISO(), r.quote.rentalPeriod, 1);
+                        return (
+                          <p className="mt-2 text-xs text-stone-500">
+                            Hôm nay chỉ thu tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu, không thu thêm khoản nào khác. Kỳ kế tiếp bắt đầu {fmtDate(next)}
+                            {grace !== undefined && <>, khách trả trước <b>{fmtDate(paymentDueDate(next, grace))}</b> (quá hạn bị tính phí trễ)</>}.
+                          </p>
+                        );
+                      })()}
                     </div>
                     <Field label={`Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
                       <PayMethodPicker value={pay} onChange={setPay} methods={['CASH', 'CARD', 'VNPAY', 'BANK_TRANSFER']} />
