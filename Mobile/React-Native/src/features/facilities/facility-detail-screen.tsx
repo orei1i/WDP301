@@ -20,6 +20,7 @@ type TypeRow = UnitType & { quote: PriceQuote; acEligible: boolean; availability
 interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
+  services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
   policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods'>;
 }
 
@@ -115,7 +116,7 @@ export default function FacilityDetailScreen() {
     );
   }
 
-  const { facility: f, unitTypes: types } = detail;
+  const { facility: f, unitTypes: types, services } = detail;
   const ut = types.find((t) => t._id === typeId);
   const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
@@ -217,6 +218,14 @@ export default function FacilityDetailScreen() {
       {ut && q && (
         <Card style={{ marginTop: S.md }}>
           <KV items={priceItems(q, ut.name, periodsNum)} />
+        </Card>
+      )}
+
+      {services.length > 0 && (
+        <Card style={{ marginTop: S.md }}>
+          <Text style={st.section}>Dịch vụ thêm sau khi thuê</Text>
+          <Muted style={{ marginTop: 2 } as never}>Tuỳ chọn, đặt trong app khi đã nhận kho — giá riêng của chi nhánh này.</Muted>
+          <KV items={services.map((s): [string, ReactNode] => [s.name, `${vnd(s.price)} / ${s.unitLabel}`])} />
         </Card>
       )}
 

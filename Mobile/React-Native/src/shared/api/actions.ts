@@ -1,5 +1,5 @@
 import type {
-  CheckInShift, ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, RentalPeriod, Reservation, StorageUnit,
+  CheckInShift, ClaimItem, ClaimType, DamageClaim, PaymentMethod, RentalContract, RentalPeriod, Reservation, ServiceOrder, SignatureMethod, StorageUnit,
   SupportTicket, SwapMethod, TicketCategory, TicketPriority, TicketStatus, UnitSwapRequest,
 } from '@ssm/shared';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
@@ -81,6 +81,18 @@ export const actions = {
   cancelSwapRequest: async (p: { swapRequestId: string }) => {
     await api.post(`/swap-requests/${p.swapRequestId}/cancel`);
   },
+
+  // ---- dịch vụ thêm sau khi thuê
+  orderService: async (p: { contractId: string; serviceId: string; quantity: number; preferredDate?: string; note?: string; method: PaymentMethod }) =>
+    api.post<ServiceOrder>('/services/orders', { ...p, preferredDate: p.preferredDate ? day(p.preferredDate) : undefined, note: p.note || undefined }),
+
+  cancelServiceOrder: async (p: { orderId: string }) => {
+    await api.post(`/services/orders/${p.orderId}/cancel`, {});
+  },
+
+  // ---- ký hợp đồng (gõ họ tên) sau khi trả cọc, trước khi nhận kho
+  signContract: async (p: { reservationId: string; signerName: string; method: SignatureMethod; image?: string | null }) =>
+    api.post<Reservation>(`/reservations/${p.reservationId}/sign`, { signerName: p.signerName, method: p.method, image: p.image ?? null }),
 };
 
 export type Actions = typeof actions;

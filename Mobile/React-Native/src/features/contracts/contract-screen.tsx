@@ -137,6 +137,17 @@ export default function ContractScreen() {
         </Card>
       )}
 
+      {c.status === 'ACTIVE' && (
+        <Card style={{ marginTop: S.md }}>
+          <Button
+            title="Dịch vụ thêm (đóng gói, vận chuyển...)"
+            variant="secondary"
+            icon="cube-outline"
+            onPress={() => router.push(`/contract/services?contract=${c._id}`)}
+          />
+        </Card>
+      )}
+
       {OPEN_CONTRACT_STATUSES.includes(c.status) && (
         <Card style={{ marginTop: S.md }}>
           <Button
