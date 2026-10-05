@@ -8,6 +8,10 @@
  * Nội dung đầy đủ của hai văn bản vẫn ở Webapp/src/features/legal/legal-content.ts (chỉ web hiển thị toàn văn).
  * MỖI LẦN SỬA NỘI DUNG LÀ PHẢI TĂNG PHIÊN BẢN, không có ngoại lệ.
  */
-export const TERMS_VERSION = '1.0';
+// 1.1 (05/10/2026): Điều 3 nêu rõ hai khoản thanh toán trước khi dùng kho (cọc khi đặt chỗ + tiền thuê kỳ đầu khi nhận kho).
+export const TERMS_VERSION = '1.1';
 export const PRIVACY_VERSION = '1.0';
+/** Ngày áp dụng Điều khoản (bản TERMS_VERSION). */
+export const TERMS_EFFECTIVE = '05/10/2026';
+/** Ngày áp dụng Chính sách bảo mật (bản PRIVACY_VERSION). */
 export const LEGAL_EFFECTIVE = '16/09/2026';

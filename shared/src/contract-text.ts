@@ -29,6 +29,8 @@ export interface ContractTextInput {
   endDate: string;
   quote: Pick<PriceQuote, 'rate' | 'surchargeAmount' | 'discountAmount' | 'firstPeriodRent' | 'depositAmount' | 'policyVersion'>;
   depositPaid: boolean;
+  /** Phiên bản Điều khoản khách đã ký (signature.termsVersion). Bỏ trống = phiên bản hiện hành (hợp đồng chưa ký). */
+  termsVersion?: string | null;
   policy: Pick<BusinessPolicy, 'gracePeriodDays' | 'lockoutAfterDays' | 'cancellation'> & Partial<Pick<BusinessPolicy, 'earlyTermination' | 'abandonAfterLockedOutDays'>>;
 }
 
@@ -103,7 +105,7 @@ export function buildContractClauses(i: ContractTextInput): ContractClause[] {
     },
     {
       title: '6. Điều khoản chung',
-      paragraphs: [`Hai bên thực hiện theo Điều khoản thuê kho (v${TERMS_VERSION}) và chính sách phiên bản v${q.policyVersion} áp dụng tại thời điểm đặt chỗ.`],
+      paragraphs: [`Hai bên thực hiện theo Điều khoản thuê kho (v${i.termsVersion ?? TERMS_VERSION}) và chính sách phiên bản v${q.policyVersion} áp dụng tại thời điểm đặt chỗ.`],
       bullets: [],
     },
   ];
