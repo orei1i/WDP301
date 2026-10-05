@@ -25,7 +25,7 @@ export function ContractDocument({ reservation: r }: { reservation: Reservation 
     facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null, customerName: userName(db, r.customerId),
     unitTypeName: type?.name ?? typeName(db, r.unitTypeId), unitNumber: unit?.unitNumber, floor: unit?.location.floor, zone: unit?.location.zone,
     areaM2: type?.areaM2, accessMethod: unit?.accessMethod, useAirConditioning: r.useAirConditioning, rentalPeriod: r.quote.rentalPeriod,
-    periods: r.periods, startDate: r.startDate, endDate: r.endDate, quote: r.quote, depositPaid: !!r.depositPaymentId, policy,
+    periods: r.periods, startDate: r.startDate, endDate: r.endDate, quote: r.quote, depositPaid: !!r.depositPaymentId, termsVersion: r.signature?.termsVersion, policy,
   });
 
   return (

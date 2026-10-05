@@ -5,13 +5,13 @@ import { LEGAL_EFFECTIVE, type LegalSection } from '@/features/legal/legal-conte
 import { Card } from '@/shared/ui';
 
 /** Khung chung cho trang Điều khoản và trang Bảo mật — hai trang chỉ khác nội dung truyền vào. */
-export function LegalPage({ title, version, sections, other }: {
-  title: string; version: string; sections: LegalSection[]; other: { href: string; label: string };
+export function LegalPage({ title, version, effective = LEGAL_EFFECTIVE, sections, other }: {
+  title: string; version: string; effective?: string; sections: LegalSection[]; other: { href: string; label: string };
 }) {
   return (
     <main className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      <p className="mt-1 text-sm text-stone-500">Phiên bản {version} · Áp dụng từ {LEGAL_EFFECTIVE}</p>
+      <p className="mt-1 text-sm text-stone-500">Phiên bản {version} · Áp dụng từ {effective}</p>
       <p className="mt-1 text-sm"><Link href={other.href} className="text-brand-700 hover:underline">{other.label}</Link></p>
 
       <Card className="mt-6 p-6 sm:p-8">

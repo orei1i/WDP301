@@ -7,7 +7,7 @@
  */
 
 // Số phiên bản nằm ở @ssm/shared để app mobile gửi đúng cùng giá trị khi lấy chấp thuận của khách.
-export { TERMS_VERSION, PRIVACY_VERSION, LEGAL_EFFECTIVE } from '@ssm/shared';
+export { TERMS_VERSION, TERMS_EFFECTIVE, PRIVACY_VERSION, LEGAL_EFFECTIVE } from '@ssm/shared';
 
 export interface LegalSection { heading: string; body: string[]; table?: { head: string[]; rows: string[][] } }
 
