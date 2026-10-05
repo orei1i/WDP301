@@ -85,8 +85,9 @@ export function buildContractClauses(i: ContractTextInput): ContractClause[] {
       paragraphs: [],
       bullets: [
         `${price.join(', ')}.`,
-        `Tiền cọc ${vnd(q.depositAmount)}${i.depositPaid ? ' (đã thanh toán)' : ''}: thanh toán khi đặt chỗ, được giữ đến khi trả kho — không trừ vào tiền thuê — và hoàn lại sau khi trừ chi phí hư hại, công nợ (nếu có).`,
-        `Tiền thuê kỳ đầu ${vnd(q.firstPeriodRent)}: thanh toán khi nhận kho.`,
+        `Trước khi sử dụng kho, Bên thuê thanh toán HAI khoản riêng biệt, tổng cộng ${vnd(q.depositAmount + q.firstPeriodRent)}. Bên thuê xác nhận đã được thông báo rõ cả hai khoản này khi đặt chỗ:`,
+        `Khoản 1 — khi đặt chỗ: tiền cọc ${vnd(q.depositAmount)}${i.depositPaid ? ' (đã thanh toán)' : ''}. Tiền cọc được giữ đến khi trả kho — không trừ vào tiền thuê — và hoàn lại sau khi trừ chi phí hư hại, công nợ (nếu có), theo mức hoàn nêu tại mục 5.`,
+        `Khoản 2 — khi nhận kho: tiền thuê ${unit} đầu ${vnd(q.firstPeriodRent)}, thanh toán THÊM ngoài tiền cọc tại quầy khi nhân viên bàn giao kho.`,
         `Các kỳ sau thanh toán theo từng ${unit} vào đầu mỗi kỳ — không phải trả trước toàn bộ thời hạn. Bên thuê cũng có thể gia hạn và trả trước thêm.`,
         `Quá hạn thanh toán quá ${i.policy.gracePeriodDays} ngày bị tính phí trễ; quá ${i.policy.lockoutAfterDays} ngày bị khoá truy cập.`,
       ],

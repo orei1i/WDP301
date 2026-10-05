@@ -185,6 +185,8 @@ export interface Reservation<I = ID, D = string> extends BaseEntity<I, D> {
     termsVersion: string;
     privacyVersion: string;
     acceptedAt: D;
+    /** Lúc khách xác nhận đã được báo trước 2 khoản thanh toán (cọc khi đặt + tiền thuê kỳ đầu khi nhận kho). null với đặt chỗ cũ. */
+    paymentScheduleAckAt?: D | null;
     ip?: string | null;
     userAgent?: string | null;
   } | null;
