@@ -28,6 +28,7 @@ export default function Policies() {
       deposit: { mode: 'PERIODS_OF_RENT', value: draft.depositPeriods },
       lateFees: [{ afterDays: draft.grace, kind: 'PERCENT_OF_RENT', value: draft.latePct, recurringEveryDays: null }, { afterDays: draft.lockout, kind: 'FIXED', value: draft.lateFixed, recurringEveryDays: 30 }],
       cancellation: [{ minHoursBeforeStart: 72, depositRefundPct: draft.refund72 }, { minHoursBeforeStart: 24, depositRefundPct: draft.refund24 }, { minHoursBeforeStart: 0, depositRefundPct: 0 }],
+      surcharges: current.surcharges.map((x) => (x.code === 'CLIMATE' ? { ...x, value: draft.climatePct } : x)),
       earlyTermination: [{ maxElapsedPct: 25, depositRefundPct: draft.earlyRefund25 }, { maxElapsedPct: 50, depositRefundPct: draft.earlyRefund50 }, { maxElapsedPct: 100, depositRefundPct: 0 }],
       discounts: [
         { code: 'DAI_HAN_6', kind: 'PERCENT', value: draft.disc6, minPeriods: 6, validFrom: null, validTo: null, requiresApprovalRole: null },
@@ -64,6 +65,7 @@ export default function Policies() {
               <div className="grid gap-4 sm:grid-cols-3">
                 {num('hold', 'Thời gian giữ chỗ', 'Chờ thanh toán cọc', 'phút')}
                 {num('depositPeriods', 'Tiền cọc', 'Tính theo số chu kỳ tiền thuê', 'chu kỳ')}
+                {num('climatePct', 'Phụ phí điều hòa (add-on)', 'Khách tự bật lúc đặt, tính theo giá thuê một chu kỳ — riêng từng chi nhánh', '%')}
               </div>
             </section>
             <section>
@@ -122,7 +124,7 @@ function toDraft(p: BusinessPolicy) {
   const fixed = p.lateFees.find((f) => f.kind === 'FIXED');
   return {
     hold: p.reservationHoldMinutes, depositPeriods: p.deposit.value, grace: p.gracePeriodDays, lockout: p.lockoutAfterDays, abandonAfter: p.abandonAfterLockedOutDays,
-    latePct: pctFee?.value ?? 0, lateFixed: fixed?.value ?? 0,
+    latePct: pctFee?.value ?? 0, lateFixed: fixed?.value ?? 0, climatePct: p.surcharges.find((x) => x.code === 'CLIMATE')?.value ?? 0,
     refund72: p.cancellation.find((c) => c.minHoursBeforeStart === 72)?.depositRefundPct ?? 100,
     refund24: p.cancellation.find((c) => c.minHoursBeforeStart === 24)?.depositRefundPct ?? 50,
     earlyRefund25: p.earlyTermination.find((t) => t.maxElapsedPct === 25)?.depositRefundPct ?? 100,
