@@ -10,10 +10,10 @@ import { ContractDocument } from './contract-document';
 import { SignaturePad } from './signature-pad';
 
 /**
- * Bước ký hợp đồng (sau khi trả cọc, trước khi nhận kho). Khách tự ký trên web; `onBehalf` = nhân
- * viên cho khách ký trên thiết bị tại quầy — cùng một API, server ghi nhận ai đã thao tác.
+ * Bước ký hợp đồng (sau khi trả cọc, trước khi nhận kho). CHỈ khách ký, trên tài khoản của chính họ —
+ * server từ chối nhân viên/quản lý, nên màn nhận kho của nhân viên không có form này.
  */
-export function ContractSignForm({ reservation: r, onBehalf = false }: { reservation: Reservation; onBehalf?: boolean }) {
+export function ContractSignForm({ reservation: r }: { reservation: Reservation }) {
   const { db, run } = useStore();
   const [method, setMethod] = useState<SignatureMethod>('DRAWN');
   const [name, setName] = useState(() => userName(db, r.customerId).replace('—', ''));
@@ -38,7 +38,7 @@ export function ContractSignForm({ reservation: r, onBehalf = false }: { reserva
 
       <label className="flex cursor-pointer gap-2.5 text-sm leading-relaxed text-stone-700">
         <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-        <span>{onBehalf ? 'Khách đã đọc và đồng ý toàn bộ nội dung hợp đồng trên, ký xác nhận trên thiết bị này.' : 'Tôi đã đọc và đồng ý toàn bộ nội dung hợp đồng trên.'}</span>
+        <span>Tôi đã đọc và đồng ý toàn bộ nội dung hợp đồng trên.</span>
       </label>
 
       <Button className="w-full" disabled={!valid}

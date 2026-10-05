@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
-import { CircleCheck, KeyRound, ScanLine, Search, TriangleAlert, Undo2 } from 'lucide-react';
+import { CircleCheck, KeyRound, RefreshCw, ScanLine, Search, TriangleAlert, Undo2 } from 'lucide-react';
 import type { CheckInShift, PaymentMethod, Reservation } from '@ssm/shared';
 import { periodLabel } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
@@ -13,8 +13,6 @@ import { fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { QrScanButton } from '@/features/reservations/qr-scanner';
-import { ContractSignForm } from '@/features/contracts/contract-sign-form';
-import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 import { SignatureInfo } from '@/features/contracts/contract-document';
 
 function CheckInInner() {
@@ -105,9 +103,12 @@ function CheckInInner() {
                   ['Thời hạn', periodLabel(r.quote.rentalPeriod, r.periods)], ['Tiền cọc', r.depositPaymentId ? `${vnd(r.quote.depositAmount)} · đã thu` : 'Chưa thu'],
                 ]} />
                 {blockers.length === 0 && !r.signature ? (
-                  <div className="mt-5 border-t border-stone-100 pt-5">
-                    <p className="mb-3 flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><TriangleAlert className="mt-0.5 size-4 shrink-0" />Khách chưa ký hợp đồng — cho khách đọc và ký ngay trên màn hình này trước khi bàn giao kho.</p>
-                    <ContractSignForm reservation={r} onBehalf />
+                  <div className="mt-5 space-y-3 border-t border-stone-100 pt-5">
+                    <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-inset ring-amber-200">
+                      <p className="flex gap-2 font-semibold"><TriangleAlert className="mt-0.5 size-4 shrink-0" />Khách chưa ký hợp đồng — chưa bàn giao kho được.</p>
+                      <p className="mt-2 leading-relaxed">Hợp đồng phải do <b>chính khách</b> ký trên tài khoản của họ; nhân viên không ký thay. Hướng dẫn khách mở web hoặc app KhoAn → <b>Đặt chỗ của tôi</b> → <b>Ký hợp đồng</b> (đặt chỗ <span className="font-mono">{r.code}</span>), ký xong bấm “Kiểm tra lại”.</p>
+                    </div>
+                    <Button variant="secondary" onClick={() => void refresh()}><RefreshCw className="size-4" />Kiểm tra lại</Button>
                   </div>
                 ) : blockers.length > 0 ? (
                   <div className="mt-5 space-y-1 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{blockers.map((b) => <p key={b} className="flex gap-2"><TriangleAlert className="mt-0.5 size-4 shrink-0" />{b}</p>)}</div>
