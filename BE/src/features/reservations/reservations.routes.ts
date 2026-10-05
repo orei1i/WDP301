@@ -80,16 +80,16 @@ reservationsRouter.post('/:id/pay-deposit', authorize('CUSTOMER'), validate({ pa
 });
 
 /**
- * Ký xác nhận hợp đồng sau khi trả cọc. Khách tự ký, hoặc nhân viên cho khách ký trên thiết bị tại quầy
- * (đánh dấu onBehalf). Ảnh chữ ký vẽ tay là PNG data URL nhỏ (≤ ~60KB).
+ * Ký xác nhận hợp đồng sau khi trả cọc — CHỈ chính khách (chủ đặt chỗ) ký, trên tài khoản của họ. Nhân viên
+ * không ký thay: tránh việc nhân viên tự điền tên khách rồi bấm đồng ý. Ảnh chữ ký vẽ tay là PNG data URL
+ * nhỏ (≤ ~60KB).
  */
-reservationsRouter.post('/:id/sign', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+reservationsRouter.post('/:id/sign', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({
   signerName: z.string().min(2).max(100), method: e(SignatureMethod), image: z.string().max(80_000).nullable().optional(),
 }) }), async (req, res) => {
   res.json(await signContract(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
-/** Cấp lại mã QR nhận kho cho app mobile. Mỗi lần gọi vô hiệu hoá mã đã cấp trước đó. */
 /** PDF hợp đồng đã ký (có chữ ký) — khách chủ đặt chỗ hoặc nhân viên/quản lý đúng chi nhánh. */
 reservationsRouter.get('/:id/contract.pdf', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
   const { pdf, filename } = await contractPdfFor(req.auth!.user, req.valid.params.id);
@@ -103,6 +103,7 @@ reservationsRouter.post('/:id/contract/email', authorize('CUSTOMER', 'STAFF', 'F
   res.json(await resendContractEmail(req.auth!.user, req.valid.params.id));
 });
 
+/** Cấp lại mã QR nhận kho cho app mobile. Mỗi lần gọi vô hiệu hoá mã đã cấp trước đó. */
 reservationsRouter.post('/:id/qr', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
   res.json(await reissueCheckInQr(req.auth!.user, req.valid.params.id));
 });

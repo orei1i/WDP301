@@ -263,11 +263,11 @@ export async function lookupForCheckIn(user: UserHydrated, codeOrQr: string) {
   return { reservation: r, customer, qrValid: tokenValid };
 }
 
-// ---------------------------------------------------------------- ký hợp đồng (CUSTOMER chủ đặt chỗ; STAFF/FM cho khách ký tại quầy)
+// ---------------------------------------------------------------- ký hợp đồng (CUSTOMER chủ đặt chỗ — nhân viên không ký thay)
 /**
  * Khách ký xác nhận hợp đồng SAU khi đã trả cọc (CONFIRMED/ALLOCATED) và TRƯỚC khi nhận kho — check-in
- * bị chặn nếu chưa ký. Ký bằng cách vẽ tay (ảnh PNG nhỏ) hoặc gõ họ tên; nhân viên thao tác hộ tại quầy
- * thì đánh dấu onBehalf để về sau biết ai đã bấm. Mỗi đặt chỗ chỉ ký một lần, không sửa lại.
+ * bị chặn nếu chưa ký. Ký bằng cách vẽ tay (ảnh PNG nhỏ) hoặc gõ họ tên. CHỈ chính khách ký trên tài khoản
+ * của họ (route chỉ mở cho CUSTOMER) — nhân viên không ký thay. Mỗi đặt chỗ chỉ ký một lần, không sửa lại.
  */
 export async function signContract(user: UserHydrated, id: string, input: { signerName: string; method: SignatureMethod; image?: string | null }) {
   await signInTxn(user, id, input);
@@ -286,10 +286,10 @@ async function signInTxn(user: UserHydrated, id: string, input: { signerName: st
     if (input.image && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.image)) throw Unprocessable('Ảnh chữ ký không hợp lệ');
     r.signature = {
       signedAt: new Date(), signerName: input.signerName.trim(), method: input.method, image: input.method === 'DRAWN' ? input.image ?? null : null,
-      termsVersion: TERMS_VERSION, policyVersion: r.quote.policyVersion, signedBy: user._id, onBehalf: user.role !== 'CUSTOMER',
+      termsVersion: TERMS_VERSION, policyVersion: r.quote.policyVersion, signedBy: user._id, onBehalf: false,
     };
     await r.save({ session });
-    await audit({ action: 'reservation.sign', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { method: input.method, onBehalf: user.role !== 'CUSTOMER' } } }, session);
+    await audit({ action: 'reservation.sign', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { method: input.method } } }, session);
     return r;
   });
 }
