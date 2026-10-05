@@ -1,38 +1,39 @@
-import { useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { BusinessPolicy, Reservation } from '@ssm/shared';
-import { ACCESS_METHOD, PERIOD_UNIT, TERMS_VERSION, fmtDate, fmtDateTime, periodLabel, vnd } from '@ssm/shared';
+import type { Reservation, SignatureMethod } from '@ssm/shared';
+import { buildContractClauses, fmtDateTime } from '@ssm/shared';
 import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
-import { Badge, Button, Card, Field, Input, Muted } from '../../shared/ui';
+import { Badge, Button, Card, Chips, Field, Input, Muted } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
+import { SignaturePad, canDrawSignature, type SignaturePadHandle } from './signature-pad';
 
 const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://wdp-301-webapp.vercel.app';
-
-function earlyTerminationLines(policy: BusinessPolicy) {
-  const tiers = [...policy.earlyTermination].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct);
-  return tiers.map((t, i) => {
-    const prev = tiers[i - 1]?.maxElapsedPct;
-    const range = prev === undefined ? `đã dùng đến ${t.maxElapsedPct}% kỳ hạn` : i === tiers.length - 1 ? `đã dùng trên ${prev}% kỳ hạn` : `đã dùng trên ${prev}% đến ${t.maxElapsedPct}% kỳ hạn`;
-    return `Trả kho sớm khi ${range}: hoàn ${t.depositRefundPct}% tiền cọc`;
-  });
-}
+const METHODS: { value: SignatureMethod; label: string }[] = [{ value: 'DRAWN', label: 'Ký tay' }, { value: 'TYPED', label: 'Gõ họ tên' }];
 
 /**
- * Bước ký hợp đồng sau khi trả cọc, trước khi nhận kho: đọc tóm tắt hợp đồng rồi gõ họ tên + đồng ý.
- * (Mobile ký bằng họ tên gõ vào — web có thêm ký tay trên canvas; cùng một API, cùng giá trị pháp lý.)
+ * Bước ký hợp đồng sau khi trả cọc, trước khi nhận kho: đọc nội dung hợp đồng rồi ký tay (hoặc gõ họ tên)
+ * và đồng ý. Ký xong, server tự gửi PDF hợp đồng đã ký tới email của khách; có nút gửi lại.
  */
 export function ContractSignCard({ reservation: r }: { reservation: Reservation }) {
-  const { db, user, run } = useStore();
+  const { db, user, run, toast } = useStore();
   const [name, setName] = useState(user?.fullName ?? '');
   const [agree, setAgree] = useState(false);
   const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState<SignatureMethod>(canDrawSignature ? 'DRAWN' : 'TYPED');
+  const [hasInk, setHasInk] = useState(false);
+  const pad = useRef<SignaturePadHandle>(null);
 
   if (r.signature) {
+    const s = r.signature;
     return (
       <Card style={{ marginTop: S.md, backgroundColor: C.greenBg, borderColor: C.green }}>
-        <Text style={{ color: C.green, fontWeight: '700' }}>Đã ký hợp đồng — {r.signature.signerName}</Text>
-        <Muted style={{ marginTop: 2 } as never}>{fmtDateTime(r.signature.signedAt)}{r.signature.onBehalf ? ' · nhân viên thao tác tại quầy' : ''}</Muted>
+        <Text style={{ color: C.green, fontWeight: '700' }}>Đã ký hợp đồng — {s.signerName}</Text>
+        <Muted style={{ marginTop: 2 } as never}>{fmtDateTime(s.signedAt)} · {s.method === 'DRAWN' ? 'ký tay' : 'ký bằng họ tên'}{s.onBehalf ? ' · nhân viên thao tác tại quầy' : ''}</Muted>
+        {s.image ? <Image source={{ uri: s.image }} resizeMode="contain" style={st.sigImg} /> : null}
+        <Muted style={{ marginTop: S.sm } as never}>{s.emailedAt ? `Đã gửi PDF hợp đồng tới ${s.emailedTo ?? 'email của bạn'} lúc ${fmtDateTime(s.emailedAt)}.` : 'PDF hợp đồng chưa được gửi qua email.'}</Muted>
+        <Button title="Gửi lại PDF qua email" variant="secondary" icon="mail-outline" style={{ marginTop: S.sm }}
+          onPress={() => void run('emailContract', { reservationId: r._id }, (v) => `Đã gửi PDF tới ${v.to}`)} />
       </Card>
     );
   }
@@ -41,7 +42,22 @@ export function ContractSignCard({ reservation: r }: { reservation: Reservation 
   const facility = byId(db.facilities, r.facilityId);
   const unit = byId(db.units, r.unitId);
   const type = byId(db.unitTypes, r.unitTypeId);
-  const valid = name.trim().length >= 2 && agree;
+  const clauses = policy ? buildContractClauses({
+    code: r.code, facilityName: facilityName(db, r.facilityId), facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null,
+    customerName: user?.fullName ?? '—', unitTypeName: type?.name ?? typeName(db, r.unitTypeId), unitNumber: unit?.unitNumber, floor: unit?.location.floor,
+    zone: unit?.location.zone, areaM2: type?.areaM2, accessMethod: unit?.accessMethod, useAirConditioning: r.useAirConditioning,
+    rentalPeriod: r.quote.rentalPeriod, periods: r.periods, startDate: r.startDate, endDate: r.endDate, quote: r.quote, depositPaid: !!r.depositPaymentId, policy,
+  }) : [];
+  const valid = name.trim().length >= 2 && agree && (method === 'TYPED' || hasInk);
+
+  const submit = async () => {
+    let image: string | null = null;
+    if (method === 'DRAWN') {
+      image = (await pad.current?.exportPng()) ?? null;
+      if (!image) { toast('Không xuất được chữ ký tay — hãy gõ họ tên để ký', 'error'); setMethod('TYPED'); return; }
+    }
+    void run('signContract', { reservationId: r._id, signerName: name.trim(), method, image }, 'Đã ký hợp đồng — PDF được gửi tới email của bạn');
+  };
 
   return (
     <Card style={{ marginTop: S.md }}>
@@ -58,41 +74,26 @@ export function ContractSignCard({ reservation: r }: { reservation: Reservation 
 
       {open && (
         <View style={st.doc}>
-          <Text style={st.h}>1. Các bên</Text>
-          <Text style={st.p}>Bên cho thuê: KhoAn — {facilityName(db, r.facilityId)}{facility ? `, ${facility.address.line1}, ${facility.address.district}` : ''}.{'\n'}Bên thuê: {user?.fullName ?? '—'}.</Text>
-          <Text style={st.h}>2. Đối tượng thuê</Text>
-          <Text style={st.p}>
-            {type?.name ?? typeName(db, r.unitTypeId)}{unit ? `, ô ${unit.unitNumber} (tầng ${unit.location.floor})` : ''}{type ? `, ${type.areaM2} m²` : ''}
-            {unit ? `, khoá: ${ACCESS_METHOD[unit.accessMethod]}` : ''}. Điều hòa: {r.useAirConditioning ? 'có sử dụng (tính phụ phí)' : 'không sử dụng'}.
-          </Text>
-          <Text style={st.h}>3. Thời hạn</Text>
-          <Text style={st.p}>Từ {fmtDate(r.startDate)}, {periodLabel(r.quote.rentalPeriod, r.periods)} (dự kiến đến {fmtDate(r.endDate)}). Hết hạn mà chưa gia hạn hay trả kho thì tiền thuê tiếp tục được tính theo giá cũ.</Text>
-          <Text style={st.h}>4. Giá và thanh toán</Text>
-          <Text style={st.p}>
-            Giá thuê mỗi {PERIOD_UNIT[r.quote.rentalPeriod]}: {vnd(r.quote.rate)}{r.quote.surchargeAmount > 0 ? `, phụ phí điều hòa ${vnd(r.quote.surchargeAmount)}` : ''}{r.quote.discountAmount > 0 ? `, ưu đãi −${vnd(r.quote.discountAmount)}` : ''}.{'\n'}
-            Tiền thuê kỳ đầu {vnd(r.quote.firstPeriodRent)} (thanh toán khi nhận kho). Tiền cọc {vnd(r.quote.depositAmount)} — đã thanh toán.
-            {policy ? `\nQuá hạn quá ${policy.gracePeriodDays} ngày bị tính phí trễ; quá ${policy.lockoutAfterDays} ngày bị khoá truy cập.` : ''}
-          </Text>
-          {policy && (
-            <>
-              <Text style={st.h}>5. Hủy, trả kho sớm và hàng bỏ lại</Text>
-              <Text style={st.p}>
-                {[...policy.cancellation].sort((a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart)
-                  .map((t) => `${t.minHoursBeforeStart > 0 ? `Hủy trước ngày nhận ≥ ${t.minHoursBeforeStart} giờ` : 'Hủy sát ngày nhận'}: hoàn ${t.depositRefundPct}% cọc`).join('\n')}
-                {'\n'}{earlyTerminationLines(policy).join('\n')}
-                {`\nBị khoá truy cập quá ${policy.abandonAfterLockedOutDays} ngày mà không đóng tiền hay liên hệ: chi nhánh được kiểm kê, thanh lý đồ trong kho và giữ toàn bộ tiền cọc.`}
-              </Text>
-            </>
-          )}
-          <Text style={st.p}>
-            Hai bên thực hiện theo{' '}
-            <Text style={st.link} onPress={() => Linking.openURL(`${WEB_ORIGIN}/dieu-khoan`)}>Điều khoản thuê kho (v{TERMS_VERSION})</Text>.
-          </Text>
+          {clauses.map((c) => (
+            <View key={c.title}>
+              <Text style={st.h}>{c.title}</Text>
+              {c.paragraphs.map((p) => <Text key={p} style={st.p}>{p}</Text>)}
+              {c.bullets.map((b) => <Text key={b} style={st.p}>• {b}</Text>)}
+            </View>
+          ))}
+          <Text style={[st.p, st.link]} onPress={() => Linking.openURL(`${WEB_ORIGIN}/dieu-khoan`)}>Xem Điều khoản thuê kho đầy đủ</Text>
         </View>
       )}
 
+      {canDrawSignature && (
+        <View style={{ marginTop: S.md }}>
+          <Chips options={METHODS} value={method} onChange={setMethod} columns={2} />
+        </View>
+      )}
+      {method === 'DRAWN' && <View style={{ marginTop: S.md }}><SignaturePad ref={pad} onInkChange={setHasInk} /></View>}
+
       <View style={{ marginTop: S.md }}>
-        <Field label="Gõ đầy đủ họ tên để ký" hint="Họ tên gõ vào có giá trị như chữ ký xác nhận hợp đồng.">
+        <Field label={method === 'DRAWN' ? 'Họ tên người ký' : 'Gõ đầy đủ họ tên để ký'} hint={method === 'TYPED' ? 'Họ tên gõ vào có giá trị như chữ ký xác nhận hợp đồng.' : undefined}>
           <Input value={name} onChangeText={setName} autoCapitalize="words" />
         </Field>
       </View>
@@ -100,13 +101,7 @@ export function ContractSignCard({ reservation: r }: { reservation: Reservation 
         <Ionicons name={agree ? 'checkbox' : 'square-outline'} size={22} color={agree ? C.brand700 : C.faint} />
         <Text style={st.consentText}>Tôi đã đọc và đồng ý toàn bộ nội dung hợp đồng trên.</Text>
       </Pressable>
-      <Button
-        title="Ký & xác nhận hợp đồng"
-        icon="create-outline"
-        style={{ marginTop: S.md }}
-        disabled={!valid}
-        onPress={() => void run('signContract', { reservationId: r._id, signerName: name.trim(), method: 'TYPED' }, 'Đã ký hợp đồng')}
-      />
+      <Button title="Ký & xác nhận hợp đồng" icon="create-outline" style={{ marginTop: S.md }} disabled={!valid} onPress={() => void submit()} />
     </Card>
   );
 }
@@ -119,7 +114,8 @@ const st = StyleSheet.create({
   doc: { backgroundColor: C.bg, borderRadius: R.md, padding: S.md, gap: 4 },
   h: { fontSize: 13, fontWeight: '700', color: C.ink, marginTop: S.sm },
   p: { fontSize: 13, color: C.text, lineHeight: 19 },
-  link: { color: C.brand700, fontWeight: '600' },
+  link: { color: C.brand700, fontWeight: '600', marginTop: S.sm },
   consent: { flexDirection: 'row', alignItems: 'flex-start', gap: S.sm },
   consentText: { flex: 1, fontSize: 13, color: C.text, lineHeight: 19 },
+  sigImg: { width: '100%', height: 70, marginTop: S.sm, backgroundColor: '#fff', borderRadius: R.md },
 });

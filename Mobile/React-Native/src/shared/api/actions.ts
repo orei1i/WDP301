@@ -90,7 +90,9 @@ export const actions = {
     await api.post(`/services/orders/${p.orderId}/cancel`, {});
   },
 
-  // ---- ký hợp đồng (gõ họ tên) sau khi trả cọc, trước khi nhận kho
+  emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),
+
+  // ---- ký hợp đồng (vẽ tay hoặc gõ họ tên) sau khi trả cọc, trước khi nhận kho
   signContract: async (p: { reservationId: string; signerName: string; method: SignatureMethod; image?: string | null }) =>
     api.post<Reservation>(`/reservations/${p.reservationId}/sign`, { signerName: p.signerName, method: p.method, image: p.image ?? null }),
 };
