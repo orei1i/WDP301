@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, Role } from '@ssm/shared';
+import { enumValues, Role, UnitCategory } from '@ssm/shared';
 import { PolicyModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
@@ -37,6 +37,11 @@ policiesRouter.post('/', authorize('OPS_MANAGER'), validate({ body: z.object({
     lateFees: z.array(z.object({ afterDays: z.number().min(0), kind: z.enum(['FIXED', 'PERCENT_OF_RENT']), value: z.number().min(0), recurringEveryDays: z.number().int().min(1).nullable().default(null) })).max(10),
     cancellation: z.array(tier).max(10),
     earlyTermination: z.array(earlyTerminationTier).max(10),
+    // Phụ phí add-on (VD CLIMATE = điều hòa) — chính sách riêng từng chi nhánh nên giá add-on cũng riêng từng chi nhánh.
+    surcharges: z.array(z.object({
+      code: z.string().min(1).max(30), label: z.string().min(1).max(100), kind: z.enum(['FIXED', 'PERCENT']),
+      value: z.number().min(0), categories: z.array(e(UnitCategory)),
+    })).max(10),
     discounts: z.array(z.object({ code: z.string(), kind: z.enum(['FIXED', 'PERCENT']), value: z.number().min(0), minPeriods: z.number().int().min(1), validFrom: z.coerce.date().nullable().default(null), validTo: z.coerce.date().nullable().default(null), requiresApprovalRole: e(Role).nullable().default(null) })).max(20),
   }).partial().strict(),
 }) }), async (req, res) => {

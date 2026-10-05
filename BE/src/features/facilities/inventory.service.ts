@@ -1,10 +1,19 @@
-import type { AccessMethod, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
-import { FacilityModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
+import type { AccessMethod, FacilityStatus, RentalPeriod, UnitCategory, UnitStatus } from '@ssm/shared';
+import { FacilityModel, RentalContractModel, ReservationModel, ServiceOfferingModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
+import { withTxn } from '../../shared/db/txn';
+import { currentActorId } from '../../shared/core/request-context';
 import { Conflict, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertFacility } from '../../shared/http/scope';
 import { availability } from './availability';
 import { climateEligible, effectivePolicy, quote } from '../policies/pricing';
 import { audit } from '../audit/audit.service';
+
+
+/** Facility/UnitType dùng softDeletePlugin nhưng không khai báo method trong kiểu — đặt cờ trực tiếp, cùng hiệu ứng softDelete(). */
+async function softDeleteDoc(doc: { set: (v: Record<string, unknown>) => unknown; save: () => Promise<unknown> }) {
+  doc.set({ isDeleted: true, deletedAt: new Date(), deletedBy: currentActorId() ?? null });
+  await doc.save();
+}
 
 // ---------------------------------------------------------------- public catalogue
 export async function listFacilitiesPublic() {
@@ -32,8 +41,10 @@ export async function facilityDetailPublic(id: string, period: RentalPeriod = 'M
     const acEligible = climateEligible(policy, t.category);
     return { ...t, acEligible, quote: quote(t, policy, period, periods, acEligible && useAirConditioning), availability: await availability(f._id, t._id) };
   }));
+  // Dịch vụ thêm (đặt sau khi thuê) — giá riêng từng chi nhánh, chỉ để khách tham khảo trước khi đặt kho.
+  const services = await ServiceOfferingModel.find({ facilityId: f._id, isActive: true }, { code: 1, name: 1, description: 1, price: 1, unitLabel: 1 }).sort({ price: 1 }).lean();
   return {
-    facility: f, unitTypes,
+    facility: f, unitTypes, services,
     policy: {
       version: policy.version, scope: policy.scope, reservationHoldMinutes: policy.reservationHoldMinutes,
       cancellation: policy.cancellation, earlyTermination: policy.earlyTermination, minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
@@ -77,6 +88,23 @@ export async function saveFacility(id: string | null, input: { code?: string; na
   return f;
 }
 
+/** Xoá mềm — chỉ khi chi nhánh chưa từng phát sinh ô kho/đặt chỗ/hợp đồng; còn lại dùng "Tạm ngưng". */
+export async function deleteFacility(id: string) {
+  const f = await FacilityModel.findById(id);
+  if (!f) throw NotFound('chi nhánh');
+  const [units, contract, reservation] = await Promise.all([
+    StorageUnitModel.countDocuments({ facilityId: f._id }),
+    RentalContractModel.exists({ facilityId: f._id }),
+    ReservationModel.exists({ facilityId: f._id }),
+  ]);
+  if (units) throw Conflict(`Chi nhánh còn ${units} ô kho — xoá hết ô trước, hoặc chuyển trạng thái Tạm ngưng`);
+  if (contract || reservation) throw Conflict('Chi nhánh đã có đặt chỗ/hợp đồng — chỉ tạm ngưng, không xoá');
+  await UnitTypeModel.updateMany({ facilityId: f._id }, { $set: { isDeleted: true, deletedAt: new Date() } });
+  await softDeleteDoc(f);
+  await audit({ action: 'facility.delete', entityType: 'Facility', entityId: f._id, facilityId: f._id });
+  return { id: String(f._id) };
+}
+
 // ---------------------------------------------------------------- pricing (OPS)
 /** Sửa 1-3 giá chu kỳ của loại kho (khách tự chọn chu kỳ nào thì tính theo giá đó). */
 export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record<RentalPeriod, number>>) {
@@ -89,6 +117,74 @@ export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record
   await ut.save();
   await audit({ action: 'pricing.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before, after: ut.rates } });
   return ut;
+}
+
+// ---------------------------------------------------------------- unit types (OPS)
+export interface UnitTypeInput {
+  code: string; name: string; category: UnitCategory; description?: string;
+  widthM: number; depthM: number; heightM: number; indoor: boolean;
+  rates: Record<RentalPeriod, number>; depositOverride?: number | null; minPeriods: number;
+}
+
+export async function createUnitType(facilityId: string, input: UnitTypeInput) {
+  const f = await FacilityModel.findById(facilityId);
+  if (!f) throw NotFound('chi nhánh');
+  const code = input.code.trim().toUpperCase();
+  if (await UnitTypeModel.exists({ facilityId: f._id, code })) throw Conflict(`Mã loại kho ${code} đã tồn tại trong chi nhánh này`);
+  const ut = await UnitTypeModel.create({
+    facilityId: f._id, code, name: input.name.trim(), category: input.category, description: input.description,
+    dimensions: { widthM: input.widthM, depthM: input.depthM, heightM: input.heightM }, areaM2: Math.round(input.widthM * input.depthM * 100) / 100,
+    features: { indoor: input.indoor }, rates: input.rates, depositOverride: input.depositOverride ?? null, minPeriods: input.minPeriods,
+  });
+  await audit({ action: 'unit_type.create', entityType: 'UnitType', entityId: ut._id, facilityId: f._id, changes: { after: { code, name: ut.name, category: ut.category, rates: ut.rates } } });
+  return ut;
+}
+
+export interface UnitTypePatch {
+  name?: string; description?: string; widthM?: number; depthM?: number; heightM?: number; indoor?: boolean;
+  depositOverride?: number | null; minPeriods?: number; isActive?: boolean; rates?: Partial<Record<RentalPeriod, number>>;
+}
+
+/** Mã và nhóm cỡ (category) cố định sau khi tạo — nhóm cỡ quyết định điều hòa add-on, đổi sẽ lệch hợp đồng cũ. */
+export async function updateUnitType(id: string, patch: UnitTypePatch) {
+  const ut = await UnitTypeModel.findById(id);
+  if (!ut) throw NotFound('loại kho');
+  if (patch.isActive === false && ut.isActive) {
+    const busy = await StorageUnitModel.exists({ unitTypeId: ut._id, status: { $in: ['RESERVED', 'OCCUPIED', 'PENDING_INSPECTION'] } });
+    if (busy) throw Conflict('Loại kho còn ô đang giữ chỗ/đang thuê — chưa ẩn được');
+  }
+  const before = { name: ut.name, rates: { ...ut.rates }, isActive: ut.isActive, areaM2: ut.areaM2 };
+  if (patch.name !== undefined) ut.name = patch.name.trim();
+  if (patch.description !== undefined) ut.description = patch.description;
+  if (patch.widthM !== undefined || patch.depthM !== undefined || patch.heightM !== undefined) {
+    ut.set('dimensions', { widthM: patch.widthM ?? ut.dimensions.widthM, depthM: patch.depthM ?? ut.dimensions.depthM, heightM: patch.heightM ?? ut.dimensions.heightM });
+  }
+  if (patch.indoor !== undefined) ut.set('features.indoor', patch.indoor);
+  if (patch.depositOverride !== undefined) ut.depositOverride = patch.depositOverride;
+  if (patch.minPeriods !== undefined) ut.minPeriods = patch.minPeriods;
+  if (patch.isActive !== undefined) ut.isActive = patch.isActive;
+  for (const [period, rate] of Object.entries(patch.rates ?? {}) as [RentalPeriod, number | undefined][]) {
+    if (rate !== undefined) ut.set(`rates.${period}`, rate);
+  }
+  await ut.save();
+  await audit({ action: 'unit_type.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before, after: { name: ut.name, rates: ut.rates, isActive: ut.isActive, areaM2: ut.areaM2 } } });
+  return ut;
+}
+
+/** Xoá mềm — chỉ khi loại kho chưa có ô nào và chưa từng có đặt chỗ/hợp đồng; còn lại dùng "ẩn". */
+export async function deleteUnitType(id: string) {
+  const ut = await UnitTypeModel.findById(id);
+  if (!ut) throw NotFound('loại kho');
+  const [units, contract, reservation] = await Promise.all([
+    StorageUnitModel.countDocuments({ unitTypeId: ut._id }),
+    RentalContractModel.exists({ unitTypeId: ut._id }),
+    ReservationModel.exists({ unitTypeId: ut._id }),
+  ]);
+  if (units) throw Conflict(`Loại kho còn ${units} ô — xoá hết ô trước, hoặc chỉ ẩn loại kho`);
+  if (contract || reservation) throw Conflict('Loại kho đã có đặt chỗ/hợp đồng — chỉ ẩn, không xoá');
+  await softDeleteDoc(ut);
+  await audit({ action: 'unit_type.delete', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId });
+  return { id: String(ut._id) };
 }
 
 // ---------------------------------------------------------------- units (STAFF, FM)
@@ -104,6 +200,68 @@ export async function addUnit(user: UserHydrated, input: {
   });
   await audit({ action: 'unit.create', entityType: 'StorageUnit', entityId: u._id, facilityId: ut.facilityId });
   return u;
+}
+
+/** Thêm nhiều ô liền mã (VD tiền tố "M2-" từ 1 đến 12 → M2-01 … M2-12) cùng tầng/khu/hình thức khoá. */
+export async function addUnitsBulk(user: UserHydrated, input: {
+  unitTypeId: string; floor: number; zone?: string; accessMethod: AccessMethod; prefix: string; start: number; count: number;
+}) {
+  const ut = await UnitTypeModel.findById(input.unitTypeId);
+  if (!ut) throw NotFound('loại kho');
+  await assertFacility(user, ut.facilityId, 'unit.create');
+  const width = Math.max(2, String(input.start + input.count - 1).length);
+  const numbers = Array.from({ length: input.count }, (_, i) => `${input.prefix.toUpperCase()}${String(input.start + i).padStart(width, '0')}`);
+  if (numbers.some((n) => n.length > 20)) throw Unprocessable('Mã kho quá dài (tối đa 20 ký tự) — rút ngắn tiền tố');
+  const dup = await StorageUnitModel.find({ facilityId: ut.facilityId, unitNumber: { $in: numbers } }, { unitNumber: 1 }).lean();
+  if (dup.length) throw Conflict(`Mã kho đã tồn tại: ${dup.slice(0, 5).map((d) => d.unitNumber).join(', ')}${dup.length > 5 ? '…' : ''}`);
+  const created = await withTxn(async (session) => StorageUnitModel.create(
+    numbers.map((n) => ({
+      facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: n,
+      location: { building: 'A', floor: input.floor, zone: input.zone || undefined }, accessMethod: input.accessMethod,
+    })),
+    { session, ordered: true },
+  ));
+  await audit({ action: 'unit.bulk_create', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { after: { count: created.length, first: numbers[0], last: numbers[numbers.length - 1] } } });
+  return { count: created.length };
+}
+
+const EDITABLE_UNIT_STATUS: UnitStatus[] = ['AVAILABLE', 'MAINTENANCE'];
+
+/** Chỉ sửa/xoá được ô đang Trống hoặc Bảo trì — ô có đặt chỗ/hợp đồng phải đi qua quy trình nghiệp vụ. */
+async function loadEditableUnit(user: UserHydrated, id: string, action: string) {
+  const u = await StorageUnitModel.findById(id);
+  if (!u) throw NotFound('kho');
+  await assertFacility(user, u.facilityId, action);
+  if (!EDITABLE_UNIT_STATUS.includes(u.status) || u.currentReservationId || u.currentContractId || u.currentSwapRequestId) {
+    throw Conflict('Chỉ sửa/xoá được ô đang Trống hoặc Bảo trì', 'FLOW_ONLY');
+  }
+  return u;
+}
+
+export async function updateUnit(user: UserHydrated, id: string, patch: { unitNumber?: string; floor?: number; zone?: string; accessMethod?: AccessMethod }) {
+  const u = await loadEditableUnit(user, id, 'unit.update');
+  const before = { unitNumber: u.unitNumber, floor: u.location.floor, zone: u.location.zone, accessMethod: u.accessMethod };
+  if (patch.unitNumber !== undefined) {
+    const next = patch.unitNumber.trim().toUpperCase();
+    if (next !== u.unitNumber && await StorageUnitModel.exists({ facilityId: u.facilityId, unitNumber: next })) throw Conflict(`Mã kho ${next} đã tồn tại`);
+    u.unitNumber = next;
+  }
+  if (patch.floor !== undefined) u.set('location.floor', patch.floor);
+  if (patch.zone !== undefined) u.set('location.zone', patch.zone || undefined);
+  if (patch.accessMethod !== undefined) u.accessMethod = patch.accessMethod;
+  await u.save();
+  await audit({ action: 'unit.update', entityType: 'StorageUnit', entityId: u._id, facilityId: u.facilityId, changes: { before, after: { unitNumber: u.unitNumber, floor: u.location.floor, zone: u.location.zone, accessMethod: u.accessMethod } } });
+  return u;
+}
+
+/** Xoá mềm — ô đã từng có đặt chỗ/hợp đồng thì giữ lại để không mất lịch sử, chuyển Bảo trì thay vì xoá. */
+export async function deleteUnit(user: UserHydrated, id: string) {
+  const u = await loadEditableUnit(user, id, 'unit.delete');
+  const [contract, reservation] = await Promise.all([RentalContractModel.exists({ unitId: u._id }), ReservationModel.exists({ unitId: u._id })]);
+  if (contract || reservation) throw Conflict('Ô đã có lịch sử đặt/thuê — chuyển sang Bảo trì thay vì xoá');
+  await u.softDelete();
+  await audit({ action: 'unit.delete', entityType: 'StorageUnit', entityId: u._id, facilityId: u.facilityId });
+  return { id: String(u._id) };
 }
 
 /**

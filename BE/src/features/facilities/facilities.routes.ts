@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AccessMethod, enumValues, FacilityStatus, RentalPeriod, UnitStatus } from '@ssm/shared';
+import { AccessMethod, enumValues, FacilityStatus, RentalPeriod, UnitCategory, UnitStatus } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { scopeFilter, scopeQueryFacility, assertFacility } from '../../shared/http/scope';
-import { idParams, validate, zId } from '../../shared/http/validate';
-import { addUnit, facilityDetailPublic, floorPlan, listFacilitiesPublic, saveFacility, setUnitTypeRates, setUnitStatus } from './inventory.service';
+import { idParams, validate, zId, zMoney } from '../../shared/http/validate';
+import {
+  addUnit, addUnitsBulk, createUnitType, deleteFacility, deleteUnit, deleteUnitType, facilityDetailPublic, floorPlan, listFacilitiesPublic,
+  saveFacility, setUnitTypeRates, setUnitStatus, updateUnit, updateUnitType,
+} from './inventory.service';
 
 const e = <T extends string>(o: Record<string, T>) => z.enum(enumValues(o) as [T, ...T[]]);
 
@@ -47,11 +50,33 @@ facilitiesRouter.post('/', authorize('OPS_MANAGER', 'ADMIN'), validate({ body: f
 facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams, body: facilityBody.omit({ code: true }) }), async (req, res) => {
   res.json(await saveFacility(req.valid.params.id, req.valid.body));
 });
+facilitiesRouter.delete('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams }), async (req, res) => {
+  res.json(await deleteFacility(req.valid.params.id));
+});
 
 // ---- unit types & pricing
 facilitiesRouter.get('/:id/unit-types', validate({ params: idParams }), async (req, res) => {
   await assertFacility(req.auth!.user, req.valid.params.id);
   res.json({ items: await UnitTypeModel.find({ facilityId: req.valid.params.id }).sort({ 'rates.MONTH': 1 }) });
+});
+const dim = z.number().min(0.3).max(30);
+const rate = z.number().int().min(1_000);
+const unitTypeBody = z.object({
+  code: z.string().regex(/^[A-Za-z0-9.-]{2,20}$/, 'Mã 2–20 ký tự chữ/số/./-'), name: z.string().min(2).max(100), category: e(UnitCategory),
+  description: z.string().max(2000).optional(), widthM: dim, depthM: dim, heightM: dim, indoor: z.boolean(),
+  rates: z.object({ DAY: rate, WEEK: rate, MONTH: rate }), depositOverride: zMoney.nullable().optional(), minPeriods: z.number().int().min(1).max(365),
+});
+const unitTypePatch = unitTypeBody.omit({ code: true, category: true, rates: true }).partial().extend({
+  rates: z.object({ DAY: rate.optional(), WEEK: rate.optional(), MONTH: rate.optional() }).optional(), isActive: z.boolean().optional(),
+});
+facilitiesRouter.post('/:id/unit-types', authorize('OPS_MANAGER'), validate({ params: idParams, body: unitTypeBody }), async (req, res) => {
+  res.status(201).json(await createUnitType(req.valid.params.id, req.valid.body));
+});
+facilitiesRouter.patch('/unit-types/:id', authorize('OPS_MANAGER'), validate({ params: idParams, body: unitTypePatch }), async (req, res) => {
+  res.json(await updateUnitType(req.valid.params.id, req.valid.body));
+});
+facilitiesRouter.delete('/unit-types/:id', authorize('OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await deleteUnitType(req.valid.params.id));
 });
 facilitiesRouter.patch('/unit-types/:id/price', authorize('OPS_MANAGER'), validate({ params: idParams, body: z.object({
   rates: z.object({ DAY: z.number().int().min(1_000).optional(), WEEK: z.number().int().min(1_000).optional(), MONTH: z.number().int().min(1_000).optional() }),
@@ -70,11 +95,27 @@ unitsRouter.get('/', validate({ query: z.object({ facilityId: zId, status: z.enu
   res.json({ items });
 });
 
-unitsRouter.post('/', authorize('FACILITY_MANAGER'), validate({ body: z.object({
+// Quản lý chi nhánh (trong phạm vi) và Quản lý vận hành (toàn chuỗi) cùng thêm/sửa/xoá ô kho.
+unitsRouter.post('/', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ body: z.object({
   unitTypeId: zId, unitNumber: z.string().min(1).max(20), floor: z.number().int().min(-5).max(100), zone: z.string().optional(),
   accessMethod: e(AccessMethod).default('PIN'),
 }) }), async (req, res) => {
   res.status(201).json(await addUnit(req.auth!.user, req.valid.body));
+});
+unitsRouter.post('/bulk', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ body: z.object({
+  unitTypeId: zId, floor: z.number().int().min(-5).max(100), zone: z.string().max(50).optional(), accessMethod: e(AccessMethod).default('PIN'),
+  prefix: z.string().min(1).max(12).regex(/^[A-Za-z0-9-]+$/, 'Tiền tố chỉ gồm chữ/số/-'), start: z.number().int().min(0).max(9999), count: z.number().int().min(1).max(200),
+}) }), async (req, res) => {
+  res.status(201).json(await addUnitsBulk(req.auth!.user, req.valid.body));
+});
+unitsRouter.patch('/:id', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams, body: z.object({
+  unitNumber: z.string().min(1).max(20).optional(), floor: z.number().int().min(-5).max(100).optional(),
+  zone: z.string().max(50).optional(), accessMethod: e(AccessMethod).optional(),
+}) }), async (req, res) => {
+  res.json(await updateUnit(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+unitsRouter.delete('/:id', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await deleteUnit(req.auth!.user, req.valid.params.id));
 });
 
 unitsRouter.patch('/:id/status', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ to: z.enum(['AVAILABLE', 'MAINTENANCE']), reason: z.string().max(500).optional() }) }), async (req, res) => {
