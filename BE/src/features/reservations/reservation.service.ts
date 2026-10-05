@@ -11,6 +11,7 @@ import { addDays, addPeriodsUTC, todayUTC, toDateOnly } from '../../shared/utils
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment, randomToken, sha256, sixDigitPin } from '../payments/payment.service';
+import { emailContract } from './contract-document.service';
 
 const loadReservation = async (id: string, session?: ClientSession) => {
   const r = await ReservationModel.findById(id).session(session ?? null);
@@ -269,6 +270,13 @@ export async function lookupForCheckIn(user: UserHydrated, codeOrQr: string) {
  * thì đánh dấu onBehalf để về sau biết ai đã bấm. Mỗi đặt chỗ chỉ ký một lần, không sửa lại.
  */
 export async function signContract(user: UserHydrated, id: string, input: { signerName: string; method: SignatureMethod; image?: string | null }) {
+  await signInTxn(user, id, input);
+  // Gửi ngay PDF hợp đồng đã ký tới email khách — lỗi/thiếu cấu hình SMTP không làm hỏng việc ký; chờ tối đa 10 giây rồi trả kết quả.
+  await Promise.race([emailContract(null, id).catch((e) => console.error('[contract-email]', e)), new Promise((resolve) => setTimeout(resolve, 10_000))]);
+  return loadReservation(id);
+}
+
+async function signInTxn(user: UserHydrated, id: string, input: { signerName: string; method: SignatureMethod; image?: string | null }) {
   return withTxn(async (session) => {
     const r = await loadReservation(id, session);
     await assertCanAccess(user, r, 'reservation.sign');

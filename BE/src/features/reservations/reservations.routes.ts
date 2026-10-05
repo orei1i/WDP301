@@ -7,6 +7,7 @@ import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId } from '../../shared/http/validate';
+import { contractPdfFor, resendContractEmail } from './contract-document.service';
 import {
   allocate, cancelReservation, checkIn, createReservation, createReservationsBatch, lookupForCheckIn, payDeposit,
   reissueCheckInQr, signContract, unallocate, type BookingItem,
@@ -89,6 +90,19 @@ reservationsRouter.post('/:id/sign', authorize('CUSTOMER', 'STAFF', 'FACILITY_MA
 });
 
 /** Cấp lại mã QR nhận kho cho app mobile. Mỗi lần gọi vô hiệu hoá mã đã cấp trước đó. */
+/** PDF hợp đồng đã ký (có chữ ký) — khách chủ đặt chỗ hoặc nhân viên/quản lý đúng chi nhánh. */
+reservationsRouter.get('/:id/contract.pdf', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  const { pdf, filename } = await contractPdfFor(req.auth!.user, req.valid.params.id);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(pdf);
+});
+
+/** Gửi lại PDF hợp đồng đã ký tới email của khách (tối thiểu 60 giây giữa hai lần). */
+reservationsRouter.post('/:id/contract/email', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await resendContractEmail(req.auth!.user, req.valid.params.id));
+});
+
 reservationsRouter.post('/:id/qr', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
   res.json(await reissueCheckInQr(req.auth!.user, req.valid.params.id));
 });

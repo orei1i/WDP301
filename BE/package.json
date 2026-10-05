@@ -13,10 +13,13 @@
   "dependencies": {
     "@ssm/shared": "*",
     "cors": "^2.8.5",
+    "dejavu-fonts-ttf": "^2.37.3",
     "express": "^5.1.0",
     "firebase-admin": "^13.0.0",
     "helmet": "^8.0.0",
     "mongoose": "^8.9.0",
+    "nodemailer": "^10.0.14",
+    "pdfkit": "^0.20.2",
     "swagger-ui-express": "^5.0.1",
     "tsx": "^4.19.0",
     "zod": "^3.24.0",
@@ -26,6 +29,8 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pdfkit": "^0.17.6",
     "@types/swagger-ui-express": "^4.1.7",
     "typescript": "^5"
   },

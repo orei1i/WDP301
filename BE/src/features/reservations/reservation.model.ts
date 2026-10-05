@@ -84,6 +84,8 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
       policyVersion: { type: Number, required: true, min: 1 },
       signedBy: refOpt('User'),
       onBehalf: { type: Boolean, default: false },
+      emailedAt: { type: Date, default: null },
+      emailedTo: { type: String, default: null, maxlength: 120 },
     }, subOptions),
     default: null,
   },

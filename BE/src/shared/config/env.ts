@@ -23,6 +23,13 @@ const schema = z.object({
   // Tùy chọn: điền sẵn mật khẩu cho nút tài khoản demo trên trang /api.
   // CẢNH BÁO: trang /api công khai, đặt biến này là công bố mật khẩu demo. Chỉ dùng cho DB demo.
   DOC_DEMO_PASSWORD: z.string().optional(),
+  // Gửi email hợp đồng PDF cho khách. Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<gmail>, SMTP_PASS=<Mật khẩu ứng dụng 16 ký tự>.
+  // Bỏ trống thì hệ thống vẫn chạy bình thường, chỉ không gửi được email (khách vẫn tải được PDF).
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().default(465),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
