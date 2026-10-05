@@ -98,6 +98,16 @@ Enum payment_type {
   REFUND
   WAIVER
   COMPENSATION
+  SERVICE
+}
+Enum service_order_status {
+  REQUESTED
+  DONE
+  CANCELLED
+}
+Enum signature_method {
+  DRAWN
+  TYPED
 }
 Enum payment_status {
   PENDING
@@ -238,6 +248,11 @@ Table reservations {
   contract_id objectid
   hold_expires_at datetime [note: 'chỉ khi PENDING']
   qr_token_hash varchar [note: 'checkIn — chỉ lưu hash']
+  "signature.signed_at" datetime [note: 'khách ký sau khi trả cọc, trước khi nhận kho — chưa ký thì check-in bị chặn']
+  "signature.signer_name" varchar
+  "signature.method" signature_method
+  "signature.image" varchar [note: 'PNG data URL của chữ ký vẽ tay, ≤ ~60KB; null nếu gõ họ tên']
+  "signature.on_behalf" boolean [note: 'true = nhân viên cho khách ký tại quầy']
 }
 
 Table rental_contracts {
@@ -265,6 +280,7 @@ Table rental_contracts {
   "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash']
   "terms.policy_id" objectid
   "terms.policy_version" int
+  "terms.signer_name" varchar [note: 'chép từ reservations.signature lúc nhận kho']
 }
 
 Table payment_transactions {
@@ -372,6 +388,37 @@ Table unit_swap_requests {
   indexes { (contract_id) [unique, note: 'chỉ 1 yêu cầu đang mở (SUBMITTED/APPROVED) mỗi hợp đồng'] }
 }
 
+Table service_offerings {
+  id objectid [pk]
+  facility_id objectid
+  code varchar [note: 'duy nhất trong chi nhánh, VD PACK-BOX']
+  name varchar
+  description varchar
+  price int [note: 'đơn giá một đơn vị (VND) — mỗi chi nhánh tự đặt giá']
+  unit_label varchar [note: 'lần, thùng, giờ, chuyến, tháng...']
+  is_active boolean
+
+  indexes { (facility_id, code) [unique] }
+}
+
+Table service_orders {
+  id objectid [pk]
+  order_number varchar [unique]
+  facility_id objectid
+  customer_id objectid
+  contract_id objectid
+  service_id objectid
+  service_name varchar [note: 'chốt lúc đặt']
+  unit_price int [note: 'chốt lúc đặt']
+  quantity int
+  total int
+  preferred_date date
+  status service_order_status
+  payment_id objectid [note: 'khoản SERVICE trả ngay lúc đặt']
+  refund_payment_id objectid [note: 'có khi huỷ — hoàn đủ']
+  completed_at datetime
+}
+
 Table audit_logs {
   id objectid [pk]
   at datetime
@@ -429,3 +476,9 @@ Ref: unit_swap_requests.to_unit_id > storage_units.id
 Ref: unit_swap_requests.decided_by > users.id
 Ref: unit_swap_requests.payment_id - payment_transactions.id
 Ref: storage_units.current_swap_request_id - unit_swap_requests.id
+Ref: service_offerings.facility_id > facilities.id
+Ref: service_orders.facility_id > facilities.id
+Ref: service_orders.customer_id > users.id
+Ref: service_orders.contract_id > rental_contracts.id
+Ref: service_orders.service_id > service_offerings.id
+Ref: service_orders.payment_id - payment_transactions.id

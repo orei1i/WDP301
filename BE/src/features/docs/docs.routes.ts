@@ -92,7 +92,32 @@ export const API_GROUPS: Group[] = [
         ],
       },
       { method: 'PATCH', path: '/facilities/:id', auth: ['OPS_MANAGER', 'ADMIN'], summary: 'Cập nhật chi nhánh (không đổi được code).' },
+      {
+        method: 'DELETE', path: '/facilities/:id', auth: ['OPS_MANAGER', 'ADMIN'], summary: 'Xoá mềm chi nhánh.',
+        notes: ['Chỉ xoá được khi chưa có ô kho, đặt chỗ hay hợp đồng nào — ngược lại 409, dùng trạng thái "Tạm ngưng".'],
+      },
       { method: 'GET', path: '/facilities/:id/unit-types', auth: 'ANY', summary: 'Các loại ô kho của chi nhánh, sắp theo giá tăng dần.', notes: ['Bị chặn nếu chi nhánh nằm ngoài phạm vi của người gọi.'] },
+      {
+        method: 'POST', path: '/facilities/:id/unit-types', auth: R.OPS, summary: 'Thêm loại tủ/phòng thuê cho chi nhánh.',
+        body: [
+          { name: 'code', type: 'string [A-Za-z0-9.-]{2,20}', required: true, note: 'duy nhất trong chi nhánh' },
+          { name: 'name', type: 'string 2..100', required: true },
+          { name: 'category', type: 'UnitCategory', required: true, note: 'quyết định loại kho có tuỳ chọn điều hòa hay không' },
+          { name: 'widthM / depthM / heightM', type: 'number 0.3..30', required: true },
+          { name: 'indoor', type: 'boolean', required: true },
+          { name: 'rates', type: '{ DAY, WEEK, MONTH } int ≥ 1.000', required: true },
+          { name: 'minPeriods', type: 'int 1..365', required: true },
+          { name: 'depositOverride', type: 'int | null', note: 'bỏ trống = tính theo chính sách' },
+        ],
+      },
+      {
+        method: 'PATCH', path: '/facilities/unit-types/:id', auth: R.OPS, summary: 'Sửa loại kho (tên, kích thước, giá, ẩn/hiện).',
+        notes: ['Không đổi được code và category. Ẩn (isActive=false) bị chặn nếu còn ô đang giữ chỗ/đang thuê.'],
+      },
+      {
+        method: 'DELETE', path: '/facilities/unit-types/:id', auth: R.OPS, summary: 'Xoá mềm loại kho.',
+        notes: ['Chỉ xoá được khi không còn ô nào và chưa từng có đặt chỗ/hợp đồng — ngược lại 409, dùng "ẩn".'],
+      },
       {
         method: 'PATCH', path: '/facilities/unit-types/:id/price', auth: R.OPS, summary: 'Đổi giá thuê cơ bản theo tháng.',
         body: [{ name: 'rate', type: 'int ≥ 50.000 (VND)', required: true }],
@@ -113,14 +138,34 @@ export const API_GROUPS: Group[] = [
         ],
       },
       {
-        method: 'POST', path: '/units', auth: R.FM, summary: 'Thêm ô kho mới.',
+        method: 'POST', path: '/units', auth: ['FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Thêm ô kho mới.',
         body: [
           { name: 'unitTypeId', type: 'ObjectId', required: true },
           { name: 'unitNumber', type: 'string 1..20', required: true },
           { name: 'floor', type: 'int -5..100', required: true },
-          { name: 'priceTier', type: 'STANDARD | PREMIUM | ...', note: 'mặc định STANDARD' },
+          { name: 'accessMethod', type: 'AccessMethod', note: 'mặc định PIN' },
           { name: 'zone', type: 'string' },
         ],
+      },
+      {
+        method: 'POST', path: '/units/bulk', auth: ['FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Thêm nhiều ô liền mã cùng tầng/khu/hình thức khoá.',
+        body: [
+          { name: 'unitTypeId', type: 'ObjectId', required: true },
+          { name: 'prefix', type: 'string [A-Za-z0-9-]{1,12}', required: true, note: 'VD "M2-"' },
+          { name: 'start / count', type: 'int', required: true, note: 'count 1..200 — mã sinh ra là prefix + số đệm 0, VD M2-01…M2-12' },
+          { name: 'floor', type: 'int -5..100', required: true },
+          { name: 'accessMethod', type: 'AccessMethod', note: 'mặc định PIN' },
+          { name: 'zone', type: 'string ≤50' },
+        ],
+        notes: ['Trùng mã với ô đã có trong chi nhánh → 409, không tạo ô nào.'],
+      },
+      {
+        method: 'PATCH', path: '/units/:id', auth: ['FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Sửa mã/tầng/khu/hình thức khoá của ô.',
+        notes: ['Chỉ sửa được ô đang AVAILABLE hoặc MAINTENANCE và không gắn đặt chỗ/hợp đồng.'],
+      },
+      {
+        method: 'DELETE', path: '/units/:id', auth: ['FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Xoá mềm ô kho.',
+        notes: ['Chỉ xoá ô AVAILABLE/MAINTENANCE chưa từng có đặt chỗ/hợp đồng — ngược lại 409, chuyển sang Bảo trì.'],
       },
       {
         method: 'PATCH', path: '/units/:id/status', auth: R.STAFF, summary: 'Đưa ô vào/ra bảo trì.',
@@ -171,6 +216,18 @@ export const API_GROUPS: Group[] = [
         method: 'POST', path: '/reservations/:id/pay-deposit', auth: R.CUS, summary: 'Thanh toán cọc (cổng thanh toán đang ở chế độ giả lập).',
         body: [{ name: 'method', type: "'VNPAY' | 'MOMO' | 'CARD' | 'BANK_TRANSFER'", required: true }],
         notes: ['Thành công → CONFIRMED và trả qrPayload dạng SSM:<code>:<token> đúng một lần; server chỉ lưu SHA-256 của token.'],
+      },
+      {
+        method: 'POST', path: '/reservations/:id/sign', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Ký xác nhận hợp đồng sau khi trả cọc, trước khi nhận kho.',
+        body: [
+          { name: 'signerName', type: 'string 2..100', required: true },
+          { name: 'method', type: 'DRAWN | TYPED', required: true, note: 'DRAWN = vẽ tay (cần image), TYPED = gõ họ tên' },
+          { name: 'image', type: 'PNG data URL ≤ ~60KB', note: 'bắt buộc khi DRAWN' },
+        ],
+        notes: [
+          'Chỉ ký được khi đặt chỗ ở CONFIRMED/ALLOCATED và chưa ký; mỗi đặt chỗ ký một lần, không sửa.',
+          'Nhân viên cho khách ký tại quầy → onBehalf = true. Chưa ký thì check-in bị chặn (422 CONTRACT_NOT_SIGNED).',
+        ],
       },
       {
         method: 'POST', path: '/reservations/:id/cancel', auth: 'ANY', summary: 'Hủy đặt chỗ, hoàn cọc theo bậc trong chính sách.',
@@ -255,6 +312,43 @@ export const API_GROUPS: Group[] = [
       {
         method: 'GET', path: '/inspections', auth: ['STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'], summary: '100 biên bản kiểm tra gần nhất của một chi nhánh.',
         query: [{ name: 'facilityId', type: 'ObjectId', required: true }],
+      },
+    ],
+  },
+  {
+    name: 'Dịch vụ thêm',
+    blurb: 'Dịch vụ tuỳ chọn khách đặt sau khi thuê (đóng gói, vận chuyển, vệ sinh...). Danh mục và đơn đi qua GET /bootstrap; danh mục công khai nằm trong GET /facilities/public/:id. Giá riêng từng chi nhánh.',
+    routes: [
+      {
+        method: 'POST', path: '/services/offerings', auth: R.OPS, summary: 'Thêm dịch vụ vào danh mục của một chi nhánh.',
+        body: [
+          { name: 'facilityId', type: 'ObjectId', required: true },
+          { name: 'code', type: 'string [A-Za-z0-9-]{2,30}', required: true, note: 'duy nhất trong chi nhánh' },
+          { name: 'name', type: 'string 2..100', required: true },
+          { name: 'price', type: 'int ≥ 1.000 (VND)', required: true },
+          { name: 'unitLabel', type: 'string ≤20', required: true, note: 'lần, thùng, giờ, chuyến, tháng...' },
+          { name: 'description', type: 'string ≤1000' },
+        ],
+      },
+      { method: 'PATCH', path: '/services/offerings/:id', auth: R.OPS, summary: 'Sửa tên/mô tả/giá/đơn vị hoặc ẩn/hiện dịch vụ.', notes: ['Đơn đã đặt giữ nguyên tên và giá đã chốt.'] },
+      { method: 'DELETE', path: '/services/offerings/:id', auth: R.OPS, summary: 'Xoá mềm dịch vụ khỏi danh mục.' },
+      {
+        method: 'POST', path: '/services/orders', auth: R.CUS, summary: 'Đặt dịch vụ cho hợp đồng đang hiệu lực và thanh toán ngay.',
+        body: [
+          { name: 'contractId', type: 'ObjectId', required: true },
+          { name: 'serviceId', type: 'ObjectId', required: true },
+          { name: 'quantity', type: 'int 1..99', required: true },
+          { name: 'method', type: 'PaymentMethod (≠ INTERNAL, khách không dùng CASH)', required: true },
+          { name: 'preferredDate', type: 'date' },
+          { name: 'note', type: 'string ≤500' },
+        ],
+        notes: ['Hợp đồng phải ACTIVE (không công nợ); dịch vụ phải đang bán ở đúng chi nhánh của hợp đồng — ngược lại 422.'],
+      },
+      { method: 'POST', path: '/services/orders/:id/complete', auth: R.STAFF, summary: 'Xác nhận đã thực hiện xong đơn (REQUESTED → DONE).' },
+      {
+        method: 'POST', path: '/services/orders/:id/cancel', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Huỷ đơn chưa thực hiện, hoàn đủ tiền.',
+        body: [{ name: 'reason', type: 'string ≤500' }],
+        notes: ['Tạo khoản REFUND và chuyển khoản gốc sang REFUNDED.'],
       },
     ],
   },
