@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
 import {
-  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, enumValues, LEGAL_EFFECTIVE, paymentAckText, PERIOD_UNIT,
-  PRIVACY_VERSION, STAFF_SHIFTS, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
+  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, enumValues, paymentAckText, PERIOD_UNIT,
+  PRIVACY_VERSION, STAFF_SHIFTS, TERMS_EFFECTIVE, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { api } from '../../shared/api/client';
 import { useStore } from '../../shared/store/store';
@@ -236,7 +236,7 @@ export default function FacilityDetailScreen() {
           <Text style={st.consentText}>
             Tôi đã đọc và đồng ý{' '}
             <Text style={st.link} onPress={() => Linking.openURL(`${WEB_ORIGIN}/dieu-khoan`)}>Điều khoản dịch vụ</Text>
-            {' '}(bản {TERMS_VERSION}, hiệu lực {LEGAL_EFFECTIVE}).
+            {' '}(bản {TERMS_VERSION}, hiệu lực {TERMS_EFFECTIVE}).
           </Text>
         </Pressable>
         <Pressable onPress={() => setAgreePrivacy((v) => !v)} style={st.consent}>

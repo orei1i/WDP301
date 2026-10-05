@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LEGAL_EFFECTIVE, PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
+import { LEGAL_EFFECTIVE, PRIVACY_VERSION, TERMS_EFFECTIVE, TERMS_VERSION } from '@ssm/shared';
 import { useStore } from '../../shared/store/store';
 import { Button, Card, Field, H1, Input, Muted, Screen } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
@@ -103,7 +103,7 @@ export default function LoginScreen() {
                   <Text style={st.link} onPress={() => Linking.openURL(`${WEB_ORIGIN}/dieu-khoan`)}>Điều khoản dịch vụ</Text>
                   {' '}và{' '}
                   <Text style={st.link} onPress={() => Linking.openURL(`${WEB_ORIGIN}/bao-mat`)}>Chính sách bảo mật</Text>
-                  {' '}(bản {TERMS_VERSION}/{PRIVACY_VERSION}, hiệu lực {LEGAL_EFFECTIVE}).
+                  {' '}(Điều khoản bản {TERMS_VERSION} áp dụng từ {TERMS_EFFECTIVE}; Chính sách bảo mật bản {PRIVACY_VERSION} áp dụng từ {LEGAL_EFFECTIVE}).
                 </Text>
               </Pressable>
             )}
