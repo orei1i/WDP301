@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StoreProvider, useStore } from '../src/shared/store/store';
 import { Toasts } from '../src/shared/ui';
 import { BootScreen } from '../src/shared/ui/boot-screen';
+import { WebFrame } from '../src/shared/ui/web-frame';
 import { C } from '../src/shared/ui/theme';
 
 /**
@@ -39,12 +40,14 @@ function Gate() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <StoreProvider>
-        <StatusBar style="dark" />
-        <Gate />
-        <Toasts />
-      </StoreProvider>
-    </SafeAreaProvider>
+    <WebFrame>
+      <SafeAreaProvider>
+        <StoreProvider>
+          <StatusBar style="dark" />
+          <Gate />
+          <Toasts />
+        </StoreProvider>
+      </SafeAreaProvider>
+    </WebFrame>
   );
 }
