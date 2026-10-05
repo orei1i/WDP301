@@ -7,7 +7,7 @@ import type {
   BusinessPolicy, DamageClaim, Facility, PaymentTransaction, RentalContract, Reservation, ServiceOffering, ServiceOrder,
   StorageUnit, SupportTicket, UnitCategory, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { PRIVACY_VERSION, TERMS_VERSION } from '@ssm/shared';
+import { PRIVACY_VERSION, TERMS_VERSION, withPolicyDefaults } from '@ssm/shared';
 import { api, ApiError } from '../api/client';
 import { actions, type ActionName, type Payload, type Value } from '../api/actions';
 import { authErrorMessage, firebaseAuth, firebaseConfigured } from '../api/firebase';
@@ -93,7 +93,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const { me, ...rest } = snap;
     userRef.current = me;
     setUser(me);
-    setDb({ ...EMPTY_DB, ...rest });
+    // Chính sách cũ trong DB có thể thiếu earlyTermination/abandonAfterLockedOutDays — điền mặc định để các màn không sập.
+    setDb({ ...EMPTY_DB, ...rest, policies: (rest.policies ?? []).map(withPolicyDefaults) });
   }, []);
 
   const reloadCatalog = useCallback(async () => {
