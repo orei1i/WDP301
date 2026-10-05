@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
 import {
-  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, CHECK_IN_SHIFT, enumValues, LEGAL_EFFECTIVE, PERIOD_UNIT,
+  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, enumValues, LEGAL_EFFECTIVE, paymentAckText, PERIOD_UNIT,
   PRIVACY_VERSION, STAFF_SHIFTS, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { api } from '../../shared/api/client';
@@ -13,6 +13,7 @@ import { Badge, Button, Card, Chips, DateStepper, EmptyState, Input, KV, Muted, 
 import { C, S } from '../../shared/ui/theme';
 import { FloorPlanPicker, type FloorPlanUnit } from './floor-plan-picker';
 import { DurationPicker } from './duration-picker';
+import { PaymentSchedule } from '../payments/payment-schedule';
 
 const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://wdp-301-webapp.vercel.app';
 
@@ -22,7 +23,7 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods' | 'discounts'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'>;
 }
 
 // Nhãn ngắn trên chip ("Ca 1"), thời gian đầy đủ chỉ hiện ở dòng chú thích bên dưới khi đã chọn — đỡ rối mắt.
@@ -42,7 +43,6 @@ function priceItems(q: PriceQuote, typeName: string, periods: number): [string, 
   if (q.discountAmount > 0) items.push(['Giảm giá', `-${vnd(q.discountAmount)}`]);
   items.push([`Tiền thuê mỗi ${unit}`, vnd(q.firstPeriodRent)]);
   items.push([`Tổng giá trị ${periodLabel(q.rentalPeriod, periods)} (trả từng ${unit})`, vnd(q.firstPeriodRent * periods)]);
-  items.push(['Đặt cọc ngay', <Text key="deposit" style={{ fontWeight: '700', color: C.brand800 }}>{vnd(q.depositAmount)}</Text>]);
   return items;
 }
 
@@ -65,6 +65,8 @@ export default function FacilityDetailScreen() {
   const [unitId, setUnitId] = useState<string | null>(null);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
+  // Xác nhận đã đọc lịch thanh toán gắn với ĐÚNG số tiền đang hiển thị — đổi ô/chu kỳ (số tiền đổi) thì phải xác nhận lại.
+  const [ackedPayment, setAckedPayment] = useState('');
 
   // Khách tự chọn chu kỳ (ngày/tuần/tháng) + số chu kỳ + có dùng điều hòa không — server tính lại
   // giá theo đúng combo này (ac bị bỏ qua cho loại kho không hợp lệ, xem TypeRow.acEligible).
@@ -121,7 +123,10 @@ export default function FacilityDetailScreen() {
   const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
   const periodsNum = Math.max(1, Math.min(365, Number(periods) || 1));
-  const canBook = !!ut && !!unitId && ut.availability.available > 0 && agreeTerms && agreePrivacy;
+  const schedule = q ? buildPaymentSchedule([q], detail?.policy.gracePeriodDays) : null;
+  const ackKey = schedule ? `${schedule.payNow}:${schedule.payAtCheckIn}` : '';
+  const agreePayment = !!schedule && ackedPayment === ackKey;
+  const canBook = !!ut && !!unitId && ut.availability.available > 0 && agreeTerms && agreePrivacy && agreePayment;
 
   return (
     <Screen>
@@ -207,7 +212,7 @@ export default function FacilityDetailScreen() {
       {ut && q && (
         <Card style={{ marginTop: S.md }}>
           <KV items={priceItems(q, ut.name, periodsNum)} />
-          <Muted style={{ marginTop: S.sm } as never}>Chỉ trả cọc khi đặt chỗ (giữ đến lúc trả kho, không trừ vào tiền thuê). Tiền thuê kỳ đầu trả khi nhận kho, các kỳ sau trả theo từng kỳ — không phải trả trước toàn bộ.</Muted>
+          {schedule && <View style={{ marginTop: S.md }}><PaymentSchedule quotes={[q]} graceDays={detail?.policy.gracePeriodDays} /></View>}
         </Card>
       )}
 
@@ -220,6 +225,12 @@ export default function FacilityDetailScreen() {
       )}
 
       <Card style={{ marginTop: S.md }}>
+        {schedule && (
+          <Pressable onPress={() => setAckedPayment(agreePayment ? '' : ackKey)} style={[st.consent, st.ackBox]}>
+            <Ionicons name={agreePayment ? 'checkbox' : 'square-outline'} size={22} color={agreePayment ? C.brand700 : C.faint} />
+            <Text style={[st.consentText, { fontWeight: '600', color: '#78350f' }]}>{paymentAckText(schedule)}</Text>
+          </Pressable>
+        )}
         <Pressable onPress={() => setAgreeTerms((v) => !v)} style={st.consent}>
           <Ionicons name={agreeTerms ? 'checkbox' : 'square-outline'} size={22} color={agreeTerms ? C.brand700 : C.faint} />
           <Text style={st.consentText}>
@@ -263,6 +274,7 @@ const st = StyleSheet.create({
   typePrice: { fontSize: 15, fontWeight: '700', color: C.ink },
   availText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
   consent: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', marginBottom: S.md },
+  ackBox: { backgroundColor: C.amberBg, borderRadius: 12, padding: S.sm, marginBottom: S.sm },
   consentText: { flex: 1, fontSize: 13, lineHeight: 19, color: C.text },
   link: { color: C.brand700, fontWeight: '600' },
 });

@@ -83,6 +83,7 @@ export default function HomeScreen() {
                       ['Loại kho', typeName(db, r.unitTypeId)],
                       ['Kho được phân', r.unitId ? unitLabel(db, r.unitId) : 'Chi nhánh sẽ phân trước ngày nhận'],
                       ['Ngày nhận', `${fmtDate(r.startDate)} · ${relativeDay(r.startDate)}`],
+                      ['Trả thêm khi nhận kho', vnd(r.quote.firstPeriodRent)],
                     ]} />
                   </View>
                   <Button
@@ -107,7 +108,7 @@ export default function HomeScreen() {
                   <Badge tone="amber">Giữ chỗ tạm thời</Badge>
                 </View>
                 <Muted style={{ marginTop: 6 } as never}>
-                  {typeName(db, r.unitTypeId)} · {facilityName(db, r.facilityId)} · cọc {vnd(r.quote.depositAmount)}
+                  {typeName(db, r.unitTypeId)} · {facilityName(db, r.facilityId)} · cọc {vnd(r.quote.depositAmount)} hôm nay, thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu {vnd(r.quote.firstPeriodRent)} trả thêm khi nhận kho
                 </Muted>
                 <Button
                   title="Thanh toán cọc"

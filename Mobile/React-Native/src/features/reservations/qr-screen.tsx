@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Brightness from 'expo-brightness';
 import QRCode from 'react-native-qrcode-svg';
-import { RESERVATION_STATUS, fmtDate, fmtDateTime } from '@ssm/shared';
+import { RESERVATION_STATUS, fmtDate, fmtDateTime, vnd } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { actions } from '../../shared/api/actions';
 import { Button, Card, KV, Muted, StatusBadge } from '../../shared/ui';
@@ -116,6 +116,7 @@ export default function QrScreen() {
           ['Loại kho', typeName(db, r.unitTypeId)],
           ['Kho được phân', r.unitId ? unitLabel(db, r.unitId) : 'Chưa phân'],
           ['Ngày nhận', fmtDate(r.startDate)],
+          ['Trả thêm khi nhận kho', vnd(r.quote.firstPeriodRent)],
           ...(expiresAt ? ([['Mã hết hạn', fmtDateTime(expiresAt)]] as [string, string][]) : []),
         ]} />
       </Card>

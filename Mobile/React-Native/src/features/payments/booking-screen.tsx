@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
-import { PAYMENT_METHOD, RESERVATION_STATUS, fmtDate, minutesLeft, periodLabel, vnd } from '@ssm/shared';
+import { PAYMENT_METHOD, PERIOD_UNIT, RESERVATION_STATUS, fmtDate, minutesLeft, periodLabel, vnd } from '@ssm/shared';
 import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
 import { Button, Card, Chips, EmptyState, KV, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
 import { ContractSignCard } from '../contracts/contract-sign-card';
+import { PaymentSchedule } from './payment-schedule';
 
 const METHODS: { value: PaymentMethod; label: string }[] = (['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'] as PaymentMethod[])
   .map((v) => ({ value: v, label: PAYMENT_METHOD[v] }));
@@ -46,10 +47,14 @@ export default function BookingScreen() {
           ['Loại kho', typeName(db, r.unitTypeId)],
           ['Ngày nhận', fmtDate(r.startDate)],
           ['Thời hạn', `${periodLabel(r.quote.rentalPeriod, r.periods)} (đến ${fmtDate(r.endDate)})`],
-          ['Tiền thuê / tháng', vnd(r.quote.firstPeriodRent)],
-          ['Tiền cọc', vnd(r.quote.depositAmount)],
+          [`Tiền thuê / ${PERIOD_UNIT[r.quote.rentalPeriod]}`, vnd(r.quote.firstPeriodRent)],
+          ['Tiền cọc (trả khi đặt chỗ)', vnd(r.quote.depositAmount)],
         ]} />
       </Card>
+
+      {(r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && (
+        <View style={{ marginTop: S.md }}><PaymentSchedule quotes={[r.quote]} /></View>
+      )}
 
       {r.status === 'PENDING' && (
         <Card style={{ marginTop: S.md }}>

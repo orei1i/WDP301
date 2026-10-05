@@ -27,7 +27,8 @@ export const actions = {
       preferredCheckInShift: p.preferredCheckInShift,
       useAirConditioning: p.useAirConditioning,
       source: 'MOBILE',
-      consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION },
+      // paymentScheduleAck: màn đặt chỗ bắt buộc khách tick xác nhận đã đọc lịch thanh toán (cọc hôm nay + tiền thuê kỳ đầu khi nhận kho)
+      consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, paymentScheduleAck: true },
     }, { 'idempotency-key': newKey() }),
 
   payDeposit: async (p: { reservationId: string; method: PaymentMethod }) =>
