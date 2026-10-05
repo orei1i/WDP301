@@ -3,7 +3,7 @@
 import type {
   AbandonedItemsDisposal, AccessMethod, BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
   PaymentMethod, RentalContract, RentalPeriod, Reservation, Role, StorageUnit, SupportTicket, SwapMethod,
-  TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitStatus, UnitSwapRequest, User,
+  ServiceOffering, ServiceOrder, SignatureMethod, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus, UnitSwapRequest, User,
 } from '@ssm/shared';
 import { api } from '@/shared/api/client';
 
@@ -78,7 +78,54 @@ export const actions = {
 
   setUnitStatus: async (p: { unitId: string; to: UnitStatus; reason?: string }) => { await api.patch(`/units/${p.unitId}/status`, { to: p.to, reason: p.reason }); },
 
-  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number; accessMethod: AccessMethod }) => { await api.post('/units', p); },
+  addUnit: async (p: { unitTypeId: string; unitNumber: string; floor: number; zone?: string; accessMethod: AccessMethod }) => { await api.post('/units', { ...p, zone: p.zone || undefined }); },
+
+  /** Thêm nhiều ô liền mã (VD "M2-" từ 1, 12 ô → M2-01…M2-12) cùng tầng/khu/hình thức khoá. */
+  addUnitsBulk: async (p: { unitTypeId: string; prefix: string; start: number; count: number; floor: number; zone?: string; accessMethod: AccessMethod }) =>
+    (await api.post<{ count: number }>('/units/bulk', { ...p, zone: p.zone || undefined })).count,
+
+  updateUnit: async (p: { unitId: string; unitNumber: string; floor: number; zone?: string; accessMethod: AccessMethod }) => {
+    await api.patch(`/units/${p.unitId}`, { unitNumber: p.unitNumber, floor: p.floor, zone: p.zone ?? '', accessMethod: p.accessMethod });
+  },
+
+  deleteUnit: async (p: { unitId: string }) => { await api.delete(`/units/${p.unitId}`); },
+
+  // ---- loại tủ/phòng thuê (Quản lý vận hành)
+  createUnitType: async (p: { facilityId: string; code: string; name: string; category: UnitCategory; description?: string; widthM: number; depthM: number; heightM: number; indoor: boolean; rates: Record<RentalPeriod, number>; minPeriods: number; depositOverride?: number | null }) => {
+    const { facilityId, ...body } = p;
+    await api.post(`/facilities/${facilityId}/unit-types`, { ...body, description: body.description || undefined });
+  },
+
+  updateUnitType: async (p: { unitTypeId: string; name?: string; description?: string; widthM?: number; depthM?: number; heightM?: number; indoor?: boolean; rates?: Partial<Record<RentalPeriod, number>>; minPeriods?: number; depositOverride?: number | null; isActive?: boolean }) => {
+    const { unitTypeId, ...body } = p;
+    await api.patch(`/facilities/unit-types/${unitTypeId}`, body);
+  },
+
+  deleteUnitType: async (p: { unitTypeId: string }) => { await api.delete(`/facilities/unit-types/${p.unitTypeId}`); },
+
+  deleteFacility: async (p: { facilityId: string }) => { await api.delete(`/facilities/${p.facilityId}`); },
+
+  // ---- dịch vụ thêm sau khi thuê: danh mục giá riêng từng chi nhánh (Ops) + đơn của khách
+  createServiceOffering: async (p: { facilityId: string; code: string; name: string; description?: string; price: number; unitLabel: string }) =>
+    api.post<ServiceOffering>('/services/offerings', { ...p, description: p.description || undefined }),
+
+  updateServiceOffering: async (p: { serviceId: string; name?: string; description?: string; price?: number; unitLabel?: string; isActive?: boolean }) => {
+    const { serviceId, ...body } = p;
+    await api.patch(`/services/offerings/${serviceId}`, body);
+  },
+
+  deleteServiceOffering: async (p: { serviceId: string }) => { await api.delete(`/services/offerings/${p.serviceId}`); },
+
+  orderService: async (p: { contractId: string; serviceId: string; quantity: number; preferredDate?: string; note?: string; method: PaymentMethod }) =>
+    api.post<ServiceOrder>('/services/orders', { ...p, preferredDate: p.preferredDate ? day(p.preferredDate) : undefined, note: p.note || undefined }),
+
+  completeServiceOrder: async (p: { orderId: string }) => { await api.post(`/services/orders/${p.orderId}/complete`); },
+
+  cancelServiceOrder: async (p: { orderId: string; reason?: string }) => { await api.post(`/services/orders/${p.orderId}/cancel`, { reason: p.reason || undefined }); },
+
+  // ---- ký hợp đồng sau khi trả cọc (khách tự ký, hoặc nhân viên cho khách ký tại quầy)
+  signContract: async (p: { reservationId: string; signerName: string; method: SignatureMethod; image?: string | null }) =>
+    api.post<Reservation>(`/reservations/${p.reservationId}/sign`, { signerName: p.signerName, method: p.method, image: p.image ?? null }),
 
   createTicket: async (p: { facilityId: string; kind: TicketKind; category: TicketCategory; priority: TicketPriority; subject: string; description: string; unitId?: string | null; contractId?: string | null; assigneeId?: string | null; dueAt?: string | null }) =>
     api.post<SupportTicket>('/tickets', { ...p, description: p.description || undefined }),
@@ -101,8 +148,8 @@ export const actions = {
 
   withdrawClaim: async (p: { claimId: string; reason?: string }) => { await api.post(`/claims/${p.claimId}/withdraw`, { reason: p.reason || undefined }); },
 
-  saveFacility: async (p: Pick<Facility, 'name' | 'code' | 'status'> & { _id?: string; line1: string; district: string; phone: string }) => {
-    const body = { name: p.name, status: p.status, line1: p.line1, district: p.district, phone: p.phone };
+  saveFacility: async (p: Pick<Facility, 'name' | 'code' | 'status'> & { _id?: string; line1: string; district: string; phone: string; lng?: number; lat?: number }) => {
+    const body = { name: p.name, status: p.status, line1: p.line1, district: p.district, phone: p.phone, lng: p.lng, lat: p.lat };
     if (p._id) await api.patch(`/facilities/${p._id}`, body);
     else await api.post('/facilities', { ...body, code: p.code });
   },

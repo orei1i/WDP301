@@ -1,7 +1,7 @@
 import type { Role } from '@ssm/shared';
 import {
-  Building2, CalendarCheck, ClipboardList, CreditCard, FileText, HandCoins, LayoutDashboard, LayoutGrid, LifeBuoy,
-  ListTodo, PackageOpen, Repeat, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
+  Boxes, Building2, CalendarCheck, ClipboardList, ConciergeBell, CreditCard, FileText, HandCoins, LayoutDashboard, LayoutGrid, LifeBuoy,
+  ListTodo, PackageOpen, PackagePlus, Repeat, ScanLine, ScrollText, ShieldCheck, Tags, TrendingUp, Users, Warehouse, type LucideIcon,
 } from 'lucide-react';
 
 export type Area = 'portal' | 'staff' | 'manager' | 'ops' | 'admin';
@@ -14,6 +14,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/portal', label: 'Tổng quan', icon: LayoutDashboard },
       { href: '/portal/reservations', label: 'Đặt chỗ của tôi', icon: CalendarCheck },
       { href: '/portal/units', label: 'Kho đang thuê', icon: Warehouse },
+      { href: '/portal/services', label: 'Dịch vụ thêm', icon: PackagePlus },
       { href: '/portal/payments', label: 'Thanh toán', icon: CreditCard },
       { href: '/portal/tickets', label: 'Hỗ trợ', icon: LifeBuoy },
       { href: '/portal/claims', label: 'Bồi thường', icon: HandCoins },
@@ -27,6 +28,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/staff/move-out', label: 'Trả kho & kiểm tra', icon: PackageOpen },
       { href: '/staff/units', label: 'Sơ đồ kho', icon: LayoutGrid },
       { href: '/staff/swaps', label: 'Yêu cầu đổi ô', icon: Repeat },
+      { href: '/staff/services', label: 'Dịch vụ yêu cầu', icon: ConciergeBell },
       { href: '/staff/tasks', label: 'Công việc của tôi', icon: ListTodo },
     ],
   },
@@ -46,6 +48,8 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
     items: [
       { href: '/ops', label: 'Tổng quan chuỗi', icon: TrendingUp },
       { href: '/ops/facilities', label: 'Chi nhánh', icon: Building2 },
+      { href: '/ops/inventory', label: 'Loại kho & ô kho', icon: Boxes },
+      { href: '/ops/services', label: 'Dịch vụ thêm', icon: PackagePlus },
       { href: '/ops/policies', label: 'Chính sách', icon: ScrollText },
       { href: '/ops/pricing', label: 'Bảng giá', icon: Tags },
     ],
