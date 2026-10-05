@@ -12,6 +12,7 @@ import {
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
+import { getContractAccess } from '../access/access.service';
 
 export const contractsRouter = Router();
 contractsRouter.use(authenticate);
@@ -39,6 +40,11 @@ contractsRouter.get('/:id', validate({ params: idParams }), async (req, res) => 
 });
 
 const pm = z.enum(enumValues(PaymentMethod) as [string, ...string[]]).refine((m) => m !== 'INTERNAL') as z.ZodType<PaymentMethod>;
+
+// Chủ hợp đồng xem phương tiện vào kho hiện tại (mật khẩu giải mã tại đây, mỗi lần xem ghi nhật ký).
+contractsRouter.get('/:id/access', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await getContractAccess(req.auth!.user, req.valid.params.id));
+});
 
 contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm }) }), async (req, res) => {
   res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.periods, req.valid.body.method));

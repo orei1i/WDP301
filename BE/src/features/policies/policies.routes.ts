@@ -5,7 +5,7 @@ import { PolicyModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { assertFacility } from '../../shared/http/scope';
-import { idParams, validate, zId } from '../../shared/http/validate';
+import { idParams, validate, zId, zMoney } from '../../shared/http/validate';
 import { effectivePolicy } from './pricing';
 import { publishPolicy } from './policy.service';
 
@@ -32,6 +32,7 @@ policiesRouter.post('/', authorize('OPS_MANAGER'), validate({ body: z.object({
   patch: z.object({
     gracePeriodDays: z.number().int().min(0).max(60), lockoutAfterDays: z.number().int().min(1).max(180),
     abandonAfterLockedOutDays: z.number().int().min(1).max(365),
+    accessFees: z.object({ PIN_RESET: zMoney, CARD_REISSUE: zMoney, KEY_REISSUE: zMoney }),
     reservationHoldMinutes: z.number().int().min(5).max(1440), allocationLeadDays: z.number().int().min(0).max(60), noShowAfterHours: z.number().int().min(1).max(168),
     minPeriods: z.number().int().min(1), maxPeriods: z.number().int().max(365),
     deposit: z.object({ mode: z.enum(['PERIODS_OF_RENT', 'FIXED']), value: z.number().min(0) }),

@@ -11,6 +11,7 @@ import { addDays, addPeriodsUTC, todayUTC, toDateOnly } from '../../shared/utils
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment, randomToken, sha256, sixDigitPin } from '../payments/payment.service';
+import { encryptSecret } from '../../shared/crypto/secret-box';
 import { emailContract } from './contract-document.service';
 
 const loadReservation = async (id: string, session?: ClientSession) => {
@@ -341,7 +342,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
       billing: { currency: 'VND', rentalPeriod: period, rate: r.quote.firstPeriodRent, nextBillingDate: nextBilling, paidThrough: periodEnd },
       deposit: { amount: r.quote.depositAmount, status: 'HELD', paymentId: r.depositPaymentId ?? null, refundedAmount: 0 },
       balance: { outstanding: 0, lastPaymentAt: now },
-      access: { method: unit.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, issuedAt: now, issuedBy: user._id },
+      access: { method: unit.accessMethod, keyTag: input.keyTag ?? null, credentialHash: pin ? sha256(pin) : null, credentialEnc: pin ? encryptSecret(pin) : null, issuedAt: now, issuedBy: user._id },
       terms: { policyId: policy._id, policyVersion: policy.version, gracePeriodDays: policy.gracePeriodDays, lockoutAfterDays: policy.lockoutAfterDays, signedAt: r.signature.signedAt, signatureRef: `esign-${r._id}`, signerName: r.signature.signerName },
       statusHistory: [{ from: null, to: 'ACTIVE', at: now, by: user._id }],
     }], { session });

@@ -54,6 +54,8 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
       method: enumOf(enumValues(AccessMethod)),
       keyTag: { type: String, default: null },
       credentialHash: { type: String, default: null, select: false },
+      // PIN mã hoá AES-GCM để chủ hợp đồng xem lại (GET /contracts/:id/access). select:false → không bao giờ ra bootstrap/list.
+      credentialEnc: { type: String, default: null, select: false },
       issuedAt: { type: Date, default: null }, issuedBy: refOpt('User'),
       suspendedAt: { type: Date, default: null }, revokedAt: { type: Date, default: null },
     }, subOptions),

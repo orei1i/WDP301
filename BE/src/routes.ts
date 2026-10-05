@@ -9,6 +9,7 @@ import { ticketsRouter } from './features/tickets/tickets.routes';
 import { claimsRouter } from './features/claims/claims.routes';
 import { swapsRouter } from './features/swaps/swaps.routes';
 import { servicesRouter } from './features/services/services.routes';
+import { accessRouter } from './features/access/access.routes';
 import { policiesRouter } from './features/policies/policies.routes';
 import { usersRouter } from './features/users/users.routes';
 import { auditRouter } from './features/audit/audit.routes';
@@ -33,6 +34,7 @@ export const API_MOUNTS: Mount[] = [
   { prefix: '/claims', router: claimsRouter },
   { prefix: '/swap-requests', router: swapsRouter },
   { prefix: '/services', router: servicesRouter },
+  { prefix: '/access-requests', router: accessRouter },
   { prefix: '/policies', router: policiesRouter },
   { prefix: '/users', router: usersRouter },
   { prefix: '/audit', router: auditRouter },

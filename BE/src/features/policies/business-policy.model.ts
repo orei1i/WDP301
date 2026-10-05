@@ -23,6 +23,8 @@ const schema = new Schema<PolicyDoc>({
   gracePeriodDays: int(0, 60),
   lockoutAfterDays: int(1, 180),
   abandonAfterLockedOutDays: int(1, 365),
+  // Phí cấp lại mật khẩu/thẻ/chìa. Không bắt buộc: chính sách cũ chưa có thì dùng DEFAULT_ACCESS_FEES (xem accessFeeOf).
+  accessFees: { type: new Schema({ PIN_RESET: money(), CARD_REISSUE: money(), KEY_REISSUE: money() }, subOptions), immutable: true, default: undefined },
   lateFees: rule(new Schema({
     afterDays: { type: Number, required: true, min: 0 }, kind: { type: String, enum: ['FIXED', 'PERCENT_OF_RENT'], required: true },
     value: { type: Number, required: true, min: 0 }, recurringEveryDays: { type: Number, default: null, min: 1 },

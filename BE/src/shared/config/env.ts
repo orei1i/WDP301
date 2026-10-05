@@ -34,6 +34,8 @@ const schema = z.object({
   // relay (src/shared/mail/gmail-relay.gs). Có đủ hai biến này thì ưu tiên dùng kênh này.
   MAIL_RELAY_URL: z.string().url().optional(),
   MAIL_RELAY_SECRET: z.string().min(8).optional(),
+  // Khoá mã hoá mật khẩu mở kho (AES-GCM) để chủ hợp đồng xem lại được. Bỏ trống = suy từ FIREBASE_PRIVATE_KEY.
+  ACCESS_CODE_SECRET: z.string().min(16).optional(),
 });
 
 const parsed = schema.safeParse(process.env);
