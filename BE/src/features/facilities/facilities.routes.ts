@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { AccessMethod, enumValues, FacilityStatus, RentalPeriod, UnitCategory, UnitStatus } from '@ssm/shared';
+import {
+  AccessMethod, COORDS_PAIR_MESSAGE, enumValues, FACILITY_CODE_MESSAGE, FACILITY_CODE_RE, FacilityStatus, isValidPhone, PHONE_MESSAGE, RATE_MAX, RATE_MIN, RATES_ORDER_MESSAGE,
+  RentalPeriod, ratesOrdered, UNIT_NUMBER_MESSAGE, UNIT_NUMBER_RE, UnitCategory, UnitStatus,
+} from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel } from '../../shared/db/models';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
@@ -41,13 +44,18 @@ facilitiesRouter.get('/', authorize('STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER', 
 });
 
 const facilityBody = z.object({
-  code: z.string().regex(/^[A-Za-z0-9-]{3,20}$/).optional(), name: z.string().min(3).max(150), status: z.enum(enumValues(FacilityStatus) as [FacilityStatus, ...FacilityStatus[]]),
-  line1: z.string().min(3), district: z.string().min(2), city: z.string().optional(), phone: z.string().min(6), lng: z.number().optional(), lat: z.number().optional(),
+  code: z.string().trim().regex(FACILITY_CODE_RE, FACILITY_CODE_MESSAGE).optional(), name: z.string().trim().min(3).max(150),
+  status: z.enum(enumValues(FacilityStatus) as [FacilityStatus, ...FacilityStatus[]]),
+  line1: z.string().trim().min(3).max(200), district: z.string().trim().min(2).max(80), city: z.string().trim().min(2).max(80).optional(),
+  phone: z.string().trim().refine(isValidPhone, PHONE_MESSAGE),
+  lng: z.number().min(-180).max(180).optional(), lat: z.number().min(-90).max(90).optional(),
 });
-facilitiesRouter.post('/', authorize('OPS_MANAGER', 'ADMIN'), validate({ body: facilityBody.required({ code: true }) }), async (req, res) => {
+// Toạ độ là một cặp: nhập thiếu một nửa thì trước đây bị bỏ qua âm thầm — nay báo lỗi.
+const coordsPaired = (d: { lng?: number; lat?: number }) => (d.lng === undefined) === (d.lat === undefined);
+facilitiesRouter.post('/', authorize('OPS_MANAGER', 'ADMIN'), validate({ body: facilityBody.required({ code: true }).refine(coordsPaired, { message: COORDS_PAIR_MESSAGE, path: ['lng'] }) }), async (req, res) => {
   res.status(201).json(await saveFacility(null, req.valid.body));
 });
-facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams, body: facilityBody.omit({ code: true }) }), async (req, res) => {
+facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams, body: facilityBody.omit({ code: true }).refine(coordsPaired, { message: COORDS_PAIR_MESSAGE, path: ['lng'] }) }), async (req, res) => {
   res.json(await saveFacility(req.valid.params.id, req.valid.body));
 });
 facilitiesRouter.delete('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams }), async (req, res) => {
@@ -60,14 +68,17 @@ facilitiesRouter.get('/:id/unit-types', validate({ params: idParams }), async (r
   res.json({ items: await UnitTypeModel.find({ facilityId: req.valid.params.id }).sort({ 'rates.MONTH': 1 }) });
 });
 const dim = z.number().min(0.3).max(30);
-const rate = z.number().int().min(1_000);
+const rate = z.number().int().min(RATE_MIN).max(RATE_MAX);
+// Giá phải tăng dần ngày ≤ tuần ≤ tháng. Khi sửa một phần, service kiểm lại trên giá cuối cùng (gộp với giá đang lưu).
+const ratesFull = z.object({ DAY: rate, WEEK: rate, MONTH: rate }).refine(ratesOrdered, RATES_ORDER_MESSAGE);
+const ratesPartial = z.object({ DAY: rate.optional(), WEEK: rate.optional(), MONTH: rate.optional() }).refine(ratesOrdered, RATES_ORDER_MESSAGE);
 const unitTypeBody = z.object({
-  code: z.string().regex(/^[A-Za-z0-9.-]{2,20}$/, 'Mã 2–20 ký tự chữ/số/./-'), name: z.string().min(2).max(100), category: e(UnitCategory),
-  description: z.string().max(2000).optional(), widthM: dim, depthM: dim, heightM: dim, indoor: z.boolean(),
-  rates: z.object({ DAY: rate, WEEK: rate, MONTH: rate }), depositOverride: zMoney.nullable().optional(), minPeriods: z.number().int().min(1).max(365),
+  code: z.string().trim().regex(/^[A-Za-z0-9.-]{2,20}$/, 'Mã 2–20 ký tự chữ/số/./-'), name: z.string().trim().min(2).max(100), category: e(UnitCategory),
+  description: z.string().trim().max(2000).optional(), widthM: dim, depthM: dim, heightM: dim, indoor: z.boolean(),
+  rates: ratesFull, depositOverride: zMoney.max(RATE_MAX).nullable().optional(), minPeriods: z.number().int().min(1).max(365),
 });
 const unitTypePatch = unitTypeBody.omit({ code: true, category: true, rates: true }).partial().extend({
-  rates: z.object({ DAY: rate.optional(), WEEK: rate.optional(), MONTH: rate.optional() }).optional(), isActive: z.boolean().optional(),
+  rates: ratesPartial.optional(), isActive: z.boolean().optional(),
 });
 facilitiesRouter.post('/:id/unit-types', authorize('OPS_MANAGER'), validate({ params: idParams, body: unitTypeBody }), async (req, res) => {
   res.status(201).json(await createUnitType(req.valid.params.id, req.valid.body));
@@ -78,9 +89,7 @@ facilitiesRouter.patch('/unit-types/:id', authorize('OPS_MANAGER'), validate({ p
 facilitiesRouter.delete('/unit-types/:id', authorize('OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
   res.json(await deleteUnitType(req.valid.params.id));
 });
-facilitiesRouter.patch('/unit-types/:id/price', authorize('OPS_MANAGER'), validate({ params: idParams, body: z.object({
-  rates: z.object({ DAY: z.number().int().min(1_000).optional(), WEEK: z.number().int().min(1_000).optional(), MONTH: z.number().int().min(1_000).optional() }),
-}) }), async (req, res) => {
+facilitiesRouter.patch('/unit-types/:id/price', authorize('OPS_MANAGER'), validate({ params: idParams, body: z.object({ rates: ratesPartial }) }), async (req, res) => {
   res.json(await setUnitTypeRates(req.valid.params.id, req.valid.body.rates));
 });
 
@@ -96,21 +105,22 @@ unitsRouter.get('/', validate({ query: z.object({ facilityId: zId, status: z.enu
 });
 
 // Quản lý chi nhánh (trong phạm vi) và Quản lý vận hành (toàn chuỗi) cùng thêm/sửa/xoá ô kho.
+const unitNumber = z.string().trim().regex(UNIT_NUMBER_RE, UNIT_NUMBER_MESSAGE);
 unitsRouter.post('/', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ body: z.object({
-  unitTypeId: zId, unitNumber: z.string().min(1).max(20), floor: z.number().int().min(-5).max(100), zone: z.string().optional(),
+  unitTypeId: zId, unitNumber, floor: z.number().int().min(-5).max(100), zone: z.string().trim().max(50).optional(),
   accessMethod: e(AccessMethod).default('PIN'),
 }) }), async (req, res) => {
   res.status(201).json(await addUnit(req.auth!.user, req.valid.body));
 });
 unitsRouter.post('/bulk', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ body: z.object({
-  unitTypeId: zId, floor: z.number().int().min(-5).max(100), zone: z.string().max(50).optional(), accessMethod: e(AccessMethod).default('PIN'),
-  prefix: z.string().min(1).max(12).regex(/^[A-Za-z0-9-]+$/, 'Tiền tố chỉ gồm chữ/số/-'), start: z.number().int().min(0).max(9999), count: z.number().int().min(1).max(200),
+  unitTypeId: zId, floor: z.number().int().min(-5).max(100), zone: z.string().trim().max(50).optional(), accessMethod: e(AccessMethod).default('PIN'),
+  prefix: z.string().trim().min(1).max(12).regex(/^[A-Za-z0-9-]+$/, 'Tiền tố chỉ gồm chữ/số/-'), start: z.number().int().min(0).max(9999), count: z.number().int().min(1).max(200),
 }) }), async (req, res) => {
   res.status(201).json(await addUnitsBulk(req.auth!.user, req.valid.body));
 });
 unitsRouter.patch('/:id', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams, body: z.object({
-  unitNumber: z.string().min(1).max(20).optional(), floor: z.number().int().min(-5).max(100).optional(),
-  zone: z.string().max(50).optional(), accessMethod: e(AccessMethod).optional(),
+  unitNumber: unitNumber.optional(), floor: z.number().int().min(-5).max(100).optional(),
+  zone: z.string().trim().max(50).optional(), accessMethod: e(AccessMethod).optional(),
 }) }), async (req, res) => {
   res.json(await updateUnit(req.auth!.user, req.valid.params.id, req.valid.body));
 });

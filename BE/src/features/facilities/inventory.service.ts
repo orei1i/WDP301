@@ -1,4 +1,4 @@
-import { earlyTerminationOf, type AccessMethod, type FacilityStatus, type RentalPeriod, type UnitCategory, type UnitStatus } from '@ssm/shared';
+import { earlyTerminationOf, RATES_ORDER_MESSAGE, ratesOrdered, type AccessMethod, type FacilityStatus, type RentalPeriod, type UnitCategory, type UnitStatus } from '@ssm/shared';
 import { FacilityModel, RentalContractModel, ReservationModel, ServiceOfferingModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { withTxn } from '../../shared/db/txn';
 import { currentActorId } from '../../shared/core/request-context';
@@ -73,6 +73,7 @@ export async function saveFacility(id: string | null, input: { code?: string; na
     const f = await FacilityModel.findById(id);
     if (!f) throw NotFound('chi nhánh');
     f.set({ name: input.name, status: input.status, 'address.line1': input.line1, 'address.district': input.district, 'contact.phone': input.phone });
+    if (input.city) f.set('address.city', input.city);
     if (input.lng !== undefined && input.lat !== undefined) f.set('location.coordinates', [input.lng, input.lat]);
     await f.save();
     await audit({ action: 'facility.update', entityType: 'Facility', entityId: f._id, facilityId: f._id, changes: { after: input } });
@@ -106,6 +107,11 @@ export async function deleteFacility(id: string) {
 }
 
 // ---------------------------------------------------------------- pricing (OPS)
+/** Giá cuối cùng (sau khi gộp bản sửa với giá đang lưu) vẫn phải tăng dần ngày ≤ tuần ≤ tháng. */
+function assertRatesOrdered(r: { DAY: number; WEEK: number; MONTH: number }) {
+  if (!ratesOrdered(r)) throw Unprocessable(`${RATES_ORDER_MESSAGE} (hiện: ${r.DAY} / ${r.WEEK} / ${r.MONTH})`, 'RATES_NOT_ORDERED');
+}
+
 /** Sửa 1-3 giá chu kỳ của loại kho (khách tự chọn chu kỳ nào thì tính theo giá đó). */
 export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record<RentalPeriod, number>>) {
   const ut = await UnitTypeModel.findById(unitTypeId);
@@ -114,6 +120,7 @@ export async function setUnitTypeRates(unitTypeId: string, rates: Partial<Record
   for (const [period, rate] of Object.entries(rates) as [RentalPeriod, number | undefined][]) {
     if (rate !== undefined) ut.set(`rates.${period}`, rate);
   }
+  assertRatesOrdered(ut.rates);
   await ut.save();
   await audit({ action: 'pricing.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before, after: ut.rates } });
   return ut;
@@ -166,6 +173,7 @@ export async function updateUnitType(id: string, patch: UnitTypePatch) {
   for (const [period, rate] of Object.entries(patch.rates ?? {}) as [RentalPeriod, number | undefined][]) {
     if (rate !== undefined) ut.set(`rates.${period}`, rate);
   }
+  if (patch.rates && Object.keys(patch.rates).length) assertRatesOrdered(ut.rates); // chỉ kiểm khi người dùng đổi giá — dữ liệu cũ không bị chặn oan
   await ut.save();
   await audit({ action: 'unit_type.update', entityType: 'UnitType', entityId: ut._id, facilityId: ut.facilityId, changes: { before, after: { name: ut.name, rates: ut.rates, isActive: ut.isActive, areaM2: ut.areaM2 } } });
   return ut;
@@ -195,7 +203,7 @@ export async function addUnit(user: UserHydrated, input: {
   if (!ut) throw NotFound('loại kho');
   await assertFacility(user, ut.facilityId, 'unit.create');
   const u = await StorageUnitModel.create({
-    facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: input.unitNumber, location: { building: 'A', floor: input.floor, zone: input.zone },
+    facilityId: ut.facilityId, unitTypeId: ut._id, unitNumber: input.unitNumber, location: { building: 'A', floor: input.floor, zone: input.zone || undefined },
     accessMethod: input.accessMethod,
   });
   await audit({ action: 'unit.create', entityType: 'StorageUnit', entityId: u._id, facilityId: ut.facilityId });

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Types } from 'mongoose';
 import type { RouteSchemas } from './tags';
 import { SCHEMAS_TAG, tag } from './tags';
+import './zod-vi'; // thông báo lỗi zod mặc định bằng tiếng Việt
 
 /** Zod schema gắn ở đây vừa để kiểm tra dữ liệu, vừa là nguồn sinh OpenAPI (xem modules/openapi.ts). */
 export const validate = (s: RouteSchemas): RequestHandler => tag<RequestHandler>((req, _res, next) => {
