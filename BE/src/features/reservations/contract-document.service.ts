@@ -34,6 +34,7 @@ async function renderPdf(r: ReservationHydrated, customer: { fullName: string; e
     unitNumber: unit?.unitNumber, floor: unit?.location.floor, zone: unit?.location.zone, areaM2: type?.areaM2, accessMethod: unit?.accessMethod,
     useAirConditioning: r.useAirConditioning, rentalPeriod: r.quote.rentalPeriod, periods: r.periods,
     startDate: r.startDate.toISOString(), endDate: r.endDate.toISOString(), quote: r.quote, depositPaid: !!r.depositPaymentId,
+    termsVersion: r.signature?.termsVersion, // hợp đồng đã ký giữ đúng phiên bản Điều khoản lúc ký
     policy: policy.toObject(),
   });
   const pdf = await buildContractPdf({
