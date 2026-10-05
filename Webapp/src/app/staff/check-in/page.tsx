@@ -14,6 +14,7 @@ import { Button, ButtonLink, Card, CardHeader, Field, KV, PageHeader, StatusBadg
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { QrScanButton } from '@/features/reservations/qr-scanner';
 import { SignatureInfo } from '@/features/contracts/contract-document';
+import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
 function CheckInInner() {
   const { db, user, run, refresh } = useStore();
