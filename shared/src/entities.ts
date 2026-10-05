@@ -279,7 +279,10 @@ export interface ContractSignature<I = ID, D = string> {
   termsVersion: string;
   policyVersion: number;
   signedBy?: I | null;                    // người thao tác: chính khách, hoặc nhân viên ký hộ tại quầy
-  onBehalf: boolean;                      // true = nhân viên cho khách ký trên thiết bị tại quầy
+  onBehalf: boolean;                      // luôn false với chữ ký mới (nhân viên không ký thay); chỉ còn ở dữ liệu cũ
+  /** Lần gửi PDF hợp đồng đã ký tới email khách thành công gần nhất; emailedTo đã che (a***@gmail.com). */
+  emailedAt?: D | null;
+  emailedTo?: string | null;
 }
 
 // ---------- UnitSwapRequest (đổi ô kho theo yêu cầu — A1b) ----------

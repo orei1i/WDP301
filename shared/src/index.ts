@@ -7,3 +7,4 @@ export * from './format';
 export * from './labels';
 export * from './legal';
 export * from './policy-defaults';
+export * from './contract-text';
