@@ -6,6 +6,7 @@ import { cancelReservation } from '../features/reservations/reservation.service'
 import { expireSwapRequests } from '../features/swaps/unit-swap-request.service';
 import { audit } from '../features/audit/audit.service';
 import { createPayment } from '../features/payments/payment.service';
+import { coveredByPaidRenewal } from '../features/contracts/billing-rules';
 import { withTxn } from '../shared/db/txn';
 
 /**
@@ -52,6 +53,13 @@ export async function runBilling() {
       const start = c.billing.nextBillingDate;
       const period = c.billing.rentalPeriod;
       const end = addDays(addPeriodsUTC(start, period, 1), -1);
+      // Kỳ này khách đã trả trước khi gia hạn (RENEWAL) → không xuất hoá đơn RENT lần nữa, chỉ đẩy lịch sang kỳ sau.
+      if (coveredByPaidRenewal(c.renewals, start)) {
+        c.billing.nextBillingDate = addPeriodsUTC(start, period, 1);
+        if (c.balance.outstanding <= 0 && c.status === 'ACTIVE') c.billing.paidThrough = end;
+        await c.save({ session });
+        return;
+      }
       // Hết hạn (start >= endDate) mà chưa autoRenew VÀ khách chưa đăng ký trả kho (contract này vẫn nằm
       // trong { ACTIVE, DELINQUENT, LOCKED_OUT } — MOVE_OUT_PENDING đã bị loại khỏi `due` ở trên) — vẫn
       // giữ đồ trong kho nên tiếp tục tính tiền thuê theo đúng giá cũ (holdover), KHÔNG tự gia hạn cam kết
