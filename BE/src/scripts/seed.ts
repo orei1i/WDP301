@@ -6,10 +6,12 @@
  */
 import mongoose, { Types, type Model } from 'mongoose';
 import { env } from '../shared/config/env';
+import { encryptSecret } from '../shared/crypto/secret-box';
+import { sha256 } from '../features/payments/payment.service';
 import { firebaseAuth } from '../shared/config/firebase';
 import { connectMongo } from '../shared/db/connection';
 import {
-  ALL_MODELS, AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel,
+  ALL_MODELS, AccessRequestModel, AuditLogModel, DamageClaimModel, FacilityModel, InspectionModel, PaymentModel, PolicyModel,
   RentalContractModel, ReservationModel, ServiceOfferingModel, ServiceOrderModel, StorageUnitModel, TicketModel, UnitSwapRequestModel, UnitTypeModel, UserModel,
 } from '../shared/db/models';
 import { createSeed, DEMO_IDS } from '../../../Webapp/src/shared/lib/mock-data';
@@ -35,6 +37,15 @@ async function main() {
   for (const m of ALL_MODELS) await m.syncIndexes();
 
   const data = createSeed();
+
+  // Hợp đồng khoá mật khẩu: PIN demo cố định theo số hợp đồng, lưu mã hoá để khách xem được trong app.
+  for (const c of data.contracts) {
+    if (c.access.method !== 'PIN') continue;
+    const n = Number(c.contractNumber.replace(/\D/g, '').slice(-6) || '1');
+    const pin = String(100_000 + ((n * 7919) % 900_000));
+    c.access.credentialHash = sha256(pin);
+    c.access.credentialEnc = encryptSecret(pin);
+  }
 
   // mock string ids ('f-q7', 'u-c-01', …) → ObjectIds, applied everywhere they appear
   const idMap = new Map<string, Types.ObjectId>();
@@ -63,7 +74,7 @@ async function main() {
     [StorageUnitModel, data.units], [ReservationModel, data.reservations], [RentalContractModel, data.contracts],
     [PaymentModel, data.payments], [InspectionModel, data.inspections], [TicketModel, data.tickets],
     [DamageClaimModel, data.claims], [UnitSwapRequestModel, data.swapRequests],
-    [ServiceOfferingModel, data.services], [ServiceOrderModel, data.serviceOrders], [AuditLogModel, data.audit],
+    [ServiceOfferingModel, data.services], [ServiceOrderModel, data.serviceOrders], [AccessRequestModel, data.accessRequests], [AuditLogModel, data.audit],
   ];
   for (const [model, docs] of plan) {
     await model.insertMany(docs.map(convert), { ordered: true });
