@@ -302,9 +302,10 @@ export default function FacilityDetail() {
                 {q.surchargeAmount > 0 && <div className="flex justify-between"><dt className="text-stone-500">Phụ phí điều hòa</dt><dd className="tabular-nums">+{vnd(q.surchargeAmount)}</dd></div>}
                 {q.discountAmount > 0 && <div className="flex justify-between text-emerald-700"><dt>Ưu đãi thuê {periodLabel(period, periods)} (−{discountPct}%)</dt><dd className="tabular-nums">−{vnd(q.discountAmount)}</dd></div>}
                 <div className="flex justify-between font-medium"><dt>Tiền thuê mỗi {PERIOD_UNIT[period]}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent)}</dd></div>
-                <div className="flex justify-between"><dt className="text-stone-500">Tổng {periodLabel(period, periods)}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
+                <div className="flex justify-between"><dt className="text-stone-500">Tổng giá trị {periodLabel(period, periods)} <span className="text-xs">(trả từng {PERIOD_UNIT[period]})</span></dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
                 <div className="mt-1 flex justify-between rounded-lg bg-brand-50 px-3 py-2.5 font-semibold text-brand-900"><dt>Đặt cọc</dt><dd className="tabular-nums">{vnd(q.depositAmount)}</dd></div>
               </dl>
+              <p className="mt-3 text-xs leading-relaxed text-stone-500">Chỉ trả cọc khi đặt chỗ (giữ đến lúc trả kho, không trừ vào tiền thuê). Tiền thuê {PERIOD_UNIT[period]} đầu trả khi nhận kho, các {PERIOD_UNIT[period]} sau trả theo từng kỳ — không phải trả trước toàn bộ.</p>
             </Card>
           )}
           {services.length > 0 && (

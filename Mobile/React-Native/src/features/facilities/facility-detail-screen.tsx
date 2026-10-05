@@ -41,7 +41,7 @@ function priceItems(q: PriceQuote, typeName: string, periods: number): [string, 
   if (q.surchargeAmount > 0) items.push(['Phụ phí', `+${vnd(q.surchargeAmount)}`]);
   if (q.discountAmount > 0) items.push(['Giảm giá', `-${vnd(q.discountAmount)}`]);
   items.push([`Tiền thuê mỗi ${unit}`, vnd(q.firstPeriodRent)]);
-  items.push([`Tổng ${periodLabel(q.rentalPeriod, periods)}`, vnd(q.firstPeriodRent * periods)]);
+  items.push([`Tổng giá trị ${periodLabel(q.rentalPeriod, periods)} (trả từng ${unit})`, vnd(q.firstPeriodRent * periods)]);
   items.push(['Đặt cọc ngay', <Text key="deposit" style={{ fontWeight: '700', color: C.brand800 }}>{vnd(q.depositAmount)}</Text>]);
   return items;
 }
@@ -218,6 +218,7 @@ export default function FacilityDetailScreen() {
       {ut && q && (
         <Card style={{ marginTop: S.md }}>
           <KV items={priceItems(q, ut.name, periodsNum)} />
+          <Muted style={{ marginTop: S.sm } as never}>Chỉ trả cọc khi đặt chỗ (giữ đến lúc trả kho, không trừ vào tiền thuê). Tiền thuê kỳ đầu trả khi nhận kho, các kỳ sau trả theo từng kỳ — không phải trả trước toàn bộ.</Muted>
         </Card>
       )}
 

@@ -17,7 +17,7 @@ import { SignatureInfo } from '@/features/contracts/contract-document';
 import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
 function CheckInInner() {
-  const { db, user, run, refresh } = useStore();
+  const { db, user, run, refresh, busy } = useStore();
   const sp = useSearchParams();
   const [code, setCode] = useState(sp.get('code') ?? '');
   const [found, setFound] = useState<Reservation | null>(null);
@@ -125,10 +125,24 @@ function CheckInInner() {
                       </Field>
                       {method !== 'PIN' && <Field label={method === 'PHYSICAL_KEY' ? 'Mã chìa khoá' : 'Số thẻ khoá'}><input className={inputCls} value={keyTag} onChange={(e) => setKeyTag(e.target.value)} placeholder={method === 'PHYSICAL_KEY' ? `K-${unitLabel(db, r.unitId)}` : 'RF-000123'} /></Field>}
                     </div>
-                    <Field label={`Thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu · ${vnd(r.quote.firstPeriodRent)}`}>
+                    <div className="rounded-lg bg-stone-50 p-4 text-sm ring-1 ring-inset ring-stone-200 md:col-span-2">
+                      <p className="font-semibold">Thanh toán khi nhận kho</p>
+                      <dl className="mt-2 space-y-1.5">
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-stone-600">Tiền cọc <span className="text-xs text-stone-500">— đã thu lúc đặt chỗ, giữ đến khi trả kho, không thu lại và không trừ vào tiền thuê</span></dt>
+                          <dd className={cx('shrink-0 tabular-nums', r.depositPaymentId ? 'text-emerald-700' : 'text-red-700')}>{vnd(r.quote.depositAmount)} · {r.depositPaymentId ? 'đã thu' : 'chưa thu'}</dd>
+                        </div>
+                        <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5 font-semibold">
+                          <dt>Thu hôm nay: tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">(khoản riêng với cọc)</span></dt>
+                          <dd className="shrink-0 tabular-nums">{vnd(r.quote.firstPeriodRent)}</dd>
+                        </div>
+                      </dl>
+                      <p className="mt-2 text-xs text-stone-500">Các {PERIOD_UNIT[r.quote.rentalPeriod]} sau khách trả theo từng kỳ (hoá đơn xuất vào đầu mỗi kỳ).</p>
+                    </div>
+                    <Field label={`Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
                       <PayMethodPicker value={pay} onChange={setPay} methods={['CASH', 'CARD', 'VNPAY', 'BANK_TRANSFER']} />
                     </Field>
-                    <Button size="lg" className="md:col-span-2" onClick={() => void confirm()}><KeyRound className="size-4" />Xác nhận bàn giao kho</Button>
+                    <Button size="lg" className="md:col-span-2" disabled={busy} onClick={() => void confirm()}><KeyRound className="size-4" />Xác nhận bàn giao kho</Button>
                   </div>
                 )}
               </div>
