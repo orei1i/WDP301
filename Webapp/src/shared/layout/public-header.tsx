@@ -16,6 +16,7 @@ export function PublicHeader() {
           <Link href="/facilities" className="hover:text-ink">Tìm kho</Link>
           <Link href="/#sizes" className="hover:text-ink">Kích thước & giá</Link>
           <Link href="/#how" className="hover:text-ink">Cách thuê</Link>
+          <Link href="/dieu-khoan" className="hover:text-ink">Điều khoản</Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
           {user ? (
