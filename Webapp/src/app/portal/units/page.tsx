@@ -66,7 +66,7 @@ export default function MyUnits() {
                 ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)} · ${vnd(c.billing.rate)}`],
                 ['Hạn trả tiền kỳ tới', `${fmtDate(paymentDueDate(c.billing.nextBillingDate, c.terms.gracePeriodDays))} — quá hạn bị tính phí trễ`],
                 ['Truy cập', <span key="a" className="inline-flex items-center gap-1.5"><KeyRound className="size-3.5" />{ACCESS_METHOD[c.access.method]}{c.access.keyTag ? ` · ${c.access.keyTag}` : ''}</span>],
-                ['Tiền cọc', <span key="d">{vnd(c.deposit.amount)} · {DEPOSIT_STATUS[c.deposit.status].label}</span>],
+                ['Tiền giữ chân', <span key="d">{vnd(c.deposit.amount)} · {DEPOSIT_STATUS[c.deposit.status].label}</span>],
                 ['Công nợ', <span key="o" className={c.balance.outstanding ? 'text-red-700' : ''}>{vnd(c.balance.outstanding)}</span>],
                 ['Hợp đồng đã ký', `${c.terms.signerName ?? '—'} · ${fmtDate(c.terms.signedAt)}`],
               ]} /></div>
@@ -91,6 +91,7 @@ export default function MyUnits() {
                         <span>
                           Yêu cầu đổi ô {openSwap.requestNumber} · <StatusBadge map={SWAP_REQUEST_STATUS} value={openSwap.status} />
                           {openSwap.status === 'APPROVED' && openSwap.method === 'SELF' && openSwap.moveDeadline && <> · hạn chuyển {fmtDate(openSwap.moveDeadline)}</>}
+                          {openSwap.status === 'APPROVED' && openSwap.method === 'DELIVERY' && <> · chi nhánh chuyển ngày {fmtDate(openSwap.scheduledFor)}{openSwap.assignedStaffName ? `, nhân viên ${openSwap.assignedStaffName}` : ''}</>}
                         </span>
                         {openSwap.status === 'SUBMITTED' && (
                           <Button size="sm" variant="ghost" onClick={() => void run('cancelSwapRequest', { swapRequestId: openSwap._id }, 'Đã rút yêu cầu đổi ô')}>Rút yêu cầu</Button>
@@ -122,22 +123,22 @@ export default function MyUnits() {
 
       <Modal open={dlg?.kind === 'moveout'} onClose={close} title="Đăng ký trả kho"
         footer={<Button onClick={() => dlg && void run('requestMoveOut', { contractId: dlg.c._id, date: `${date}T00:00:00.000Z` }, 'Đã đăng ký trả kho', () => close())}>Xác nhận</Button>}>
-        <Field label="Ngày trả kho dự kiến" hint="Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền cọc hoàn sau khi trừ chi phí hư hại (nếu có).">
+        <Field label="Ngày trả kho dự kiến" hint="Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền giữ chân hoàn sau khi trừ chi phí hư hại (nếu có).">
           <input type="date" className={inputCls} min={todayISO().slice(0, 10)} value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
         {dlg && (() => {
           const preview = earlyTerminationPreview(db, dlg.c, `${date}T00:00:00.000Z`);
           return preview && (
             <p className={cx('mt-3 rounded-lg p-3 text-xs leading-relaxed', preview.refundCapPct === 0 ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900')}>
-              Trả kho sớm — đến ngày này bạn đã dùng {preview.elapsedPct}% kỳ hạn thuê, tiền cọc chỉ được hoàn tối đa <strong>{preview.refundCapPct}%</strong>
-              {preview.refundCapPct === 0 ? ' (không hoàn cọc)' : ''}, chưa kể trừ chi phí hư hại nếu có.
+              Trả kho sớm — đến ngày này bạn đã dùng {preview.elapsedPct}% kỳ hạn thuê, tiền giữ chân chỉ được hoàn tối đa <strong>{preview.refundCapPct}%</strong>
+              {preview.refundCapPct === 0 ? ' (không hoàn tiền giữ chân)' : ''}, chưa kể trừ chi phí hư hại nếu có.
             </p>
           );
         })()}
       </Modal>
 
       <Modal open={dlg?.kind === 'swap'} onClose={close} size="lg" title="Yêu cầu đổi ô kho"
-        description="Gửi yêu cầu để Quản lý chi nhánh xét duyệt. Giá thuê và tiền cọc giữ nguyên vì chỉ đổi sang ô cùng loại."
+        description="Gửi yêu cầu để Quản lý chi nhánh xét duyệt. Giá thuê và tiền giữ chân giữ nguyên vì chỉ đổi sang ô cùng loại."
         footer={<Button disabled={!swapUnitId || swapReason.trim().length < 5} onClick={() => dlg && swapUnitId && void run(
           'requestUnitSwap', { contractId: dlg.c._id, toUnitId: swapUnitId, method: swapMethod, reason: swapReason },
           (r) => `Đã gửi yêu cầu ${r.requestNumber} — chờ chi nhánh xét duyệt`, () => close(),

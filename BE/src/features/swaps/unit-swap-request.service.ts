@@ -1,7 +1,7 @@
 import { Types, type ClientSession } from 'mongoose';
 import type { SwapMethod } from '@ssm/shared';
 import {
-  RentalContractModel, ReservationModel, StorageUnitModel, UnitSwapRequestModel, UnitTypeModel, type UserHydrated,
+  RentalContractModel, ReservationModel, StorageUnitModel, UnitSwapRequestModel, UnitTypeModel, UserModel, type UserHydrated,
 } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
@@ -58,9 +58,18 @@ export async function createSwapRequest(user: UserHydrated, contractId: string, 
   });
 }
 
+/** Người chuyển phải là NHÂN VIÊN đang hoạt động của đúng chi nhánh đó — không phân công chéo chi nhánh hay tài khoản bị khoá. */
+async function loadMover(staffId: string, facilityId: Types.ObjectId, session: ClientSession) {
+  const staff = await UserModel.findById(staffId, { fullName: 1, role: 1, status: 1, facilityIds: 1 }).session(session);
+  if (!staff || staff.role !== 'STAFF' || staff.status !== 'ACTIVE' || !staff.facilityIds.some((f) => String(f) === String(facilityId))) {
+    throw Unprocessable('Người chuyển phải là nhân viên đang hoạt động của chi nhánh này', 'INVALID_MOVER');
+  }
+  return staff;
+}
+
 // ---------------------------------------------------------------- duyệt / từ chối (FACILITY_MANAGER)
 export async function decideSwapRequest(user: UserHydrated, id: string, input: {
-  approve: boolean; facilityFault?: boolean; fee?: number; scheduledFor?: string; rejectReason?: string;
+  approve: boolean; facilityFault?: boolean; fee?: number; scheduledFor?: string; assignedStaffId?: string; rejectReason?: string;
 }) {
   return withTxn(async (session) => {
     const req = await UnitSwapRequestModel.findById(id).session(session);
@@ -83,6 +92,8 @@ export async function decideSwapRequest(user: UserHydrated, id: string, input: {
     }
 
     if (req.method === 'DELIVERY' && !input.scheduledFor) throw Unprocessable('Thuê người chuyển thì cần hẹn ngày chi nhánh cử người chuyển');
+    if (req.method === 'DELIVERY' && !input.assignedStaffId) throw Unprocessable('Thuê người chuyển thì cần phân công nhân viên chuyển', 'MOVER_REQUIRED');
+    const mover = req.method === 'DELIVERY' ? await loadMover(input.assignedStaffId!, req.facilityId, session) : null;
 
     const priorSwaps = await UnitSwapRequestModel.countDocuments({ contractId: req.contractId, status: 'DONE' }).session(session);
     const facilityFault = input.facilityFault ?? false;
@@ -95,13 +106,36 @@ export async function decideSwapRequest(user: UserHydrated, id: string, input: {
     req.decidedBy = user._id;
     req.decidedAt = new Date();
     if (req.method === 'SELF') req.moveDeadline = addDays(new Date(), SWAP_SELF_MOVE_DAYS);
-    else req.scheduledFor = new Date(input.scheduledFor!);
+    else {
+      req.scheduledFor = new Date(input.scheduledFor!);
+      req.assignedStaffId = mover!._id;
+      req.assignedStaffName = mover!.fullName;
+    }
     req.transitionTo('APPROVED', { actor: user.role, by: user._id, reason: facilityFault ? 'Lỗi từ chi nhánh — miễn phí' : undefined });
     await req.save({ session });
     await audit({
       action: 'swap_request.approve', entityType: 'UnitSwapRequest', entityId: req._id, facilityId: req.facilityId,
-      changes: { after: { fee, facilityFault, method: req.method, moveDeadline: req.moveDeadline, scheduledFor: req.scheduledFor } },
+      changes: { after: { fee, facilityFault, method: req.method, moveDeadline: req.moveDeadline, scheduledFor: req.scheduledFor, mover: req.assignedStaffName } },
     }, session);
+    return req;
+  });
+}
+
+// ---------------------------------------------------------------- đổi người / ngày chuyển (FACILITY_MANAGER, khi đã duyệt)
+/** Sắp xếp lại nhân viên chuyển đồ (nghỉ ốm, đổi ca…) hoặc dời ngày hẹn — chỉ với yêu cầu DELIVERY đang APPROVED. */
+export async function assignSwapMover(user: UserHydrated, id: string, input: { assignedStaffId: string; scheduledFor?: string }) {
+  return withTxn(async (session) => {
+    const req = await load(id, session);
+    await assertFacility(user, req.facilityId, 'swap_request.assign');
+    if (req.method !== 'DELIVERY') throw Unprocessable('Chỉ phân công người chuyển cho yêu cầu "Thuê người chuyển"');
+    if (req.status !== 'APPROVED') throw Unprocessable('Chỉ đổi người chuyển khi yêu cầu đã duyệt và chưa hoàn tất');
+    const mover = await loadMover(input.assignedStaffId, req.facilityId, session);
+    const before = { mover: req.assignedStaffName, scheduledFor: req.scheduledFor };
+    req.assignedStaffId = mover._id;
+    req.assignedStaffName = mover.fullName;
+    if (input.scheduledFor) req.scheduledFor = new Date(input.scheduledFor);
+    await req.save({ session });
+    await audit({ action: 'swap_request.assign', entityType: 'UnitSwapRequest', entityId: req._id, facilityId: req.facilityId, changes: { before, after: { mover: mover.fullName, scheduledFor: req.scheduledFor } } }, session);
     return req;
   });
 }

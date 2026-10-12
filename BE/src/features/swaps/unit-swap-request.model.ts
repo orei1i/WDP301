@@ -23,6 +23,9 @@ const schema = new Schema<UnitSwapRequestDoc, UnitSwapRequestModelType, Methods>
   fee: { ...money(), default: 0 },
   facilityFault: { type: Boolean, default: null },
   scheduledFor: { type: Date, default: null },
+  // Nhân viên được phân công chuyển đồ (DELIVERY). Tên lưu kèm để khách xem được mà không cần đọc bảng users.
+  assignedStaffId: refOpt('User'),
+  assignedStaffName: { type: String, default: null, maxlength: 100 },
   moveDeadline: { type: Date, default: null },
   decidedBy: refOpt('User'),
   decidedAt: { type: Date, default: null },

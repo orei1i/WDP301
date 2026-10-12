@@ -4,7 +4,7 @@ import { enumValues, SwapRequestStatus } from '@ssm/shared';
 import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { idParams, paging, validate, zDate, zId } from '../../shared/http/validate';
-import { cancelSwapRequest, completeSwapRequest, decideSwapRequest, getSwapRequest, listSwapRequestsQueue } from './unit-swap-request.service';
+import { assignSwapMover, cancelSwapRequest, completeSwapRequest, decideSwapRequest, getSwapRequest, listSwapRequestsQueue } from './unit-swap-request.service';
 
 const e = <T extends string>(o: Record<string, T>) => z.enum(enumValues(o) as [T, ...T[]]);
 
@@ -31,9 +31,15 @@ swapsRouter.post('/:id/decide', authorize('FACILITY_MANAGER'), validate({ params
   facilityFault: z.boolean().optional().describe('Có phải lỗi từ chi nhánh không — quyết định miễn phí'),
   fee: z.number().int().min(0).optional().describe('Sửa phí đề xuất, trong trần SWAP_FEE_MAX'),
   scheduledFor: zDate.optional().describe('Bắt buộc khi method = DELIVERY — ngày chi nhánh cử người chuyển'),
+  assignedStaffId: zId.optional().describe('Bắt buộc khi method = DELIVERY — nhân viên của chi nhánh được phân công chuyển đồ'),
   rejectReason: z.string().min(5).max(500).optional().describe('Bắt buộc khi approve = false'),
 }) }), async (req, res) => {
   res.json(await decideSwapRequest(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+
+/** Đổi nhân viên chuyển đồ / dời ngày hẹn cho yêu cầu DELIVERY đã duyệt. */
+swapsRouter.post('/:id/assign', authorize('FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ assignedStaffId: zId, scheduledFor: zDate.optional() }) }), async (req, res) => {
+  res.json(await assignSwapMover(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
 swapsRouter.post('/:id/complete', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {

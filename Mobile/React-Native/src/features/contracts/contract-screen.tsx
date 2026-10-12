@@ -54,7 +54,7 @@ export default function ContractScreen() {
           ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)} · ${vnd(c.billing.rate)}`],
           ['Hạn trả tiền kỳ tới', `${fmtDate(paymentDueDate(c.billing.nextBillingDate, c.terms.gracePeriodDays))} — quá hạn bị tính phí trễ`],
           ['Phương thức truy cập', ACCESS_METHOD[c.access.method]],
-          ['Tiền cọc', `${vnd(c.deposit.amount)} · ${DEPOSIT_STATUS[c.deposit.status].label}`],
+          ['Tiền giữ chân', `${vnd(c.deposit.amount)} · ${DEPOSIT_STATUS[c.deposit.status].label}`],
           ['Công nợ', c.balance.outstanding > 0
             ? <Text key="o" style={{ color: C.red, fontWeight: '700' }}>{vnd(c.balance.outstanding)}</Text>
             : 'Không có'],
@@ -97,8 +97,8 @@ export default function ContractScreen() {
       {c.status === 'ACTIVE' && (
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Đăng ký trả kho</Text>
-          <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền cọc hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
-          <Text style={st.hint}>Trả kho trước hạn hợp đồng còn bị giới hạn % hoàn cọc theo thời gian đã sử dụng — dùng trên 50% kỳ hạn sẽ không được hoàn cọc.</Text>
+          <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền giữ chân hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
+          <Text style={st.hint}>Trả kho trước hạn hợp đồng còn bị giới hạn % hoàn tiền giữ chân theo thời gian đã sử dụng — dùng trên 50% kỳ hạn sẽ không được hoàn tiền giữ chân.</Text>
           <DateStepper label="Ngày trả kho dự kiến" value={moveOutDate} onChange={setMoveOutDate} min={todayISO()} />
           <Button
             title="Đăng ký trả kho"
@@ -119,6 +119,9 @@ export default function ContractScreen() {
           <StatusBadge map={SWAP_REQUEST_STATUS} value={openSwap.status} />
           {openSwap.status === 'APPROVED' && openSwap.method === 'SELF' && openSwap.moveDeadline && (
             <Text style={st.hint}>Hạn tự chuyển: {fmtDate(openSwap.moveDeadline)}</Text>
+          )}
+          {openSwap.status === 'APPROVED' && openSwap.method === 'DELIVERY' && (
+            <Text style={st.hint}>Chi nhánh chuyển ngày {fmtDate(openSwap.scheduledFor)}{openSwap.assignedStaffName ? ` — nhân viên ${openSwap.assignedStaffName}` : ''}</Text>
           )}
           {openSwap.status === 'SUBMITTED' && (
             <Button

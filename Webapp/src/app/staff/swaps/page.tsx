@@ -3,14 +3,14 @@
 import { useState } from 'react';
 import type { UnitSwapRequest } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
+import { CHECK_IN_SHIFT, SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
 import { facilityName, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
 import { Badge, Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
 type Tab = 'pending' | 'approved' | 'done';
-type Dialog = { kind: 'decide' | 'complete'; s: UnitSwapRequest } | null;
+type Dialog = { kind: 'decide' | 'complete' | 'assign'; s: UnitSwapRequest } | null;
 
 export default function StaffSwaps() {
   const { db, user, run } = useStore();
@@ -22,6 +22,8 @@ export default function StaffSwaps() {
   const [facilityFault, setFacilityFault] = useState(false);
   const [fee, setFee] = useState('0');
   const [scheduledFor, setScheduledFor] = useState('');
+  // Nhân viên được phân công chuyển đồ cho yêu cầu "Thuê người chuyển" — FM chọn lúc duyệt, đổi lại được khi chưa hoàn tất.
+  const [moverId, setMoverId] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   if (!user) return null;
   const close = () => setDlg(null);
@@ -34,19 +36,40 @@ export default function StaffSwaps() {
   };
 
   const openDecide = (s: UnitSwapRequest) => {
-    setApprove(true); setFacilityFault(false); setFee('0'); setScheduledFor(''); setRejectReason('');
+    setApprove(true); setFacilityFault(false); setFee('0'); setScheduledFor(''); setRejectReason(''); setMoverId('');
     setDlg({ kind: 'decide', s });
   };
+  const openAssign = (s: UnitSwapRequest) => {
+    setMoverId(s.assignedStaffId ?? ''); setScheduledFor(s.scheduledFor ? s.scheduledFor.slice(0, 10) : '');
+    setDlg({ kind: 'assign', s });
+  };
+  /** Nhân viên đang hoạt động của đúng chi nhánh của yêu cầu — chỉ những người này mới được phân công. */
+  const moversOf = (s: UnitSwapRequest) => db.users.filter((u) => u.role === 'STAFF' && u.status === 'ACTIVE' && u.facilityIds.includes(s.facilityId));
+  const moverSelect = (s: UnitSwapRequest) => (
+    <Field label="Nhân viên chuyển đồ" hint="Chỉ nhân viên đang hoạt động của chi nhánh này. Khách sẽ thấy tên người đến chuyển.">
+      <select className={inputCls} value={moverId} onChange={(e) => setMoverId(e.target.value)}>
+        <option value="">— Chọn nhân viên —</option>
+        {moversOf(s).map((u) => <option key={u._id} value={u._id}>{u.fullName}{u.shift ? ` · ${CHECK_IN_SHIFT[u.shift].label}` : ''}</option>)}
+      </select>
+    </Field>
+  );
+  const deliveryReady = !!scheduledFor && !!moverId;
 
   const columns = [
     { key: 'n', header: 'Yêu cầu', cell: (s: UnitSwapRequest) => <div><p className="font-mono text-xs">{s.requestNumber}</p><p className="text-xs text-stone-500">{facilityName(db, s.facilityId)}</p></div> },
     { key: 'k', header: 'Khách hàng', cell: (s: UnitSwapRequest) => userName(db, s.customerId) },
     { key: 'u', header: 'Đổi ô', cell: (s: UnitSwapRequest) => <span>{unitLabel(db, s.fromUnitId)} → <b>{unitLabel(db, s.toUnitId)}</b> <span className="text-stone-400">({typeName(db, s.unitTypeId)})</span></span> },
     { key: 'm', header: 'Hình thức', cell: (s: UnitSwapRequest) => SWAP_METHOD[s.method] },
+    { key: 'mv', header: 'Người chuyển', cell: (s: UnitSwapRequest) => (s.method === 'SELF'
+      ? <span className="text-stone-500">Khách tự chuyển{s.moveDeadline ? ` · hạn ${fmtDate(s.moveDeadline)}` : ''}</span>
+      : s.assignedStaffName
+        ? <div><p className="font-medium">{s.assignedStaffName} {s.assignedStaffId === user._id && <Badge tone="violet">Giao cho bạn</Badge>}</p><p className="text-xs text-stone-500">Ngày chuyển {fmtDate(s.scheduledFor)}</p></div>
+        : <span className="text-amber-700">Chưa phân công</span>) },
     { key: 'st', header: 'Trạng thái', cell: (s: UnitSwapRequest) => <StatusBadge map={SWAP_REQUEST_STATUS} value={s.status} /> },
     { key: 'a', header: '', className: 'text-right', cell: (s: UnitSwapRequest) => (
       <div className="flex justify-end gap-2">
         {s.status === 'SUBMITTED' && isFM && <Button size="sm" onClick={() => openDecide(s)}>Xét duyệt</Button>}
+        {s.status === 'APPROVED' && s.method === 'DELIVERY' && isFM && <Button size="sm" variant="ghost" onClick={() => openAssign(s)}>Đổi người chuyển</Button>}
         {s.status === 'APPROVED' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'complete', s })}>Xác nhận đã chuyển</Button>}
       </div>
     ) },
@@ -54,7 +77,7 @@ export default function StaffSwaps() {
 
   return (
     <>
-      <PageHeader title="Yêu cầu đổi ô kho" description="Khách gửi yêu cầu đổi sang ô cùng loại — xét duyệt rồi xác nhận khi đã chuyển xong." actions={<FacilityPicker scope={scope} />} />
+      <PageHeader title="Yêu cầu đổi ô kho" description="Khách gửi yêu cầu đổi sang ô cùng loại — quản lý xét duyệt, phân công nhân viên chuyển đồ (nếu khách thuê người chuyển), rồi xác nhận khi đã chuyển xong." actions={<FacilityPicker scope={scope} />} />
       <Tabs tabs={[
         { key: 'pending', label: 'Chờ duyệt', count: groups.pending.length },
         { key: 'approved', label: 'Đã duyệt · chờ chuyển', count: groups.approved.length },
@@ -68,10 +91,11 @@ export default function StaffSwaps() {
         description={dlg ? `${userName(db, dlg.s.customerId)} · ${unitLabel(db, dlg.s.fromUnitId)} → ${unitLabel(db, dlg.s.toUnitId)}` : ''}
         footer={<>
           <Button variant="secondary" onClick={() => setApprove(false)}>Từ chối</Button>
-          <Button onClick={() => dlg && void run('decideSwapRequest', {
+          <Button disabled={approve && dlg?.s.method === 'DELIVERY' && !deliveryReady} onClick={() => dlg && void run('decideSwapRequest', {
             swapRequestId: dlg.s._id, approve, facilityFault: approve ? facilityFault : undefined,
             fee: approve ? Math.round(Number(fee.replace(/\D/g, '')) || 0) : undefined,
             scheduledFor: approve && dlg.s.method === 'DELIVERY' ? `${scheduledFor}T00:00:00.000Z` : undefined,
+            assignedStaffId: approve && dlg.s.method === 'DELIVERY' ? moverId : undefined,
             rejectReason: !approve ? rejectReason : undefined,
           }, approve ? 'Đã duyệt yêu cầu đổi ô' : 'Đã từ chối yêu cầu', () => close())}>
             {approve ? 'Duyệt' : 'Xác nhận từ chối'}
@@ -94,15 +118,31 @@ export default function StaffSwaps() {
                   <input className={inputCls} value={fee} onChange={(e) => setFee(e.target.value)} disabled={facilityFault} placeholder="0" />
                 </Field>
                 {dlg.s.method === 'DELIVERY' && (
-                  <Field label="Ngày cử người chuyển">
-                    <input type="date" className={inputCls} min={fmtDate(new Date().toISOString())} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
-                  </Field>
+                  <>
+                    <Field label="Ngày cử người chuyển">
+                      <input type="date" className={inputCls} min={new Date().toISOString().slice(0, 10)} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+                    </Field>
+                    {moverSelect(dlg.s)}
+                  </>
                 )}
                 {dlg.s.method === 'SELF' && <p className="text-xs text-stone-500">Duyệt xong khách có 7 ngày để tự chuyển đồ sang ô mới, quá hạn yêu cầu sẽ tự hủy.</p>}
               </>
             ) : (
               <Field label="Lý do từ chối"><textarea className={inputCls} rows={3} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} /></Field>
             )}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={dlg?.kind === 'assign'} onClose={close} title={`Phân công chuyển đồ ${dlg?.s.requestNumber ?? ''}`}
+        description={dlg ? `${userName(db, dlg.s.customerId)} · ${unitLabel(db, dlg.s.fromUnitId)} → ${unitLabel(db, dlg.s.toUnitId)}` : ''}
+        footer={<Button disabled={!deliveryReady} onClick={() => dlg && void run('assignSwapMover', { swapRequestId: dlg.s._id, assignedStaffId: moverId, scheduledFor: `${scheduledFor}T00:00:00.000Z` }, 'Đã cập nhật người chuyển', () => close())}>Lưu phân công</Button>}>
+        {dlg && (
+          <div className="space-y-4">
+            <Field label="Ngày chuyển">
+              <input type="date" className={inputCls} min={new Date().toISOString().slice(0, 10)} value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+            </Field>
+            {moverSelect(dlg.s)}
           </div>
         )}
       </Modal>
