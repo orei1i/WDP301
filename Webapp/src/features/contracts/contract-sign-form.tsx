@@ -10,7 +10,7 @@ import { ContractDocument } from './contract-document';
 import { SignaturePad } from './signature-pad';
 
 /**
- * Bước ký hợp đồng (sau khi trả cọc, trước khi nhận kho). CHỈ khách ký, trên tài khoản của chính họ —
+ * Bước ký hợp đồng (sau khi trả tiền giữ chân, trước khi nhận kho). CHỈ khách ký, trên tài khoản của chính họ —
  * server từ chối nhân viên/quản lý, nên màn nhận kho của nhân viên không có form này.
  */
 export function ContractSignForm({ reservation: r }: { reservation: Reservation }) {

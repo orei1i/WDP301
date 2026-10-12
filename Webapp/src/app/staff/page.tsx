@@ -61,7 +61,7 @@ export default function StaffQueue() {
                   <span className="grid size-10 place-items-center rounded-lg bg-violet-50 text-xs font-semibold text-violet-800">{unitLabel(db, c.unitId)}</span>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{userName(db, c.customerId)}</p>
-                    <p className="text-xs text-stone-500">Hẹn {fmtDate(c.moveOut?.scheduledFor)} · cọc {vnd(c.deposit.amount)}</p>
+                    <p className="text-xs text-stone-500">Hẹn {fmtDate(c.moveOut?.scheduledFor)} · giữ chân {vnd(c.deposit.amount)}</p>
                   </div>
                   <Badge tone="violet">{byId(db.units, c.unitId)?.status === 'PENDING_INSPECTION' ? 'Chờ kiểm tra' : 'Chờ nhận chìa'}</Badge>
                 </li>

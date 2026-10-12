@@ -34,13 +34,13 @@ export default function MoveOutPage() {
   const start = (x: RentalContract) => { setActive(x); setChecklist(Object.fromEntries(ITEMS.map((i) => [i, 'OK']))); setDamages([]); setNotes(''); };
   const submit = async () => {
     if (!c) return;
-    const res = await run('submitInspection', { contractId: c._id, checklist: ITEMS.map((item) => ({ item, condition: checklist[item] ?? 'OK' })), damages, notes }, (ins) => `Hoàn tất trả kho — hoàn cọc ${vnd(ins.depositSettlement?.refundAmount ?? 0)}`);
+    const res = await run('submitInspection', { contractId: c._id, checklist: ITEMS.map((item) => ({ item, condition: checklist[item] ?? 'OK' })), damages, notes }, (ins) => `Hoàn tất trả kho — hoàn tiền giữ chân ${vnd(ins.depositSettlement?.refundAmount ?? 0)}`);
     if (res.ok) setActive(null);
   };
 
   return (
     <>
-      <PageHeader title="Trả kho & kiểm tra" description="Nhận lại chìa khóa, kiểm tra hiện trạng, ghi nhận hư hại và quyết toán tiền cọc." actions={<FacilityPicker scope={scope} />} />
+      <PageHeader title="Trả kho & kiểm tra" description="Nhận lại chìa khóa, kiểm tra hiện trạng, ghi nhận hư hại và quyết toán tiền giữ chân." actions={<FacilityPicker scope={scope} />} />
       <div className="grid gap-6 lg:grid-cols-[340px_1fr]">
         <Card>
           <CardHeader title="Chờ trả kho" />
@@ -119,20 +119,20 @@ export default function MoveOutPage() {
                   </section>
 
                   <section className="rounded-lg bg-stone-50 p-4 text-sm">
-                    <h4 className="mb-2 font-semibold">Quyết toán tiền cọc</h4>
+                    <h4 className="mb-2 font-semibold">Quyết toán tiền giữ chân</h4>
                     <dl className="space-y-1.5">
-                      <div className="flex justify-between"><dt className="text-stone-500">Tiền cọc đang giữ</dt><dd className="tabular-nums">{vnd(c.deposit.amount)}</dd></div>
+                      <div className="flex justify-between"><dt className="text-stone-500">Tiền giữ chân đang giữ</dt><dd className="tabular-nums">{vnd(c.deposit.amount)}</dd></div>
                       <div className="flex justify-between"><dt className="text-stone-500">Chi phí hư hại</dt><dd className="tabular-nums">−{vnd(damageTotal)}</dd></div>
                       {c.balance.outstanding > 0 && <div className="flex justify-between"><dt className="text-stone-500">Công nợ còn lại</dt><dd className="tabular-nums">−{vnd(c.balance.outstanding)}</dd></div>}
                       {earlyTermination && (
                         <div className="flex justify-between text-amber-800">
                           <dt>Trả kho sớm (đã dùng {earlyTermination.elapsedPct}% kỳ hạn)</dt>
-                          <dd className="tabular-nums">trần {earlyTermination.refundCapPct}% cọc</dd>
+                          <dd className="tabular-nums">trần {earlyTermination.refundCapPct}% tiền giữ chân</dd>
                         </div>
                       )}
                       <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(refundAmount)}</dd></div>
                     </dl>
-                    {damageTotal + c.balance.outstanding > c.deposit.amount && <p className="mt-2 text-xs text-amber-800">Chi phí vượt tiền cọc — phần chênh lệch cần thu thêm từ khách.</p>}
+                    {damageTotal + c.balance.outstanding > c.deposit.amount && <p className="mt-2 text-xs text-amber-800">Chi phí vượt tiền giữ chân — phần chênh lệch cần thu thêm từ khách.</p>}
                   </section>
                   <div className="flex justify-end gap-2">
                     <Button variant="secondary" onClick={() => setActive(null)}>Để sau</Button>
@@ -154,7 +154,7 @@ export default function MoveOutPage() {
           { key: 'by', header: 'Người kiểm tra', cell: (i) => userName(db, i.inspectorId) },
           { key: 'o', header: 'Kết quả', cell: (i) => (i.outcome ? <StatusBadge map={INSPECTION_OUTCOME} value={i.outcome} /> : '—') },
           { key: 'f', header: 'Hư hại', className: 'text-right tabular-nums', cell: (i) => vnd(i.totalDamageFee) },
-          { key: 'r', header: 'Hoàn cọc', className: 'text-right tabular-nums', cell: (i) => (i.depositSettlement ? vnd(i.depositSettlement.refundAmount) : '—') },
+          { key: 'r', header: 'Hoàn tiền giữ chân', className: 'text-right tabular-nums', cell: (i) => (i.depositSettlement ? vnd(i.depositSettlement.refundAmount) : '—') },
         ]} />
       </Card>
     </>

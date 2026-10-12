@@ -53,7 +53,7 @@ function CheckInInner() {
 
   const confirm = async () => {
     if (!r) return;
-    const res = await run('checkIn', { reservationId: r._id, keyTag: keyTag || undefined, payMethod: pay }, 'Nhận kho thành công — hợp đồng đã kích hoạt');
+    const res = await run('checkIn', { reservationId: r._id, keyTag: keyTag || undefined, payMethod: r.quote.firstPeriodAtBooking ? undefined : pay }, 'Nhận kho thành công — hợp đồng đã kích hoạt');
     if (res.ok) setDone({ pin: res.value.pin, contract: res.value.contract.contractNumber, unit: res.value.unit.unitNumber });
   };
 
@@ -101,7 +101,7 @@ function CheckInInner() {
                   ['Chi nhánh', facilityName(db, r.facilityId)], ['Loại kho', typeName(db, r.unitTypeId)],
                   ['Kho được phân', unitLabel(db, r.unitId)], ['Ngày nhận', fmtDate(r.startDate)],
                   ['Ca dự kiến đến', <StatusBadge key="shift" map={CHECK_IN_SHIFT} value={r.preferredCheckInShift} />],
-                  ['Thời hạn', periodLabel(r.quote.rentalPeriod, r.periods)], ['Tiền cọc', r.depositPaymentId ? `${vnd(r.quote.depositAmount)} · đã thu` : 'Chưa thu'],
+                  ['Thời hạn', periodLabel(r.quote.rentalPeriod, r.periods)], ['Tiền giữ chân', r.depositPaymentId ? `${vnd(r.quote.depositAmount)} · đã thu` : 'Chưa thu'],
                 ]} />
                 {blockers.length === 0 && !r.signature ? (
                   <div className="mt-5 space-y-3 border-t border-stone-100 pt-5">
@@ -129,28 +129,37 @@ function CheckInInner() {
                       <p className="font-semibold">Thanh toán khi nhận kho</p>
                       <dl className="mt-2 space-y-1.5">
                         <div className="flex justify-between gap-4">
-                          <dt className="text-stone-600">Tiền cọc <span className="text-xs text-stone-500">— đã thu lúc đặt chỗ, giữ đến khi trả kho, không thu lại và không trừ vào tiền thuê</span></dt>
+                          <dt className="text-stone-600">Tiền giữ chân <span className="text-xs text-stone-500">— đã thu lúc đặt chỗ, giữ đến khi trả kho, không thu lại và không trừ vào tiền thuê</span></dt>
                           <dd className={cx('shrink-0 tabular-nums', r.depositPaymentId ? 'text-emerald-700' : 'text-red-700')}>{vnd(r.quote.depositAmount)} · {r.depositPaymentId ? 'đã thu' : 'chưa thu'}</dd>
                         </div>
-                        <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5 font-semibold">
-                          <dt>Thu hôm nay: tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">(khoản riêng với cọc)</span></dt>
-                          <dd className="shrink-0 tabular-nums">{vnd(r.quote.firstPeriodRent)}</dd>
-                        </div>
+                        {r.quote.firstPeriodAtBooking ? (
+                          <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5 font-semibold">
+                            <dt>Tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">— kho cỡ lớn: khách đã trả cùng lúc đặt chỗ, KHÔNG thu lại</span></dt>
+                            <dd className="shrink-0 tabular-nums text-emerald-700">{vnd(r.quote.firstPeriodRent)} · đã thu</dd>
+                          </div>
+                        ) : (
+                          <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5 font-semibold">
+                            <dt>Thu hôm nay: tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">(khoản riêng với tiền giữ chân)</span></dt>
+                            <dd className="shrink-0 tabular-nums">{vnd(r.quote.firstPeriodRent)}</dd>
+                          </div>
+                        )}
                       </dl>
                       {(() => {
                         const grace = db.policies.find((p) => p._id === r.quote.policyId)?.gracePeriodDays;
                         const next = addPeriods(todayISO(), r.quote.rentalPeriod, 1);
                         return (
                           <p className="mt-2 text-xs text-stone-500">
-                            Hôm nay chỉ thu tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu, không thu thêm khoản nào khác. Kỳ kế tiếp bắt đầu {fmtDate(next)}
+                            {r.quote.firstPeriodAtBooking ? 'Hôm nay KHÔNG thu thêm khoản nào — khách đã trả đủ khi đặt chỗ.' : `Hôm nay chỉ thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu, không thu thêm khoản nào khác.`} Kỳ kế tiếp bắt đầu {fmtDate(next)}
                             {grace !== undefined && <>, khách trả trước <b>{fmtDate(paymentDueDate(next, grace))}</b> (quá hạn bị tính phí trễ)</>}.
                           </p>
                         );
                       })()}
                     </div>
-                    <Field label={`Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
-                      <PayMethodPicker value={pay} onChange={setPay} methods={['CASH', 'CARD', 'VNPAY', 'BANK_TRANSFER']} />
-                    </Field>
+                    {!r.quote.firstPeriodAtBooking && (
+                      <Field label={`Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
+                        <PayMethodPicker value={pay} onChange={setPay} methods={['CASH', 'CARD', 'VNPAY', 'BANK_TRANSFER']} />
+                      </Field>
+                    )}
                     <Button size="lg" className="md:col-span-2" disabled={busy} onClick={() => void confirm()}><KeyRound className="size-4" />Xác nhận bàn giao kho</Button>
                   </div>
                 )}

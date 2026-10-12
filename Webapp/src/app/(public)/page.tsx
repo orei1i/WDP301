@@ -39,7 +39,7 @@ export default function Home() {
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs text-brand-100"><ShieldCheck className="size-3.5" /> Camera 24/7 · Bảo vệ trực đêm · Hợp đồng điện tử</p>
             <h1 className="mt-5 text-4xl font-bold leading-tight tracking-tight sm:text-5xl">Kho tự quản gần bạn.<br /><span className="text-brand-200">Đặt online, nhận kho trong ngày.</span></h1>
-            <p className="mt-5 max-w-xl text-base text-stone-300">Từ tủ locker cho sinh viên đến kho drive-up cho doanh nghiệp. Xem chỗ trống theo thời gian thực, đặt cọc qua VNPay/MoMo và quét mã QR để nhận kho.</p>
+            <p className="mt-5 max-w-xl text-base text-stone-300">Từ tủ locker cho sinh viên đến kho drive-up cho doanh nghiệp. Xem chỗ trống theo thời gian thực, thanh toán giữ chỗ qua VNPay/MoMo và quét mã QR để nhận kho.</p>
             <div className="mt-8 flex flex-wrap gap-6 text-sm text-stone-300">
               {loading ? (
                 <>
@@ -109,7 +109,7 @@ export default function Home() {
         <h2 className="text-2xl font-semibold tracking-tight">Thuê kho trong 4 bước</h2>
         <ol className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { icon: Warehouse, t: 'Chọn kho & đặt cọc', d: 'Chọn chi nhánh, loại kho, ngày bắt đầu. Giữ chỗ 30 phút để thanh toán cọc.' },
+            { icon: Warehouse, t: 'Chọn kho & giữ chỗ', d: 'Chọn chi nhánh, loại kho, ngày bắt đầu. Giữ chỗ 30 phút để thanh toán tiền giữ chân.' },
             { icon: KeyRound, t: 'Chi nhánh phân kho', d: 'Quản lý chi nhánh gán một kho cụ thể cho bạn trước ngày nhận.' },
             { icon: ScanLine, t: 'Quét QR nhận kho', d: 'Nhân viên quét mã, bàn giao chìa khóa / mã PIN / thẻ từ.' },
             { icon: CreditCard, t: 'Thanh toán & gia hạn', d: 'Thanh toán hằng tháng, gia hạn hoặc đăng ký trả kho ngay trên ứng dụng.' },

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import type { Reservation } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { periodLabel } from '@ssm/shared';
+import { dueAtBooking, dueAtCheckIn, periodLabel } from '@ssm/shared';
 import { CANCELLATION_REASON, RESERVATION_STATUS } from '@/shared/lib/labels';
 import { cancellationRefund, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { fmtDate, vnd } from '@/shared/lib/format';
@@ -30,12 +30,12 @@ export default function MyReservations() {
           { key: 'code', header: 'Mã', cell: (r) => <span className="font-mono text-xs">{r.code}</span> },
           { key: 'what', header: 'Kho', cell: (r) => <div><p className="font-medium">{typeName(db, r.unitTypeId)}</p><p className="text-xs text-stone-500">{facilityName(db, r.facilityId)} · {unitLabel(db, r.unitId)}</p></div> },
           { key: 'date', header: 'Ngày nhận', cell: (r) => <div><p>{fmtDate(r.startDate)}</p><p className="text-xs text-stone-500">{periodLabel(r.quote.rentalPeriod, r.periods)}</p></div> },
-          { key: 'deposit', header: 'Cọc (khi đặt)', cell: (r) => vnd(r.quote.depositAmount), className: 'tabular-nums' },
-          { key: 'atCheckIn', header: 'Trả thêm khi nhận kho', cell: (r) => (live.includes(r) ? <span className="font-medium text-amber-800">{vnd(r.quote.firstPeriodRent)}</span> : <span className="text-stone-400">—</span>), className: 'tabular-nums' },
+          { key: 'deposit', header: 'Trả khi đặt', cell: (r) => vnd(dueAtBooking(r.quote)), className: 'tabular-nums' },
+          { key: 'atCheckIn', header: 'Trả thêm khi nhận kho', cell: (r) => (live.includes(r) && dueAtCheckIn(r.quote) > 0 ? <span className="font-medium text-amber-800">{vnd(dueAtCheckIn(r.quote))}</span> : <span className="text-stone-400">{live.includes(r) ? 'Không' : '—'}</span>), className: 'tabular-nums' },
           { key: 'status', header: 'Trạng thái', cell: (r) => <div><StatusBadge map={RESERVATION_STATUS} value={r.status} />{r.cancellation && <p className="mt-1 text-xs text-stone-500">{CANCELLATION_REASON[r.cancellation.reason]}</p>}</div> },
           { key: 'act', header: '', className: 'text-right', cell: (r) => (
             <div className="flex justify-end gap-2">
-              {live.includes(r) && <ButtonLink href={`/booking/${r._id}`} size="sm" variant={r.status === 'PENDING' || !r.signature ? 'primary' : 'secondary'}>{r.status === 'PENDING' ? 'Đặt cọc' : !r.signature ? 'Ký hợp đồng' : 'Mã QR'}</ButtonLink>}
+              {live.includes(r) && <ButtonLink href={`/booking/${r._id}`} size="sm" variant={r.status === 'PENDING' || !r.signature ? 'primary' : 'secondary'}>{r.status === 'PENDING' ? 'Thanh toán' : !r.signature ? 'Ký hợp đồng' : 'Mã QR'}</ButtonLink>}
               {live.includes(r) && <Button size="sm" variant="ghost" onClick={() => setCancel(r)}>Hủy</Button>}
             </div>
           ) },
@@ -44,7 +44,7 @@ export default function MyReservations() {
 
       <Modal open={!!cancel} onClose={() => setCancel(null)} title="Hủy đặt chỗ?" description={cancel?.code}
         footer={<><Button variant="secondary" onClick={() => setCancel(null)}>Giữ lại</Button><Button variant="danger" onClick={() => cancel && void run('cancelReservation', { reservationId: cancel._id, reason: 'CUSTOMER_REQUEST' }, (v) => `Đã hủy — hoàn ${vnd(v)}`, () => setCancel(null))}>Xác nhận hủy</Button></>}>
-        <p className="text-sm text-stone-600">Theo chính sách hủy, bạn được hoàn <b>{refund?.pct}%</b> tiền cọc: <b>{vnd(refund?.amount ?? 0)}</b>. Tiền hoàn về tài khoản trong 3–5 ngày làm việc.</p>
+        <p className="text-sm text-stone-600">Theo chính sách hủy, bạn được hoàn <b>{refund?.pct}%</b> số tiền đã trả khi đặt chỗ: <b>{vnd(refund?.amount ?? 0)}</b>. Tiền hoàn về tài khoản trong 3–5 ngày làm việc.</p>
       </Modal>
     </>
   );

@@ -33,10 +33,13 @@ const CELL: Record<UnitStatus, string> = {
  * Hình thức khoá là thuộc tính của TỪNG Ô (không phải loại kho) — `lockMethod` lọc ngay trên chính
  * sơ đồ này: ô không khớp bị LÀM MỜ VÀ TẮT (không bấm được) nhưng vẫn hiện nguyên vị trí, không bị
  * ẩn khỏi sơ đồ — khách vẫn thấy toàn cảnh để đổi ý lọc lại.
+ *
+ * Chọn NHIỀU ô (đặt nhiều kho một lượt): truyền `selected` — mỗi lần bấm một ô gọi `onChange`, nơi dùng tự bật/tắt
+ * ô đó trong danh sách; ô đã chọn hiện dấu ✓ ngay trên sơ đồ. Không truyền `selected` = chọn một ô như cũ (`value`).
  */
-export function FloorPlanPicker({ items, value, onChange, lockMethod = null }: {
+export function FloorPlanPicker({ items, value, onChange, lockMethod = null, selected }: {
   items: FloorPlanUnit[]; value: string | null; onChange: (unitId: string) => void;
-  lockMethod?: AccessMethod | null;
+  lockMethod?: AccessMethod | null; selected?: readonly string[];
 }) {
   const floors = [...new Set(items.map((u) => u.location.floor))].sort((a, b) => b - a);
   const [floor, setFloor] = useState<number | null>(null);
@@ -62,14 +65,14 @@ export function FloorPlanPicker({ items, value, onChange, lockMethod = null }: {
         <div key={fl}>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-2">
             {items.filter((u) => u.location.floor === fl).sort((a, b) => a.unitNumber.localeCompare(b.unitNumber)).map((u) => {
-              const selected = u._id === value;
+              const picked = selected ? selected.includes(u._id) : u._id === value;
               const dimmed = !matches(u);
               const pickable = u.status === 'AVAILABLE' && !dimmed;
               return (
-                <button key={u._id} type="button" disabled={!pickable} onClick={() => onChange(u._id)} title={u.location.zone}
-                  className={cx('relative rounded-lg px-2 py-2 text-left ring-1 ring-inset transition-colors', CELL[u.status], selected && 'ring-2 ring-brand-600 bg-brand-50', dimmed && 'opacity-30 grayscale cursor-not-allowed hover:bg-transparent')}>
+                <button key={u._id} type="button" disabled={!pickable} aria-pressed={picked} onClick={() => onChange(u._id)} title={u.location.zone}
+                  className={cx('relative rounded-lg px-2 py-2 text-left ring-1 ring-inset transition-colors', CELL[u.status], picked && 'ring-2 ring-brand-600 bg-brand-50', dimmed && 'opacity-30 grayscale cursor-not-allowed hover:bg-transparent')}>
                   <p className="text-sm font-semibold">{u.unitNumber}</p>
-                  <p className="truncate text-[10px] opacity-75">{dimmed ? 'Khác lựa chọn' : pickable ? 'Còn trống' : UNIT_STATUS[u.status].label}</p>
+                  <p className="truncate text-[10px] opacity-75">{dimmed ? 'Khác lựa chọn' : picked && selected ? '✓ Đã chọn' : pickable ? 'Còn trống' : UNIT_STATUS[u.status].label}</p>
                   {u.overlockActive && <Lock className="absolute right-1 top-1 size-3 text-red-600" />}
                 </button>
               );

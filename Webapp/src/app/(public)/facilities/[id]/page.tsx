@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Camera, Clock, KeyRound, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
+import { Camera, Clock, Info, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
-import { AccessMethod, buildPaymentSchedule, enumValues, paymentAckText, periodLabel, STAFF_SHIFTS, withPolicyDefaults } from '@ssm/shared';
+import { AccessMethod, buildPaymentSchedule, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, periodLabel, STAFF_SHIFTS, surchargeLines, withPolicyDefaults } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, UNIT_CATEGORY } from '@/shared/lib/labels';
@@ -22,10 +22,12 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'earlyTermination' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'> & Partial<Pick<BusinessPolicy, 'surcharges'>>;
 }
-/** Một dòng trong giỏ — đã chốt ô cụ thể, có dùng điều hòa hay không, và báo giá tại thời điểm thêm vào giỏ. */
-interface CartLine { key: string; typeId: string; typeName: string; unitId: string; unitNumber: string; useAirConditioning: boolean; quote: PriceQuote }
+/** Một ô khách đã bấm chọn trên sơ đồ. Báo giá KHÔNG lưu ở đây — luôn lấy theo thời hạn/điều hòa đang chọn để số tiền hiển thị khớp đúng lúc đặt. */
+interface PickedUnit { unitId: string; unitNumber: string; typeId: string; typeName: string }
+/** Đặt tối đa bấy nhiêu kho trong một lượt (khớp giới hạn của API /reservations/batch). */
+const MAX_UNITS = 10;
 
 /** Ca giờ nhận kho — chọn ngay lúc đặt, cộng thêm "Chưa rõ giờ" cho khách chưa chắc lịch. */
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const].map((s) => ({ value: s, label: CHECK_IN_SHIFT[s].label }));
@@ -67,8 +69,8 @@ export default function FacilityDetail() {
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
   const [floorPlan, setFloorPlan] = useState<FloorPlanUnit[] | null>(null);
-  const [unitId, setUnitId] = useState<string | null>(null);
-  const [cart, setCart] = useState<CartLine[]>([]);
+  // Chọn NHIỀU ô ngay trên sơ đồ: bấm một ô để chọn, bấm lại để bỏ. Đổi loại kho thì các ô đã chọn vẫn giữ.
+  const [picked, setPicked] = useState<PickedUnit[]>([]);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   // Xác nhận đã đọc lịch thanh toán gắn với ĐÚNG số tiền đang hiển thị — giỏ đổi (số tiền đổi) thì phải xác nhận lại.
@@ -84,18 +86,22 @@ export default function FacilityDetail() {
     return () => { alive = false; };
   }, [id, period, periods, useAirConditioning]);
 
-  // Sơ đồ 2D cơ bản của loại kho đang chọn — bắt buộc chọn đúng một ô trống trước khi thêm vào giỏ.
+  // Sơ đồ 2D cơ bản của loại kho đang chọn — khách bấm chọn một hoặc nhiều ô trống.
   useEffect(() => {
     if (!typeId) { setFloorPlan(null); return; }
     let alive = true;
-    setUnitId(null);
     api.get<{ items: FloorPlanUnit[] }>(`/facilities/public/${id}/unit-types/${typeId}/floor-plan`)
       .then((d) => alive && setFloorPlan(d.items))
       .catch(() => alive && setFloorPlan([]));
     return () => { alive = false; };
   }, [id, typeId]);
 
-  const schedule = useMemo(() => (cart.length ? buildPaymentSchedule(cart.map((l) => l.quote)) : null), [cart]);
+  // Mỗi ô đã chọn + báo giá hiện hành của loại kho đó (theo thời hạn và công tắc điều hòa đang chọn).
+  const cart = useMemo(() => picked.flatMap((p) => {
+    const t = detail?.unitTypes.find((x) => x._id === p.typeId);
+    return t ? [{ ...p, quote: t.quote, useAirConditioning: t.acEligible && useAirConditioning }] : [];
+  }), [picked, detail, useAirConditioning]);
+  const schedule = useMemo(() => (cart.length ? buildPaymentSchedule(cart.map((l) => l.quote), detail?.policy.gracePeriodDays) : null), [cart, detail]);
   const ackKey = schedule ? `${schedule.payNow}:${schedule.payAtCheckIn}` : '';
   const agreePayment = !!schedule && ackedPayment === ackKey;
 
@@ -104,21 +110,19 @@ export default function FacilityDetail() {
 
   const { facility: f, unitTypes: types, policy, services } = detail;
   const ut = types.find((t) => t._id === typeId);
-  const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
+  const qSurcharges = q ? surchargeLines(q, policy.surcharges) : [];
   const discountPct = q && q.discountAmount ? Math.round((q.discountAmount / (q.rate + q.surchargeAmount)) * 100) : 0;
   const bookable = f.status === 'ACTIVE';
-  const alreadyInCart = cart.some((l) => l.unitId === unitId);
 
-  const addToCart = () => {
-    if (!ut || !unitId || !q) return;
-    // Chốt đúng cấu hình điều hòa hiện tại vào dòng giỏ — nếu khách đổi công tắc rồi thêm ô khác, mỗi
-    // dòng vẫn giữ đúng lựa chọn lúc thêm, không bị đè bởi lần bật/tắt sau.
-    setCart((c) => [...c, { key: `${unitId}-${c.length}`, typeId: ut._id, typeName: ut.name, unitId, unitNumber: selectedUnit?.unitNumber ?? '', useAirConditioning: ut.acEligible && useAirConditioning, quote: q }]);
-    setUnitId(null);
-    toast('Đã thêm vào giỏ — chọn tiếp ô khác hoặc giữ chỗ toàn bộ giỏ', 'info');
+  const toggleUnit = (unitId: string) => {
+    if (!ut) return;
+    if (picked.some((p) => p.unitId === unitId)) { setPicked((c) => c.filter((p) => p.unitId !== unitId)); return; }
+    if (picked.length >= MAX_UNITS) { toast(`Mỗi lượt đặt tối đa ${MAX_UNITS} kho`, 'error'); return; }
+    const u = floorPlan?.find((x) => x._id === unitId);
+    setPicked((c) => [...c, { unitId, unitNumber: u?.unitNumber ?? '', typeId: ut._id, typeName: ut.name }]);
   };
-  const removeFromCart = (key: string) => setCart((c) => c.filter((l) => l.key !== key));
+  const removeFromCart = (unitId: string) => setPicked((c) => c.filter((p) => p.unitId !== unitId));
 
   const book = async () => {
     if (!user) { router.push(`/login?next=${encodeURIComponent(`/facilities/${f._id}`)}`); return; }
@@ -129,13 +133,13 @@ export default function FacilityDetail() {
     const startDate = `${start}T00:00:00.000Z`;
     if (cart.length === 1) {
       const line = cart[0];
-      const res = await run('createReservation', { unitTypeId: line.typeId, unitId: line.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, useAirConditioning: line.useAirConditioning, source: 'WEB', consent }, 'Đã giữ chỗ — vui lòng thanh toán tiền cọc');
+      const res = await run('createReservation', { unitTypeId: line.typeId, unitId: line.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, useAirConditioning: line.useAirConditioning, source: 'WEB', consent }, 'Đã giữ chỗ — vui lòng thanh toán để giữ kho');
       if (res.ok) router.push(`/booking/${res.value._id}`);
       return;
     }
     const res = await run('createReservationsBatch', {
       items: cart.map((l) => ({ unitTypeId: l.typeId, unitId: l.unitId, startDate, rentalPeriod: period, periods, preferredCheckInShift: checkInShift, useAirConditioning: l.useAirConditioning })), consent,
-    }, (items) => `Đã giữ chỗ ${items.length} kho — thanh toán cọc từng kho trong mục Đặt chỗ của tôi`);
+    }, (items) => `Đã giữ chỗ ${items.length} kho — thanh toán từng kho trong mục Đặt chỗ của tôi`);
     if (res.ok) router.push('/portal/reservations');
   };
 
@@ -144,6 +148,7 @@ export default function FacilityDetail() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{f.name}</h1>
+          <Link href={`/facilities/${f._id}/gioi-thieu`} className="mt-1 inline-block text-sm font-medium text-brand-700 hover:underline">Xem giới thiệu & hình ảnh kho</Link>
           <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-stone-500">
             <span className="inline-flex items-center gap-1.5"><MapPin className="size-3.5" />{f.address.line1}, {f.address.district}</span>
             <span className="inline-flex items-center gap-1.5"><Clock className="size-3.5" />Ra vào {f.accessHours?.open ?? '06:00'}–{f.accessHours?.close ?? '22:00'}</span>
@@ -171,6 +176,8 @@ export default function FacilityDetail() {
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <Badge>{UNIT_CATEGORY[t.category]}</Badge>
                           {t.minPeriods > 1 && <Badge tone="gray">Tối thiểu {periodLabel(period, t.minPeriods)}</Badge>}
+                          {t.quote.firstPeriodAtBooking && <Badge tone="amber">Giữ chân {periodLabel(period, t.quote.depositPeriods ?? 1)} + trả {PERIOD_UNIT[period]} đầu khi đặt</Badge>}
+                          {picked.some((p) => p.typeId === t._id) && <Badge tone="violet">Đã chọn {picked.filter((p) => p.typeId === t._id).length} ô</Badge>}
                         </div>
                       </div>
                       <div className="text-right">
@@ -188,7 +195,7 @@ export default function FacilityDetail() {
 
           {ut && (
             <Card className="p-5">
-              <CardHeader title={`Chọn ô kho — ${ut.name}`} description="Bắt buộc chọn đúng một ô còn trống trên sơ đồ" />
+              <CardHeader title={`Chọn ô kho — ${ut.name}`} description={`Bấm vào ô còn trống để chọn, bấm lại để bỏ. Muốn thuê nhiều kho thì bấm chọn nhiều ô (tối đa ${MAX_UNITS}); đổi loại kho ở trên để chọn thêm ô loại khác.`} />
               <div className="mt-4 flex flex-wrap gap-1.5">
                 {LOCK_OPTIONS.map((o) => (
                   <button key={o.label} type="button" onClick={() => setLockFilter(o.value)} className={cx('rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset', lockFilter === o.value ? 'bg-brand-600 text-white ring-brand-600' : 'text-stone-600 ring-stone-300 hover:bg-stone-50')}>{o.label}</button>
@@ -197,18 +204,12 @@ export default function FacilityDetail() {
               <p className="mt-2 text-xs text-stone-500">Ô không khớp hình thức khoá đang chọn sẽ mờ đi (không bấm được) nhưng vẫn hiện trên sơ đồ.</p>
               <div className="mt-4">
                 {floorPlan === null ? <p className="text-sm text-stone-500">Đang tải sơ đồ…</p> : (
-                  <FloorPlanPicker items={floorPlan} value={unitId} onChange={setUnitId} lockMethod={lockFilter} />
+                  <FloorPlanPicker items={floorPlan} value={null} selected={picked.map((p) => p.unitId)} onChange={toggleUnit} lockMethod={lockFilter} />
                 )}
               </div>
-              {selectedUnit && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  <Badge tone="violet">Ô {selectedUnit.unitNumber}</Badge>
-                  {selectedUnit.accessMethod && <Badge tone="gray"><KeyRound className="size-3" />{ACCESS_METHOD[selectedUnit.accessMethod]}</Badge>}
-                </div>
-              )}
-              <Button className="mt-4" disabled={!unitId || alreadyInCart} onClick={addToCart}>
-                <ShoppingCart className="size-4" />{alreadyInCart ? 'Ô này đã có trong giỏ' : 'Thêm vào giỏ'}
-              </Button>
+              <p className="mt-3 text-sm text-stone-600">
+                {picked.length === 0 ? 'Chưa chọn ô nào.' : <>Đã chọn <b>{picked.length}</b> ô: {picked.map((p) => p.unitNumber).join(', ')}.</>}
+              </p>
             </Card>
           )}
         </div>
@@ -224,7 +225,7 @@ export default function FacilityDetail() {
                 <DurationPicker period={period} periods={periods} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(n); }} />
               </Field>
               {ut?.acEligible && (
-                <Field label="Điều hòa" hint="Cơ sở vật chất loại kho này đã có sẵn máy lạnh — bật thì cộng phụ phí, không bật thì không tính phí.">
+                <Field label="Điều hòa" hint="Ô kho loại này có sẵn máy lạnh. Bật: cộng phụ phí điều hòa (tiền điện và vận hành máy lạnh) vào tiền thuê mỗi kỳ của mọi ô đã chọn có máy lạnh. Tắt: không mất phí này.">
                   <Switch checked={useAirConditioning} onChange={setUseAirConditioning}
                     label={<span className="inline-flex items-center gap-1"><Snowflake className="size-3.5 text-sky-500" />{useAirConditioning ? 'Có sử dụng' : 'Không sử dụng'}</span>} />
                 </Field>
@@ -242,22 +243,25 @@ export default function FacilityDetail() {
           <Card className="p-5">
             <h2 className="flex items-center gap-2 font-semibold"><ShoppingCart className="size-4" />Giỏ đặt kho {cart.length > 0 && `(${cart.length})`}</h2>
             {cart.length === 0 ? (
-              <p className="mt-3 text-sm text-stone-500">Chọn loại kho rồi chọn một ô trên sơ đồ để thêm vào giỏ. Có thể thêm nhiều kho khác loại trong cùng một lượt đặt.</p>
+              <p className="mt-3 text-sm text-stone-500">Chọn loại kho rồi bấm các ô còn trống trên sơ đồ — mỗi ô bấm chọn sẽ hiện ở đây. Có thể chọn nhiều ô, kể cả khác loại, trong cùng một lượt đặt.</p>
             ) : (
               <ul className="mt-3 space-y-2">
                 {cart.map((l) => (
-                  <li key={l.key} className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-sm">
+                  <li key={l.unitId} className="flex items-center justify-between gap-2 rounded-lg bg-stone-50 px-3 py-2 text-sm">
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{l.typeName} · ô {l.unitNumber}</p>
-                      <p className="text-xs text-stone-500">Cọc {vnd(l.quote.depositAmount)} hôm nay · thuê {PERIOD_UNIT[period]} đầu {vnd(l.quote.firstPeriodRent)} khi nhận kho</p>
+                      <p className="truncate font-medium">{l.typeName} · ô {l.unitNumber}{l.useAirConditioning ? ' · có điều hòa' : ''}</p>
+                      <p className="text-xs text-stone-500">
+                        Hôm nay {vnd(dueAtBooking(l.quote))}{l.quote.firstPeriodAtBooking ? ` (giữ chân ${vnd(l.quote.depositAmount)} + thuê ${PERIOD_UNIT[period]} đầu ${vnd(l.quote.firstPeriodRent)})` : ' tiền giữ chân'}
+                        {dueAtCheckIn(l.quote) > 0 ? ` · thêm ${vnd(dueAtCheckIn(l.quote))} khi nhận kho` : ' · nhận kho không trả thêm'}
+                      </p>
                     </div>
-                    <button type="button" aria-label="Bỏ khỏi giỏ" onClick={() => removeFromCart(l.key)} className="grid size-7 shrink-0 place-items-center rounded-md text-stone-400 hover:bg-stone-200 hover:text-red-600"><Trash2 className="size-4" /></button>
+                    <button type="button" aria-label="Bỏ khỏi giỏ" onClick={() => removeFromCart(l.unitId)} className="grid size-7 shrink-0 place-items-center rounded-md text-stone-400 hover:bg-stone-200 hover:text-red-600"><Trash2 className="size-4" /></button>
                   </li>
                 ))}
               </ul>
             )}
             {cart.length > 0 && (
-              <PaymentSchedule quotes={cart.map((l) => l.quote)} graceDays={policy.gracePeriodDays} compact className="mt-3" />
+              <PaymentSchedule quotes={cart.map((l) => l.quote)} graceDays={policy.gracePeriodDays} className="mt-3" />
             )}
 
             <div className="mt-5 space-y-2.5 border-t border-dashed border-stone-200 pt-4">
@@ -277,13 +281,13 @@ export default function FacilityDetail() {
               </label>
             </div>
             <Button size="lg" className="mt-4 w-full" onClick={() => void book()} disabled={cart.length === 0 || !bookable || !agreeTerms || !agreePrivacy || !agreePayment}>
-              {bookable ? `Giữ chỗ & đặt cọc${cart.length > 1 ? ` (${cart.length} kho)` : ''}` : 'Chi nhánh chưa nhận đặt chỗ'}
+              {bookable ? `Giữ chỗ & thanh toán${cart.length > 1 ? ` (${cart.length} kho)` : ''}` : 'Chi nhánh chưa nhận đặt chỗ'}
             </Button>
             <p className="mt-3 text-xs leading-relaxed text-stone-500">
-              Giữ chỗ {policy.reservationHoldMinutes} phút để thanh toán cọc. Hủy trước {policy.cancellation[0]?.minHoursBeforeStart} giờ được hoàn {policy.cancellation[0]?.depositRefundPct}% cọc,
-              trước {policy.cancellation[1]?.minHoursBeforeStart} giờ hoàn {policy.cancellation[1]?.depositRefundPct}%. Tiền thuê kỳ đầu thanh toán khi nhận kho.
-              Nếu trả kho sớm khi đang thuê: dùng ≤{policy.earlyTermination[0]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[0]?.depositRefundPct}% cọc,
-              dùng ≤{policy.earlyTermination[1]?.maxElapsedPct}% hoàn {policy.earlyTermination[1]?.depositRefundPct}%, dùng quá {policy.earlyTermination[1]?.maxElapsedPct}% thời hạn không hoàn cọc.
+              Giữ chỗ {policy.reservationHoldMinutes} phút để thanh toán. Hủy trước ngày nhận từ {policy.cancellation[0]?.minHoursBeforeStart} giờ trở lên được hoàn {policy.cancellation[0]?.depositRefundPct}% số tiền đã trả khi đặt chỗ,
+              từ {policy.cancellation[1]?.minHoursBeforeStart} giờ hoàn {policy.cancellation[1]?.depositRefundPct}%, sát hơn thì không hoàn.
+              Nếu trả kho sớm khi đang thuê: dùng ≤{policy.earlyTermination[0]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[0]?.depositRefundPct}% tiền giữ chân,
+              dùng ≤{policy.earlyTermination[1]?.maxElapsedPct}% hoàn {policy.earlyTermination[1]?.depositRefundPct}%, dùng quá {policy.earlyTermination[1]?.maxElapsedPct}% thời hạn không hoàn tiền giữ chân.
             </p>
           </Card>
           {q && ut && (
@@ -291,12 +295,16 @@ export default function FacilityDetail() {
               <h3 className="text-sm font-semibold">Báo giá {ut.name}</h3>
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex justify-between"><dt className="text-stone-500">{ut.name} / {PERIOD_UNIT[period]}</dt><dd className="tabular-nums">{vnd(q.rate)}</dd></div>
-                {q.surchargeAmount > 0 && <div className="flex justify-between"><dt className="text-stone-500">Phụ phí điều hòa</dt><dd className="tabular-nums">+{vnd(q.surchargeAmount)}</dd></div>}
+                {qSurcharges.map((s) => (
+                  <div key={s.code}>
+                    <div className="flex justify-between"><dt className="text-stone-500">{s.label}{s.basis ? ` (${s.basis})` : ''}</dt><dd className="tabular-nums">+{vnd(s.amount)}</dd></div>
+                    <p className="mt-0.5 flex gap-1.5 text-xs leading-relaxed text-stone-500"><Info className="mt-0.5 size-3 shrink-0" />{s.reason}</p>
+                  </div>
+                ))}
                 {q.discountAmount > 0 && <div className="flex justify-between text-emerald-700"><dt>Ưu đãi thuê {periodLabel(period, periods)} (−{discountPct}%)</dt><dd className="tabular-nums">−{vnd(q.discountAmount)}</dd></div>}
                 <div className="flex justify-between font-medium"><dt>Tiền thuê mỗi {PERIOD_UNIT[period]}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent)}</dd></div>
                 <div className="flex justify-between"><dt className="text-stone-500">Tổng giá trị {periodLabel(period, periods)} <span className="text-xs">(trả từng {PERIOD_UNIT[period]})</span></dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
               </dl>
-              <PaymentSchedule quotes={[q]} graceDays={policy.gracePeriodDays} className="mt-4" />
             </Card>
           )}
           {services.length > 0 && (

@@ -63,10 +63,10 @@ export default function Policies() {
           <CardHeader title={`Đang áp dụng: v${current.version}`} description={`Hiệu lực từ ${fmtDate(current.effectiveFrom)}`} actions={<Button onClick={publish}>Phát hành phiên bản mới</Button>} />
           <div className="space-y-6 p-5">
             <section>
-              <h4 className="mb-3 text-sm font-semibold">Đặt chỗ & tiền cọc</h4>
+              <h4 className="mb-3 text-sm font-semibold">Đặt chỗ & tiền giữ chân</h4>
               <div className="grid gap-4 sm:grid-cols-3">
-                {num('hold', 'Thời gian giữ chỗ', 'Chờ thanh toán cọc', 'phút')}
-                {num('depositPeriods', 'Tiền cọc', 'Tính theo số chu kỳ tiền thuê', 'chu kỳ')}
+                {num('hold', 'Thời gian giữ chỗ', 'Chờ thanh toán tiền giữ chân', 'phút')}
+                {num('depositPeriods', 'Tiền giữ chân', 'Tính theo số chu kỳ tiền thuê', 'chu kỳ')}
                 {num('climatePct', 'Phụ phí điều hòa (add-on)', 'Khách tự bật lúc đặt, tính theo giá thuê một chu kỳ — riêng từng chi nhánh', '%')}
               </div>
             </section>
@@ -83,14 +83,14 @@ export default function Policies() {
               </div>
             </section>
             <section>
-              <h4 className="mb-3 text-sm font-semibold">Hủy đặt chỗ — hoàn cọc</h4>
+              <h4 className="mb-3 text-sm font-semibold">Hủy đặt chỗ — hoàn tiền giữ chân</h4>
               <div className="grid gap-4 sm:grid-cols-3">
                 {num('refund72', 'Hủy trước ≥ 72 giờ', undefined, '%')}
                 {num('refund24', 'Hủy trước ≥ 24 giờ', 'Dưới 24 giờ: không hoàn', '%')}
               </div>
             </section>
             <section>
-              <h4 className="mb-3 text-sm font-semibold">Trả kho sớm khi đang thuê — hoàn cọc</h4>
+              <h4 className="mb-3 text-sm font-semibold">Trả kho sớm khi đang thuê — hoàn tiền giữ chân</h4>
               <div className="grid gap-4 sm:grid-cols-3">
                 {num('earlyRefund25', 'Đã dùng ≤ 25% kỳ hạn', undefined, '%')}
                 {num('earlyRefund50', 'Đã dùng ≤ 50% kỳ hạn', 'Trên 50% kỳ hạn: không hoàn', '%')}

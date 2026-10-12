@@ -49,7 +49,7 @@ export default function PortalHome() {
                   </div>
                   <StatusBadge map={RESERVATION_STATUS} value={r.status} />
                   <ButtonLink href={`/booking/${r._id}`} variant={r.status === 'PENDING' ? 'primary' : 'secondary'} size="sm">
-                    {r.status === 'PENDING' ? 'Đặt cọc' : <><QrCode className="size-3.5" />Mã QR</>}
+                    {r.status === 'PENDING' ? 'Thanh toán' : <><QrCode className="size-3.5" />Mã QR</>}
                   </ButtonLink>
                 </li>
               ))}

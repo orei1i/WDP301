@@ -198,7 +198,7 @@ function InventoryInner() {
             {te('rates') && <p role="alert" className="-mt-2 text-xs font-medium text-red-600">{te('rates')}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Thuê tối thiểu (số chu kỳ)" error={te('minPeriods')}><input type="number" min={1} max={365} className={inputCls} value={typeForm.minPeriods} onChange={(e) => setTypeForm({ ...typeForm, minPeriods: Math.max(1, Number(e.target.value) || 1) })} /></Field>
-              <Field label="Tiền cọc cố định (₫)" hint="Để trống: tính theo chính sách chi nhánh" error={te('depositOverride')}><input className={inputCls} inputMode="numeric" value={typeForm.depositOverride} onChange={(e) => setTypeForm({ ...typeForm, depositOverride: e.target.value })} /></Field>
+              <Field label="Tiền giữ chân cố định (₫)" hint="Để trống: tính theo chính sách chi nhánh" error={te('depositOverride')}><input className={inputCls} inputMode="numeric" value={typeForm.depositOverride} onChange={(e) => setTypeForm({ ...typeForm, depositOverride: e.target.value })} /></Field>
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4" checked={typeForm.indoor} onChange={(e) => setTypeForm({ ...typeForm, indoor: e.target.checked })} />Trong nhà (không phải kiểu drive-up ngoài trời)</label>
           </div>

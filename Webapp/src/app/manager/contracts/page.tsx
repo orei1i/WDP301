@@ -94,7 +94,7 @@ export default function Contracts() {
             <KV items={[
               ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`], ['Giá thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
               ['Đã thanh toán đến', fmtDate(c.billing.paidThrough)], ['Kỳ tới', fmtDate(c.billing.nextBillingDate)],
-              ['Tiền cọc', vnd(c.deposit.amount)], ['Truy cập', `${ACCESS_METHOD[c.access.method]}${c.access.suspendedAt ? ' · đang tạm khóa' : ''}`],
+              ['Tiền giữ chân', vnd(c.deposit.amount)], ['Truy cập', `${ACCESS_METHOD[c.access.method]}${c.access.suspendedAt ? ' · đang tạm khóa' : ''}`],
               ['Chính sách', `v${c.terms.policyVersion} · ân hạn ${c.terms.gracePeriodDays} ngày`], ['Gia hạn', `${c.renewals.length} lần`],
               ['Đổi ô', `${c.unitSwaps?.length ?? 0} lần`],
             ]} />
@@ -136,7 +136,7 @@ export default function Contracts() {
         {swap && (
           <div className="space-y-4">
             <div className="rounded-lg bg-brand-50 p-3 text-sm text-brand-900 ring-1 ring-brand-200">
-              Chỉ đổi được sang ô <b>cùng loại</b>. Giá thuê <b>{vnd(swap.billing.rate)}/{PERIOD_UNIT[swap.billing.rentalPeriod]}</b> và tiền cọc <b>{vnd(swap.deposit.amount)}</b> giữ nguyên theo hợp đồng đã ký.
+              Chỉ đổi được sang ô <b>cùng loại</b>. Giá thuê <b>{vnd(swap.billing.rate)}/{PERIOD_UNIT[swap.billing.rentalPeriod]}</b> và tiền giữ chân <b>{vnd(swap.deposit.amount)}</b> giữ nguyên theo hợp đồng đã ký.
               Ô cũ chuyển sang <b>chờ kiểm tra</b> sau khi đổi.
             </div>
 
@@ -199,7 +199,7 @@ export default function Contracts() {
           <div className="space-y-4">
             <div className="rounded-lg bg-red-50 p-3 text-sm text-red-900 ring-1 ring-red-200">
               Khách đã bị khóa truy cập {lockedOutDays(abandon)} ngày, vượt ngưỡng {policy.abandonAfterLockedOutDays} ngày mà không đóng tiền/liên hệ.
-              Xác nhận sẽ <b>mất toàn bộ tiền cọc {vnd(abandon.deposit.amount)}</b> để tất toán công nợ, đóng hợp đồng và giải phóng ô kho — không thể hoàn tác.
+              Xác nhận sẽ <b>mất toàn bộ tiền giữ chân {vnd(abandon.deposit.amount)}</b> để tất toán công nợ, đóng hợp đồng và giải phóng ô kho — không thể hoàn tác.
             </div>
 
             <div>
