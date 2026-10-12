@@ -27,9 +27,16 @@ export const actions = {
       preferredCheckInShift: p.preferredCheckInShift,
       useAirConditioning: p.useAirConditioning,
       source: 'MOBILE',
-      // paymentScheduleAck: màn đặt chỗ bắt buộc khách tick xác nhận đã đọc lịch thanh toán (cọc hôm nay + tiền thuê kỳ đầu khi nhận kho)
+      // paymentScheduleAck: màn đặt chỗ bắt buộc khách tick xác nhận đã đọc lịch thanh toán (tiền giữ chân hôm nay + tiền thuê kỳ đầu khi nhận kho)
       consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, paymentScheduleAck: true },
     }, { 'idempotency-key': newKey() }),
+
+  /** Đặt nhiều kho một lượt (các ô khách bấm chọn trên sơ đồ) — cùng một lần chấp thuận điều khoản; hoặc giữ được cả N ô, hoặc không ô nào. */
+  createReservationsBatch: async (p: { items: { unitTypeId: string; unitId: string; startDate: string; rentalPeriod: RentalPeriod; periods: number; preferredCheckInShift: CheckInShift; useAirConditioning: boolean }[] }) =>
+    (await api.post<{ items: Reservation[] }>('/reservations/batch', {
+      items: p.items.map((i) => ({ ...i, startDate: day(i.startDate), source: 'MOBILE' })),
+      consent: { termsVersion: TERMS_VERSION, privacyVersion: PRIVACY_VERSION, paymentScheduleAck: true },
+    }, { 'idempotency-key': newKey() })).items,
 
   payDeposit: async (p: { reservationId: string; method: PaymentMethod }) =>
     api.post<{ reservation: Reservation; qrPayload: string }>(`/reservations/${p.reservationId}/pay-deposit`, { method: p.method }),
@@ -101,7 +108,7 @@ export const actions = {
 
   emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),
 
-  // ---- ký hợp đồng (vẽ tay hoặc gõ họ tên) sau khi trả cọc, trước khi nhận kho
+  // ---- ký hợp đồng (vẽ tay hoặc gõ họ tên) sau khi trả tiền giữ chân, trước khi nhận kho
   signContract: async (p: { reservationId: string; signerName: string; method: SignatureMethod; image?: string | null }) =>
     api.post<Reservation>(`/reservations/${p.reservationId}/sign`, { signerName: p.signerName, method: p.method, image: p.image ?? null }),
 };

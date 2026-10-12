@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
-import { PAYMENT_METHOD, PERIOD_UNIT, RESERVATION_STATUS, fmtDate, minutesLeft, periodLabel, vnd } from '@ssm/shared';
+import { PAYMENT_METHOD, PERIOD_UNIT, RESERVATION_STATUS, dueAtBooking, fmtDate, minutesLeft, periodLabel, vnd } from '@ssm/shared';
 import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
 import { Button, Card, Chips, EmptyState, KV, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
@@ -48,7 +48,8 @@ export default function BookingScreen() {
           ['Ngày nhận', fmtDate(r.startDate)],
           ['Thời hạn', `${periodLabel(r.quote.rentalPeriod, r.periods)} (đến ${fmtDate(r.endDate)})`],
           [`Tiền thuê / ${PERIOD_UNIT[r.quote.rentalPeriod]}`, vnd(r.quote.firstPeriodRent)],
-          ['Tiền cọc (trả khi đặt chỗ)', vnd(r.quote.depositAmount)],
+          ['Tiền giữ chân (trả khi đặt chỗ)', vnd(r.quote.depositAmount)],
+          ...(r.quote.firstPeriodAtBooking ? [[`Tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu (trả khi đặt chỗ)`, vnd(r.quote.firstPeriodRent)] as [string, string]] : []),
         ]} />
       </Card>
 
@@ -59,7 +60,7 @@ export default function BookingScreen() {
       {r.status === 'PENDING' && (
         <Card style={{ marginTop: S.md }}>
           <View style={st.rowBetween}>
-            <Text style={st.sectionTitle}>Thanh toán tiền cọc</Text>
+            <Text style={st.sectionTitle}>Thanh toán giữ chỗ</Text>
             <View style={[st.timer, left <= 5 && { backgroundColor: C.redBg }]}>
               <Text style={[st.timerText, left <= 5 && { color: C.red }]}>Còn {left} phút</Text>
             </View>
@@ -68,9 +69,9 @@ export default function BookingScreen() {
             <Chips options={METHODS} value={method} onChange={setMethod} columns={2} />
           </View>
           <Button
-            title={`Thanh toán cọc ${vnd(r.quote.depositAmount)}`}
+            title={`Thanh toán ${vnd(dueAtBooking(r.quote))}`}
             style={{ marginTop: S.lg }}
-            onPress={() => void run('payDeposit', { reservationId: r._id, method }, 'Thanh toán cọc thành công — ký hợp đồng để nhận kho')}
+            onPress={() => void run('payDeposit', { reservationId: r._id, method }, 'Thanh toán thành công — ký hợp đồng để nhận kho')}
           />
           <Button
             title="Hủy giữ chỗ"

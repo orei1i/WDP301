@@ -25,10 +25,13 @@ const CELL: Record<UnitStatus, { bg: string; border: string; text: string }> = {
  *
  * Hình thức khoá là thuộc tính của TỪNG Ô (không phải loại kho) — `lockMethod` lọc ngay trên chính
  * sơ đồ này: ô không khớp bị LÀM MỜ VÀ TẮT (không bấm được) nhưng vẫn hiện nguyên vị trí.
+ *
+ * Chọn NHIỀU ô (đặt nhiều kho một lượt): truyền `selected` — mỗi lần bấm một ô gọi `onChange`, nơi dùng tự bật/tắt
+ * ô đó trong danh sách; ô đã chọn hiện dấu ✓ ngay trên sơ đồ. Không truyền `selected` = chọn một ô như cũ (`value`).
  */
-export function FloorPlanPicker({ items, value, onChange, lockMethod = null }: {
+export function FloorPlanPicker({ items, value, onChange, lockMethod = null, selected }: {
   items: FloorPlanUnit[]; value: string | null; onChange: (unitId: string) => void;
-  lockMethod?: AccessMethod | null;
+  lockMethod?: AccessMethod | null; selected?: readonly string[];
 }) {
   const floors = [...new Set(items.map((u) => u.location.floor))].sort((a, b) => b - a);
   const [floor, setFloor] = useState<number | null>(null);
@@ -57,13 +60,13 @@ export function FloorPlanPicker({ items, value, onChange, lockMethod = null }: {
           {items.filter((u) => u.location.floor === fl).sort((a, b) => a.unitNumber.localeCompare(b.unitNumber)).map((u) => {
             const dimmed = !matches(u);
             const pickable = u.status === 'AVAILABLE' && !dimmed;
-            const selected = u._id === value;
+            const picked = selected ? selected.includes(u._id) : u._id === value;
             const c = CELL[u.status];
             return (
               <Pressable key={u._id} disabled={!pickable} onPress={() => onChange(u._id)}
-                style={[st.cell, { backgroundColor: c.bg, borderColor: selected ? C.brand600 : c.border, borderWidth: selected ? 2 : 1 }, dimmed && st.cellDimmed]}>
+                style={[st.cell, { backgroundColor: c.bg, borderColor: picked ? C.brand600 : c.border, borderWidth: picked ? 2 : 1 }, picked && { backgroundColor: C.brand50 }, dimmed && st.cellDimmed]}>
                 <Text style={[st.cellNumber, { color: c.text }]}>{u.unitNumber}</Text>
-                <Text style={[st.cellStatus, { color: c.text }]}>{dimmed ? 'Khác lựa chọn' : pickable ? 'Còn trống' : UNIT_STATUS[u.status].label}</Text>
+                <Text style={[st.cellStatus, { color: c.text }]}>{dimmed ? 'Khác lựa chọn' : picked && selected ? '✓ Đã chọn' : pickable ? 'Còn trống' : UNIT_STATUS[u.status].label}</Text>
               </Pressable>
             );
           })}

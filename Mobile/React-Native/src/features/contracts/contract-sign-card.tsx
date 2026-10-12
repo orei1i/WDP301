@@ -12,7 +12,7 @@ const WEB_ORIGIN = process.env.EXPO_PUBLIC_WEB_URL ?? 'https://wdp-301-webapp.ve
 const METHODS: { value: SignatureMethod; label: string }[] = [{ value: 'DRAWN', label: 'Ký tay' }, { value: 'TYPED', label: 'Gõ họ tên' }];
 
 /**
- * Bước ký hợp đồng sau khi trả cọc, trước khi nhận kho: đọc nội dung hợp đồng rồi ký tay (hoặc gõ họ tên)
+ * Bước ký hợp đồng sau khi trả tiền giữ chân, trước khi nhận kho: đọc nội dung hợp đồng rồi ký tay (hoặc gõ họ tên)
  * và đồng ý. Ký xong, server tự gửi PDF hợp đồng đã ký tới email của khách; có nút gửi lại.
  */
 export function ContractSignCard({ reservation: r }: { reservation: Reservation }) {

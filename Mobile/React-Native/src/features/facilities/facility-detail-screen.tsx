@@ -4,8 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
 import {
-  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, enumValues, paymentAckText, PERIOD_UNIT,
-  PRIVACY_VERSION, STAFF_SHIFTS, TERMS_EFFECTIVE, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
+  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, PERIOD_UNIT,
+  PRIVACY_VERSION, STAFF_SHIFTS, surchargeLines, TERMS_EFFECTIVE, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { api } from '../../shared/api/client';
 import { useStore } from '../../shared/store/store';
@@ -23,8 +23,12 @@ interface Detail {
   facility: Facility;
   unitTypes: TypeRow[];
   services: { _id: string; code: string; name: string; description?: string; price: number; unitLabel: string }[];
-  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'>;
+  policy: Pick<BusinessPolicy, 'version' | 'scope' | 'reservationHoldMinutes' | 'cancellation' | 'minPeriods' | 'maxPeriods' | 'discounts' | 'gracePeriodDays'> & Partial<Pick<BusinessPolicy, 'surcharges'>>;
 }
+/** Một ô khách đã bấm chọn trên sơ đồ. Báo giá luôn lấy theo thời hạn/điều hòa đang chọn, không lưu cứng ở đây. */
+interface PickedUnit { unitId: string; unitNumber: string; typeId: string; typeName: string }
+/** Đặt tối đa bấy nhiêu kho trong một lượt (khớp giới hạn của API /reservations/batch). */
+const MAX_UNITS = 10;
 
 // Nhãn ngắn trên chip ("Ca 1"), thời gian đầy đủ chỉ hiện ở dòng chú thích bên dưới khi đã chọn — đỡ rối mắt.
 const CHECK_IN_SHIFTS: { value: CheckInShift; label: string }[] = [...STAFF_SHIFTS, 'UNKNOWN' as const]
@@ -36,11 +40,12 @@ const LOCK_OPTIONS: { value: AccessMethod | 'ALL'; label: string }[] = [
 ];
 
 /** Bảng tóm tắt giá — tách hàm để không phải nhồi logic điều kiện vào JSX. */
-function priceItems(q: PriceQuote, typeName: string, periods: number): [string, ReactNode][] {
+function priceItems(q: PriceQuote, typeName: string, periods: number, surcharges: Detail['policy']['surcharges']): [string, ReactNode][] {
   const unit = PERIOD_UNIT[q.rentalPeriod];
   const items: [string, ReactNode][] = [[`${typeName} / ${unit}`, vnd(q.rate)]];
-  if (q.surchargeAmount > 0) items.push(['Phụ phí', `+${vnd(q.surchargeAmount)}`]);
-  if (q.discountAmount > 0) items.push(['Giảm giá', `-${vnd(q.discountAmount)}`]);
+  // Phụ phí phải nói rõ là phụ phí gì và tính thế nào — không ghi trơ trọi "Phụ phí".
+  for (const s of surchargeLines(q, surcharges)) items.push([`${s.label}${s.basis ? ` (${s.basis})` : ''}`, `+${vnd(s.amount)}`]);
+  if (q.discountAmount > 0) items.push([`Ưu đãi thuê ${periodLabel(q.rentalPeriod, periods)}`, `-${vnd(q.discountAmount)}`]);
   items.push([`Tiền thuê mỗi ${unit}`, vnd(q.firstPeriodRent)]);
   items.push([`Tổng giá trị ${periodLabel(q.rentalPeriod, periods)} (trả từng ${unit})`, vnd(q.firstPeriodRent * periods)]);
   return items;
@@ -62,7 +67,8 @@ export default function FacilityDetailScreen() {
   const [error, setError] = useState('');
   const [typeId, setTypeId] = useState('');
   const [floorPlan, setFloorPlan] = useState<FloorPlanUnit[] | null>(null);
-  const [unitId, setUnitId] = useState<string | null>(null);
+  // Chọn NHIỀU ô ngay trên sơ đồ: bấm một ô để chọn, bấm lại để bỏ. Đổi loại kho thì các ô đã chọn vẫn giữ.
+  const [picked, setPicked] = useState<PickedUnit[]>([]);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   // Xác nhận đã đọc lịch thanh toán gắn với ĐÚNG số tiền đang hiển thị — đổi ô/chu kỳ (số tiền đổi) thì phải xác nhận lại.
@@ -83,11 +89,10 @@ export default function FacilityDetailScreen() {
     return () => { alive = false; };
   }, [id, period, periods, useAirConditioning]);
 
-  // Sơ đồ 2D cơ bản của loại kho đang chọn — bắt buộc chọn đúng một ô trống trước khi đặt.
+  // Sơ đồ 2D cơ bản của loại kho đang chọn — khách bấm chọn một hoặc nhiều ô trống.
   useEffect(() => {
     if (!typeId) { setFloorPlan(null); return; }
     let alive = true;
-    setUnitId(null);
     api.get<{ items: FloorPlanUnit[] }>(`/facilities/public/${id}/unit-types/${typeId}/floor-plan`)
       .then((d) => alive && setFloorPlan(d.items))
       .catch(() => alive && setFloorPlan([]));
@@ -120,17 +125,40 @@ export default function FacilityDetailScreen() {
 
   const { facility: f, unitTypes: types } = detail;
   const ut = types.find((t) => t._id === typeId);
-  const selectedUnit = floorPlan?.find((u) => u._id === unitId);
   const q = ut?.quote;
   const periodsNum = Math.max(1, Math.min(365, Number(periods) || 1));
-  const schedule = q ? buildPaymentSchedule([q], detail?.policy.gracePeriodDays) : null;
+  // Mỗi ô đã chọn + báo giá hiện hành của loại kho đó (theo thời hạn và công tắc điều hòa đang chọn).
+  const cart = picked.flatMap((p) => {
+    const t = types.find((x) => x._id === p.typeId);
+    return t ? [{ ...p, quote: t.quote, useAirConditioning: t.acEligible && useAirConditioning }] : [];
+  });
+  const schedule = cart.length ? buildPaymentSchedule(cart.map((l) => l.quote), detail.policy.gracePeriodDays) : null;
   const ackKey = schedule ? `${schedule.payNow}:${schedule.payAtCheckIn}` : '';
   const agreePayment = !!schedule && ackedPayment === ackKey;
-  const canBook = !!ut && !!unitId && ut.availability.available > 0 && agreeTerms && agreePrivacy && agreePayment;
+  const canBook = cart.length > 0 && agreeTerms && agreePrivacy && agreePayment;
+  const qReasons = q ? surchargeLines(q, detail.policy.surcharges) : [];
+
+  const toggleUnit = (unitId: string) => {
+    if (!ut) return;
+    if (picked.some((p) => p.unitId === unitId)) { setPicked((c) => c.filter((p) => p.unitId !== unitId)); return; }
+    if (picked.length >= MAX_UNITS) return;
+    const u = floorPlan?.find((x) => x._id === unitId);
+    setPicked((c) => [...c, { unitId, unitNumber: u?.unitNumber ?? '', typeId: ut._id, typeName: ut.name }]);
+  };
+  const book = () => {
+    const item = (l: (typeof cart)[number]) => ({ unitTypeId: l.typeId, unitId: l.unitId, startDate: start, rentalPeriod: period, periods: periodsNum, preferredCheckInShift: checkInShift, useAirConditioning: l.useAirConditioning });
+    if (cart.length === 1) {
+      void run('createReservation', item(cart[0]), 'Đã giữ chỗ — vui lòng thanh toán để giữ kho', (v) => router.replace(`/booking/${v._id}`));
+      return;
+    }
+    // Nhiều kho: mỗi kho là một đặt chỗ riêng — về trang chủ, mục "Chờ thanh toán" liệt kê từng kho để trả.
+    void run('createReservationsBatch', { items: cart.map(item) }, (items) => `Đã giữ chỗ ${items.length} kho — thanh toán từng kho ở mục Chờ thanh toán`, () => router.replace('/'));
+  };
 
   return (
     <Screen>
       <ScreenHeader title={f.name} subtitle={`${f.address.district}, ${f.address.city}`} />
+      <Text style={[st.link, { marginBottom: S.sm }]} onPress={() => router.push(`/facility/intro/${f._id}`)}>Xem giới thiệu & hình ảnh kho</Text>
 
       <Card>
         <DateStepper label="Ngày bắt đầu" value={start} onChange={setStart} min={todayISO()} max={addDays(todayISO(), 60)} presets={[0, 3, 7, 14]} />
@@ -174,7 +202,11 @@ export default function FacilityDetailScreen() {
                     <Text style={st.typeName}>{t.name}</Text>
                     <Muted>{t.dimensions.widthM}×{t.dimensions.depthM}×{t.dimensions.heightM} m ({t.areaM2} m²)</Muted>
                     {t.description ? <Muted style={{ marginTop: 4 } as never}>{t.description}</Muted> : null}
-                    <View style={{ marginTop: S.sm, flexDirection: 'row', flexWrap: 'wrap', gap: S.xs }}><Badge>{UNIT_CATEGORY[t.category]}</Badge></View>
+                    <View style={{ marginTop: S.sm, flexDirection: 'row', flexWrap: 'wrap', gap: S.xs }}>
+                      <Badge>{UNIT_CATEGORY[t.category]}</Badge>
+                      {t.quote.firstPeriodAtBooking && <Badge tone="amber">Giữ chân {periodLabel(period, t.quote.depositPeriods ?? 1)} + trả {PERIOD_UNIT[period]} đầu khi đặt</Badge>}
+                      {picked.some((p) => p.typeId === t._id) && <Badge tone="violet">Đã chọn {picked.filter((p) => p.typeId === t._id).length} ô</Badge>}
+                    </View>
                   </View>
                   <View style={{ alignItems: 'flex-end' }}>
                     <Text style={st.typePrice}>{vnd(t.quote.firstPeriodRent)}</Text>
@@ -194,27 +226,41 @@ export default function FacilityDetailScreen() {
         <Card style={{ marginTop: S.md }}>
           <Text style={st.section}>Chọn ô kho — {ut.name}</Text>
           <Chips options={LOCK_OPTIONS} value={lockFilter} onChange={setLockFilter} columns={4} />
-          <Muted style={{ marginTop: 4 } as never}>Ô không khớp hình thức khoá đang chọn sẽ mờ đi (không bấm được) nhưng vẫn hiện trên sơ đồ.</Muted>
+          <Muted style={{ marginTop: 4 } as never}>Bấm vào ô còn trống để chọn, bấm lại để bỏ — muốn thuê nhiều kho thì chọn nhiều ô (tối đa {MAX_UNITS}). Ô không khớp hình thức khoá đang lọc sẽ mờ đi.</Muted>
           <View style={{ marginTop: S.md }}>
             {floorPlan === null ? <Muted>Đang tải sơ đồ…</Muted> : (
-              <FloorPlanPicker items={floorPlan} value={unitId} onChange={setUnitId} lockMethod={lockFilter === 'ALL' ? null : lockFilter} />
+              <FloorPlanPicker items={floorPlan} value={null} selected={picked.map((p) => p.unitId)} onChange={toggleUnit} lockMethod={lockFilter === 'ALL' ? null : lockFilter} />
             )}
           </View>
-          {selectedUnit && (
-            <View style={{ marginTop: S.sm, flexDirection: 'row', flexWrap: 'wrap', gap: S.xs }}>
-              <Badge tone="violet">Ô {selectedUnit.unitNumber}</Badge>
-              {selectedUnit.accessMethod && <Badge>{ACCESS_METHOD[selectedUnit.accessMethod]}</Badge>}
-            </View>
-          )}
         </Card>
       )}
 
       {ut && q && (
         <Card style={{ marginTop: S.md }}>
-          <KV items={priceItems(q, ut.name, periodsNum)} />
-          {schedule && <View style={{ marginTop: S.md }}><PaymentSchedule quotes={[q]} graceDays={detail?.policy.gracePeriodDays} /></View>}
+          <Text style={st.cardTitle}>Báo giá {ut.name}</Text>
+          <KV items={priceItems(q, ut.name, periodsNum, detail.policy.surcharges)} />
+          {qReasons.map((s) => <Muted key={s.code} style={{ marginTop: 6 } as never}>{s.label}: {s.reason}</Muted>)}
         </Card>
       )}
+
+      <Card style={{ marginTop: S.md }}>
+        <Text style={st.cardTitle}>Kho đã chọn{cart.length > 0 ? ` (${cart.length})` : ''}</Text>
+        {cart.length === 0 ? <Muted>Chưa chọn ô nào — bấm các ô còn trống trên sơ đồ ở trên.</Muted> : cart.map((l) => (
+          <View key={l.unitId} style={st.cartLine}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.cartName}>{l.typeName} · ô {l.unitNumber}{l.useAirConditioning ? ' · có điều hòa' : ''}</Text>
+              <Muted>
+                Hôm nay {vnd(dueAtBooking(l.quote))}{l.quote.firstPeriodAtBooking ? ` (giữ chân ${vnd(l.quote.depositAmount)} + thuê ${PERIOD_UNIT[period]} đầu ${vnd(l.quote.firstPeriodRent)})` : ' tiền giữ chân'}
+                {dueAtCheckIn(l.quote) > 0 ? ` · thêm ${vnd(dueAtCheckIn(l.quote))} khi nhận kho` : ' · nhận kho không trả thêm'}
+              </Muted>
+            </View>
+            <Pressable accessibilityLabel="Bỏ ô này" hitSlop={8} onPress={() => setPicked((c) => c.filter((p) => p.unitId !== l.unitId))}>
+              <Ionicons name="close-circle" size={22} color={C.faint} />
+            </Pressable>
+          </View>
+        ))}
+        {schedule && <View style={{ marginTop: S.md }}><PaymentSchedule quotes={cart.map((l) => l.quote)} graceDays={detail.policy.gracePeriodDays} /></View>}
+      </Card>
 
       <Card style={{ marginTop: S.md }}>
         {schedule && (
@@ -240,15 +286,10 @@ export default function FacilityDetailScreen() {
           </Text>
         </Pressable>
         <Button
-          title="Giữ chỗ & đặt cọc"
+          title={`Giữ chỗ & thanh toán${cart.length > 1 ? ` (${cart.length} kho)` : ''}`}
           disabled={!canBook}
           style={{ marginTop: S.sm }}
-          onPress={() => unitId && void run(
-            'createReservation',
-            { unitTypeId: typeId, unitId, startDate: start, rentalPeriod: period, periods: periodsNum, preferredCheckInShift: checkInShift, useAirConditioning: !!ut?.acEligible && useAirConditioning },
-            'Đã giữ chỗ — vui lòng thanh toán tiền cọc',
-            (v) => router.replace(`/booking/${v._id}`),
-          )}
+          onPress={book}
         />
       </Card>
     </Screen>
@@ -263,6 +304,9 @@ const st = StyleSheet.create({
   typeCardSelected: { borderColor: C.brand600, backgroundColor: C.brand50 },
   typeCardFull: { opacity: 0.6 },
   typeName: { fontSize: 15, fontWeight: '700', color: C.ink },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: C.ink, marginBottom: S.sm },
+  cartLine: { flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: S.sm, borderTopWidth: 1, borderTopColor: C.line },
+  cartName: { fontSize: 14, fontWeight: '600', color: C.ink },
   typePrice: { fontSize: 15, fontWeight: '700', color: C.ink },
   availText: { fontSize: 12, fontWeight: '600', marginTop: 4 },
   consent: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', marginBottom: S.md },

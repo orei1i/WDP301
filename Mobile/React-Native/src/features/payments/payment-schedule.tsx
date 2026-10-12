@@ -4,20 +4,21 @@ import { buildPaymentSchedule, paymentTotalText, vnd } from '@ssm/shared';
 import { C, R, S } from '../../shared/ui/theme';
 
 /**
- * Lịch thanh toán "1 cọc + 1 kỳ đầu": nói rõ NGAY LÚC ĐẶT rằng ngoài tiền cọc trả hôm nay, khách còn trả thêm
- * tiền thuê kỳ đầu khi nhận kho — để không ai bất ngờ ở quầy. Cùng một nguồn số liệu với hợp đồng (shared).
+ * Lịch thanh toán "giữ chân + kỳ đầu": nói rõ NGAY LÚC ĐẶT khách phải trả gì, lúc nào — kho thường trả tiền giữ chân
+ * hôm nay rồi trả THÊM tiền thuê kỳ đầu khi nhận kho; kho cỡ lớn trả cả hai ngay lúc đặt. Cùng nguồn số liệu với hợp đồng (shared).
  */
 export function PaymentSchedule({ quotes, graceDays, compact = false }: {
-  quotes: readonly Pick<PriceQuote, 'depositAmount' | 'firstPeriodRent' | 'rentalPeriod'>[]; graceDays?: number; compact?: boolean;
+  quotes: readonly (Pick<PriceQuote, 'depositAmount' | 'firstPeriodRent' | 'rentalPeriod'> & Partial<Pick<PriceQuote, 'firstPeriodAtBooking' | 'depositPeriods'>>)[]; graceDays?: number; compact?: boolean;
 }) {
   if (quotes.length === 0) return null;
   const s = buildPaymentSchedule(quotes, graceDays);
+  const upfront = s.steps.filter((x) => x.key !== 'NEXT_PERIODS').length;
   return (
     <View style={st.box}>
-      <Text style={st.title}>Bạn sẽ thanh toán 2 khoản trước khi dùng kho</Text>
+      <Text style={st.title}>Bạn sẽ thanh toán {upfront} khoản trước khi dùng kho</Text>
       {s.steps.map((step, i) => (
         <View key={step.key} style={[st.step, step.key === 'NEXT_PERIODS' && { opacity: 0.8 }]}>
-          <View style={[st.dot, i >= 2 && st.dotLight]}><Text style={[st.dotText, i >= 2 && { color: C.amber }]}>{i < 2 ? i + 1 : '…'}</Text></View>
+          <View style={[st.dot, i >= upfront && st.dotLight]}><Text style={[st.dotText, i >= upfront && { color: C.amber }]}>{i < upfront ? i + 1 : '…'}</Text></View>
           <View style={{ flex: 1 }}>
             <View style={st.row}>
               <View style={{ flex: 1 }}>

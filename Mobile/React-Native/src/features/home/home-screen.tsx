@@ -101,7 +101,7 @@ export default function HomeScreen() {
 
         {pending.length > 0 && (
           <View style={{ gap: S.md }}>
-            <Text style={st.section}>Chờ đặt cọc</Text>
+            <Text style={st.section}>Chờ thanh toán</Text>
             {pending.map((r) => (
               <Card key={r._id} style={{ backgroundColor: C.amberBg, borderColor: '#fde68a' }}>
                 <View style={st.rowBetween}>
@@ -109,10 +109,12 @@ export default function HomeScreen() {
                   <Badge tone="amber">Giữ chỗ tạm thời</Badge>
                 </View>
                 <Muted style={{ marginTop: 6 } as never}>
-                  {typeName(db, r.unitTypeId)} · {facilityName(db, r.facilityId)} · cọc {vnd(r.quote.depositAmount)} hôm nay, thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu {vnd(r.quote.firstPeriodRent)} trả thêm khi nhận kho
+                  {typeName(db, r.unitTypeId)} · {facilityName(db, r.facilityId)} · {r.quote.firstPeriodAtBooking
+                    ? `giữ chân ${vnd(r.quote.depositAmount)} + thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu ${vnd(r.quote.firstPeriodRent)}, trả cùng lúc hôm nay`
+                    : `giữ chân ${vnd(r.quote.depositAmount)} hôm nay, thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu ${vnd(r.quote.firstPeriodRent)} trả thêm khi nhận kho`}
                 </Muted>
                 <Button
-                  title="Thanh toán cọc"
+                  title="Thanh toán"
                   style={{ marginTop: S.md }}
                   onPress={() => router.push(`/booking/${r._id}`)}
                 />
