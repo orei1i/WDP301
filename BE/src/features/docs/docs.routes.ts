@@ -376,6 +376,17 @@ export const API_GROUPS: Group[] = [
         ],
       },
       {
+        method: 'POST', path: '/contracts/:id/assisted-open', auth: R.STAFF, summary: 'Nhân viên mở kho HỘ khách bằng chìa tổng / thẻ tổng (khách mất chìa, mất thẻ, cần vào gấp).',
+        body: [
+          { name: 'reason', type: 'string 5..300', required: true },
+          { name: 'identityVerified', type: 'true', required: true, note: 'nhân viên xác nhận đã đối chiếu tài khoản + giấy tờ của khách; thiếu → 400' },
+        ],
+        notes: [
+          'Hệ thống không điều khiển ổ khoá — endpoint này GHI NHẬT KÝ vào contract.access.assistedOpens + audit (contract.assisted_open); khách xem được trong app.',
+          'Ô khoá mật khẩu → 422 NO_MASTER_FOR_PIN (không có mã tổng). Hợp đồng bị khoá do công nợ / đã kết thúc → 422 ACCESS_SUSPENDED.',
+        ],
+      },
+      {
         method: 'POST', path: '/access-requests', auth: R.CUS, summary: 'Gửi yêu cầu cấp lại (PIN_RESET / CARD_REISSUE / KEY_REISSUE) cho hợp đồng của mình.',
         body: [
           { name: 'contractId', type: 'ObjectId', required: true },
@@ -385,6 +396,7 @@ export const API_GROUPS: Group[] = [
         notes: [
           'Hợp đồng ACTIVE / DELINQUENT / MOVE_OUT_PENDING (không LOCKED_OUT). Mỗi hợp đồng chỉ một yêu cầu đang mở — gửi thêm: 409 REQUEST_PENDING.',
           'Phí chốt theo chính sách lúc gửi (mặc định: mật khẩu 0, thẻ 50.000, chìa 0) → tạo khoản ACCESS_FEE.',
+          'Mất thẻ / chìa: đặt contract.access.lostReportedAt ngay lúc gửi (thẻ cũ bị vô hiệu); xoá khi bàn giao thẻ mới, bị từ chối hoặc khách huỷ.',
         ],
       },
       {

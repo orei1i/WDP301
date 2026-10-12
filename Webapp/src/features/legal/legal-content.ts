@@ -16,7 +16,8 @@ export const TERMS: LegalSection[] = [
     heading: 'Điều 1. Bản chất dịch vụ',
     body: [
       'KhoAn cho thuê không gian lưu trữ tự quản. Đây là hợp đồng thuê không gian, không phải hợp đồng gửi giữ tài sản.',
-      'KhoAn không giữ chìa khóa dự phòng, không kiểm đếm, không định giá và không quản lý tài sản bên trong ô kho. Khách hàng tự khóa, tự quản lý và tự chịu rủi ro đối với tài sản của mình.',
+      'KhoAn không kiểm đếm, không định giá và không quản lý tài sản bên trong ô kho. Khách hàng tự khóa, tự quản lý và tự chịu rủi ro đối với tài sản của mình.',
+      'Mỗi chi nhánh giữ chìa khóa tổng (cho ô khóa bằng chìa) và thẻ tổng (cho ô khóa bằng thẻ từ), chỉ dùng trong các trường hợp nêu tại Điều 5. Với ô khóa bằng mật khẩu, KhoAn không xem được mật khẩu của khách hàng; chỉ khách hàng xem được trong tài khoản của mình.',
       'Khách hàng cam kết là chủ sở hữu hợp pháp hoặc được chủ sở hữu ủy quyền đối với toàn bộ tài sản gửi vào.',
     ],
   },
@@ -60,6 +61,8 @@ export const TERMS: LegalSection[] = [
     body: [
       'Khách hàng ra vào trong giờ quy định của chi nhánh, bằng phương thức được cấp: chìa khóa, mã PIN hoặc thẻ từ.',
       'Không chuyển giao phương thức truy cập cho người thứ ba khi chưa đăng ký với KhoAn.',
+      'Mất chìa, mất thẻ hoặc quên mật khẩu: khách hàng xem lại mật khẩu hoặc gửi yêu cầu cấp lại trong tài khoản; quản lý chi nhánh xác nhận, phí cấp lại (nếu có) theo chính sách. Khi khách hàng báo mất thẻ, thẻ cũ bị vô hiệu ngay.',
+      'Cần mở kho gấp khi chưa kịp cấp lại: khách hàng đến quầy trong giờ hoạt động và yêu cầu mở hộ. Nhân viên xác minh danh tính (tài khoản của khách hàng và giấy tờ tùy thân), mở bằng chìa tổng hoặc thẻ tổng với sự có mặt của khách hàng và không vào bên trong ô kho. Mỗi lần mở hộ được ghi vào nhật ký hệ thống (người mở, thời điểm, lý do) và khách hàng xem được trong tài khoản.',
       'KhoAn được quyền mở ô kho mà không cần sự có mặt của khách hàng trong các trường hợp: (a) tình huống khẩn cấp như cháy, ngập, rò rỉ; (b) có căn cứ hợp lý cho rằng bên trong chứa hàng hóa bị cấm tại Điều 4; (c) có yêu cầu bằng văn bản hoặc quyết định của cơ quan nhà nước có thẩm quyền; (d) khách hàng quá hạn thanh toán vượt ngưỡng tại Điều 7.',
       'Mọi lần mở kho theo khoản trên đều được lập biên bản, chụp ảnh hiện trạng và ghi vào nhật ký hệ thống. KhoAn thông báo cho khách hàng trong vòng 24 giờ, trừ trường hợp cơ quan chức năng yêu cầu giữ bí mật điều tra.',
     ],

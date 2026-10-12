@@ -114,9 +114,32 @@ export default function AccessScreen() {
               <Text style={st.tag}>{info.keyTag ?? 'Chưa ghi nhận'}</Text>
             </View>
             {info.suspended && <Muted style={{ marginTop: S.sm } as never}>Quyền vào kho đang bị tạm khoá do công nợ.</Muted>}
+            {c.access.lostReportedAt && (
+              <View style={[st.notice, { backgroundColor: C.amberBg }]}>
+                <Ionicons name="shield-outline" size={16} color={C.amber} />
+                <Text style={{ flex: 1, fontSize: 13, color: C.amber }}>
+                  Bạn đã báo mất lúc {fmtDateTime(c.access.lostReportedAt)}{c.access.method === 'RFID_CARD' ? ' — thẻ cũ đã bị khoá, không ai dùng được nữa.' : '.'}
+                </Text>
+              </View>
+            )}
           </View>
         )}
       </Card>
+
+      {c.access.method !== 'PIN' && (
+        <Card style={{ marginTop: S.md }}>
+          <Text style={st.title}>Cần vào kho gấp?</Text>
+          <Muted style={{ marginTop: 2 } as never}>
+            Đến quầy chi nhánh trong giờ hoạt động, mang giấy tờ tùy thân. Nhân viên xác minh danh tính rồi mở kho giúp bạn bằng {c.access.method === 'RFID_CARD' ? 'thẻ tổng' : 'chìa tổng'} của chi nhánh — bạn có mặt khi mở, nhân viên không vào trong ô kho. Mỗi lần mở hộ đều được ghi lại bên dưới.
+          </Muted>
+          {(c.access.assistedOpens ?? []).length === 0 ? <Muted style={{ marginTop: S.sm } as never}>Chưa có lần mở hộ nào.</Muted> : [...(c.access.assistedOpens ?? [])].reverse().map((o) => (
+            <View key={o.at} style={st.openRow}>
+              <Text style={st.name}>{fmtDateTime(o.at)}</Text>
+              <Muted>Nhân viên {o.byName} · {o.reason}</Muted>
+            </View>
+          ))}
+        </Card>
+      )}
 
       {/* ---- xin cấp lại ---- */}
       <Card style={{ marginTop: S.md }}>
@@ -197,6 +220,7 @@ const st = StyleSheet.create({
   feeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: S.md, marginBottom: 2 },
   feeLabel: { fontSize: 14, color: C.muted },
   fee: { fontSize: 16, fontWeight: '800', color: C.ink },
+  openRow: { marginTop: S.sm, paddingTop: S.sm, borderTopWidth: 1, borderTopColor: C.line },
   notice: { flexDirection: 'row', gap: S.sm, alignItems: 'flex-start', padding: S.md, borderRadius: R.md, marginTop: S.md },
   section: { fontSize: 16, fontWeight: '700', color: C.ink, marginTop: S.xl },
   rowBetween: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: S.md },

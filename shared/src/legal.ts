@@ -11,7 +11,9 @@
 // 1.1 (05/10/2026): Điều 3 nêu rõ hai khoản thanh toán trước khi dùng kho (cọc khi đặt chỗ + tiền thuê kỳ đầu khi nhận kho).
 // 1.2 (12/10/2026): "tiền cọc" gọi là "tiền giữ chân"; kho cỡ lớn giữ chân ≥ 2 kỳ + trả tiền thuê kỳ đầu lúc đặt chỗ;
 //                   Điều 11 mới: ký hợp đồng điện tử, xác nhận thuê kho, hủy/hoàn tiền và giới hạn trách nhiệm; Điều 8: phân công nhân viên chuyển đồ khi đổi ô.
-export const TERMS_VERSION = '1.2';
+// 1.3 (12/10/2026): Điều 1 và Điều 5 — chi nhánh giữ chìa tổng / thẻ tổng; mở kho hộ theo yêu cầu của khách có xác minh và ghi nhật ký;
+//                   báo mất thẻ thì thẻ cũ bị khoá ngay.
+export const TERMS_VERSION = '1.3';
 export const PRIVACY_VERSION = '1.0';
 /** Ngày áp dụng Điều khoản (bản TERMS_VERSION). */
 export const TERMS_EFFECTIVE = '12/10/2026';

@@ -12,7 +12,7 @@ import {
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
-import { getContractAccess } from '../access/access.service';
+import { assistedOpen, getContractAccess } from '../access/access.service';
 
 export const contractsRouter = Router();
 contractsRouter.use(authenticate);
@@ -44,6 +44,15 @@ const pm = z.enum(enumValues(PaymentMethod) as [string, ...string[]]).refine((m)
 // Chủ hợp đồng xem phương tiện vào kho hiện tại (mật khẩu giải mã tại đây, mỗi lần xem ghi nhật ký).
 contractsRouter.get('/:id/access', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
   res.json(await getContractAccess(req.auth!.user, req.valid.params.id));
+});
+
+// Nhân viên mở kho HỘ khách bằng chìa tổng / thẻ tổng (khách mất chìa, mất thẻ, cần vào gấp). Bắt buộc xác nhận đã xác minh
+// danh tính và ghi lý do — mỗi lần mở được ghi vào hợp đồng + nhật ký kiểm toán, khách xem được.
+contractsRouter.post('/:id/assisted-open', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+  reason: z.string().trim().min(5, 'Ghi lý do mở hộ (ít nhất 5 ký tự)').max(300),
+  identityVerified: z.literal(true, { errorMap: () => ({ message: 'Cần xác minh danh tính khách trước khi mở kho hộ' }) }),
+}) }), async (req, res) => {
+  res.json(await assistedOpen(req.auth!.user, req.valid.params.id, { reason: req.valid.body.reason }));
 });
 
 contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm }) }), async (req, res) => {

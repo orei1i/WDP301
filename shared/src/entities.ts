@@ -230,6 +230,10 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
     credentialEnc?: string | null;        // PIN mã hoá AES-GCM để chủ hợp đồng xem lại được
     issuedAt?: D | null; issuedBy?: I | null;
     suspendedAt?: D | null; revokedAt?: D | null;
+    /** Khách đã báo mất thẻ / chìa (đang có yêu cầu cấp lại): thẻ cũ bị vô hiệu từ lúc này cho đến khi bàn giao thẻ mới. */
+    lostReportedAt?: D | null;
+    /** Nhật ký các lần nhân viên MỞ KHO HỘ theo yêu cầu của khách bằng chìa tổng / thẻ tổng (khách mất chìa, mất thẻ, cần mở gấp). */
+    assistedOpens?: { at: D; by: I; byName: string; reason: string }[];
   };
   terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string; signerName?: string | null };
   renewals: { previousEndDate: D; newEndDate: D; periods: number; paymentId?: I | null; at: D }[];

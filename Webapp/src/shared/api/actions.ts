@@ -127,6 +127,9 @@ export const actions = {
   // Yêu cầu cấp lại mật khẩu / thẻ / chìa — Quản lý chi nhánh duyệt, nhân viên bàn giao thẻ/chìa.
   decideAccessRequest: async (p: { requestId: string; approve: boolean; note?: string }) => { await api.post(`/access-requests/${p.requestId}/decide`, { approve: p.approve, note: p.note || undefined }); },
 
+  /** Nhân viên mở kho hộ khách bằng chìa tổng / thẻ tổng sau khi xác minh danh tính — server ghi nhật ký vào hợp đồng. */
+  assistedOpen: async (p: { contractId: string; reason: string }) => { await api.post(`/contracts/${p.contractId}/assisted-open`, { reason: p.reason, identityVerified: true }); },
+
   completeAccessRequest: async (p: { requestId: string; keyTag: string }) => { await api.post(`/access-requests/${p.requestId}/complete`, { keyTag: p.keyTag }); },
 
   cancelAccessRequest: async (p: { requestId: string; reason?: string }) => { await api.post(`/access-requests/${p.requestId}/cancel`, { reason: p.reason || undefined }); },

@@ -43,6 +43,33 @@ export async function getContractAccess(user: UserHydrated, contractId: string) 
   return { method, keyTag: c.access.keyTag ?? null, issuedAt: c.access.issuedAt ?? null, suspended, pin, reason };
 }
 
+// ---------------------------------------------------------------- mở kho hộ khách (STAFF, FM)
+/**
+ * Khách mất chìa / mất thẻ mà cần vào kho GẤP: nhân viên xác minh danh tính tại quầy rồi mở bằng chìa tổng / thẻ tổng
+ * của chi nhánh. Hệ thống không điều khiển ổ khoá — việc ở đây là GHI NHẬT KÝ không sửa xoá được (ai mở, lúc nào, vì sao),
+ * khách xem được trong tài khoản. Đó là bằng chứng bảo vệ cả khách lẫn chi nhánh khi có tranh chấp.
+ *
+ * Không áp dụng cho ô khoá mật khẩu (không có "mã tổng": khách xem lại mã trong app hoặc xin đặt lại), và không dùng
+ * để vượt lệnh khoá do công nợ.
+ */
+export async function assistedOpen(user: UserHydrated, contractId: string, input: { reason: string }) {
+  return withTxn(async (session) => {
+    const c = await RentalContractModel.findById(contractId).session(session);
+    if (!c) throw NotFound('hợp đồng');
+    await assertFacility(user, c.facilityId, 'contract.assisted_open');
+    if (!REQUESTABLE_CONTRACT_STATUS.includes(c.status) || c.access.suspendedAt) {
+      throw Unprocessable('Hợp đồng đang bị khoá truy cập do công nợ hoặc đã kết thúc — không mở hộ được', 'ACCESS_SUSPENDED');
+    }
+    if (c.access.method === 'PIN') throw Unprocessable('Ô khoá mật khẩu: khách xem lại mật khẩu trong tài khoản hoặc xin đặt lại, không có mã tổng', 'NO_MASTER_FOR_PIN');
+    const now = new Date();
+    const entry = { at: now, by: user._id, byName: user.fullName, reason: input.reason.trim() };
+    c.set('access.assistedOpens', [...(c.access.assistedOpens ?? []), entry].slice(-50));
+    await c.save({ session });
+    await audit({ action: 'contract.assisted_open', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: entry.reason, changes: { after: { method: c.access.method, by: user.fullName } } }, session);
+    return c;
+  });
+}
+
 // ---------------------------------------------------------------- gửi yêu cầu (CUSTOMER chủ hợp đồng)
 /** Phí (nếu có) trả ngay khi gửi, như đặt dịch vụ; bị từ chối hoặc huỷ trước khi xong thì hoàn đủ. */
 export async function createAccessRequest(user: UserHydrated, input: { contractId: string; reason?: string; method?: PaymentMethod }) {
@@ -73,9 +100,17 @@ export async function createAccessRequest(user: UserHydrated, input: { contractI
       _id: id, facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, unitId: c.unitId,
       type, accessMethod: c.access.method, reason: input.reason?.trim() || undefined, fee, status: 'REQUESTED', paymentId,
     }], { session });
-    await audit({ action: 'access.request', entityType: 'AccessRequest', entityId: id, facilityId: c.facilityId, changes: { after: { requestNumber: req.requestNumber, type, fee } } }, session);
+    // Mất thẻ / chìa: đánh dấu NGAY lúc khách báo — thẻ cũ bị vô hiệu, không chờ tới lúc bàn giao thẻ mới.
+    if (type !== 'PIN_RESET') { c.set('access.lostReportedAt', new Date()); await c.save({ session }); }
+    await audit({ action: 'access.request', entityType: 'AccessRequest', entityId: id, facilityId: c.facilityId, changes: { after: { requestNumber: req.requestNumber, type, fee, oldCredentialBlocked: type !== 'PIN_RESET' } } }, session);
     return req;
   });
+}
+
+/** Yêu cầu cấp lại thẻ/chìa kết thúc mà KHÔNG đổi thẻ (từ chối, khách huỷ vì tìm lại được) → thẻ/chìa cũ dùng lại bình thường. */
+async function clearLostFlag(o: AccessRequestHydrated, session: ClientSession) {
+  if (o.type === 'PIN_RESET') return;
+  await RentalContractModel.updateOne({ _id: o.contractId }, { $set: { 'access.lostReportedAt': null } }, { session });
 }
 
 /** Hoàn đủ phí khi từ chối/huỷ. */
@@ -107,6 +142,7 @@ export async function decideAccessRequest(user: UserHydrated, id: string, input:
       o.decisionNote = input.note.trim();
       o.decidedBy = user._id; o.decidedAt = now;
       await refundFee(o, user._id, 'Yêu cầu cấp lại bị từ chối', session);
+      await clearLostFlag(o, session);
       await o.save({ session });
       await audit({ action: 'access.reject', entityType: 'AccessRequest', entityId: o._id, facilityId: o.facilityId, reason: o.decisionNote, changes: { after: { refund: o.fee } } }, session);
       return o;
@@ -148,6 +184,7 @@ export async function completeAccessRequest(user: UserHydrated, id: string, inpu
     o.transitionTo('DONE', { actor: user.role, by: user._id });
     o.completedAt = now; o.completedBy = user._id; o.newKeyTag = input.keyTag.trim();
     c.set('access.keyTag', o.newKeyTag);
+    c.set('access.lostReportedAt', null); // đã có thẻ / chìa mới
     c.set('access.issuedAt', now);
     c.set('access.issuedBy', user._id);
     await c.save({ session });
@@ -166,6 +203,7 @@ export async function cancelAccessRequest(user: UserHydrated, id: string, reason
     o.transitionTo('CANCELLED', { actor: user.role, by: user._id, reason });
     o.cancelReason = reason?.trim() || (user.role === 'CUSTOMER' ? 'Khách huỷ' : 'Chi nhánh huỷ');
     await refundFee(o, user._id, 'Huỷ yêu cầu cấp lại', session);
+    await clearLostFlag(o, session);
     await o.save({ session });
     await audit({ action: 'access.cancel', entityType: 'AccessRequest', entityId: o._id, facilityId: o.facilityId, reason: o.cancelReason, changes: { after: { refund: o.fee } } }, session);
     return o;

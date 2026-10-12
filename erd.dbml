@@ -297,6 +297,8 @@ Table rental_contracts {
   "access.method" access_method
   "access.key_tag" varchar
   "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash (select:false)']
+  "access.lost_reported_at" datetime [note: 'khách báo mất thẻ/chìa (yêu cầu cấp lại đang mở) — thẻ cũ bị vô hiệu tới khi bàn giao thẻ mới']
+  "access.assisted_opens" json [note: '[{at, by, byName, reason}] nhật ký nhân viên mở kho hộ bằng chìa tổng / thẻ tổng; khách xem được']
   "access.credential_enc" varchar [note: 'PIN mã hoá AES-GCM để chủ hợp đồng xem lại (select:false, không ra bootstrap)']
   "terms.policy_id" objectid
   "terms.policy_version" int
