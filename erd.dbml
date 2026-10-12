@@ -266,6 +266,8 @@ Table reservations {
   hold_expires_at datetime [note: 'chỉ khi PENDING']
   qr_token_hash varchar [note: 'checkIn — chỉ lưu hash']
   "signature.signed_at" datetime [note: 'khách ký sau khi trả tiền giữ chân, trước khi nhận kho — chưa ký thì check-in bị chặn']
+  "signature.clauses" json [note: 'NGUYÊN VĂN điều khoản lúc ký — hợp đồng đã ký không đổi theo mẫu về sau']
+  "signature.template_version" int [note: 'phiên bản mẫu hợp đồng lúc ký; 0 = mẫu mặc định']
   "signature.signer_name" varchar
   "signature.method" signature_method
   "signature.image" varchar [note: 'PNG data URL của chữ ký vẽ tay, ≤ ~60KB; null nếu gõ họ tên']
@@ -462,6 +464,17 @@ Table access_requests {
   decision_note varchar [note: 'lý do từ chối']
   completed_by objectid
   new_key_tag varchar [note: 'số thẻ / mã chìa mới nhân viên ghi khi bàn giao']
+}
+
+Table contract_templates {
+  id objectid [pk]
+  scope varchar [note: 'GLOBAL | FACILITY']
+  facility_id objectid [note: 'null khi GLOBAL']
+  version int [note: 'tăng dần theo từng phạm vi; bất biến — sửa = phát hành bản mới']
+  is_active boolean
+  clauses json [note: '[{key, title, numbered, paragraphs[], bullets[]}] lời văn có biến {{...}}']
+  note varchar [note: 'nội dung thay đổi']
+  effective_from datetime
 }
 
 Table audit_logs {

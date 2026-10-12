@@ -14,6 +14,7 @@ export * from '../../features/swaps/unit-swap-request.model';
 export * from '../../features/services/service-offering.model';
 export * from '../../features/services/service-order.model';
 export * from '../../features/access/access-request.model';
+export * from '../../features/contract-templates/contract-template.model';
 
 import { UserModel } from '../../features/users/user.model';
 import { FacilityModel } from '../../features/facilities/facility.model';
@@ -31,9 +32,10 @@ import { UnitSwapRequestModel } from '../../features/swaps/unit-swap-request.mod
 import { ServiceOfferingModel } from '../../features/services/service-offering.model';
 import { ServiceOrderModel } from '../../features/services/service-order.model';
 import { AccessRequestModel } from '../../features/access/access-request.model';
+import { ContractTemplateModel } from '../../features/contract-templates/contract-template.model';
 
 export const ALL_MODELS = [
   UserModel, FacilityModel, UnitTypeModel, StorageUnitModel, ReservationModel, RentalContractModel,
   PaymentModel, InspectionModel, TicketModel, DamageClaimModel, PolicyModel, AuditLogModel, UnitSwapRequestModel,
-  ServiceOfferingModel, ServiceOrderModel, AccessRequestModel,
+  ServiceOfferingModel, ServiceOrderModel, AccessRequestModel, ContractTemplateModel,
 ] as const;

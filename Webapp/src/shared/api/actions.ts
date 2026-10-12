@@ -1,7 +1,7 @@
 'use client';
 
 import type {
-  AbandonedItemsDisposal, AccessMethod, BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
+  AbandonedItemsDisposal, AccessMethod, ContractTemplate, ContractTemplateClause, BusinessPolicy, CancellationReason, CheckInShift, ClaimItem, ClaimType, DamageClaim, Facility, InspectionLog,
   PaymentMethod, RentalContract, RentalPeriod, Reservation, Role, StorageUnit, SupportTicket, SwapMethod,
   ServiceOffering, ServiceOrder, SignatureMethod, TicketCategory, TicketKind, TicketPriority, TicketStatus, UnitCategory, UnitStatus, UnitSwapRequest, User,
 } from '@ssm/shared';
@@ -126,6 +126,13 @@ export const actions = {
 
   // Yêu cầu cấp lại mật khẩu / thẻ / chìa — Quản lý chi nhánh duyệt, nhân viên bàn giao thẻ/chìa.
   decideAccessRequest: async (p: { requestId: string; approve: boolean; note?: string }) => { await api.post(`/access-requests/${p.requestId}/decide`, { approve: p.approve, note: p.note || undefined }); },
+
+  /** Phát hành phiên bản mẫu hợp đồng mới (facilityId null = toàn chuỗi). Server kiểm tra lại đủ điều khoản + biến bắt buộc. */
+  publishContractTemplate: async (p: { facilityId: string | null; clauses: ContractTemplateClause[]; note?: string }) =>
+    api.post<ContractTemplate>('/contract-templates', { facilityId: p.facilityId, clauses: p.clauses, note: p.note }),
+
+  /** Chi nhánh bỏ mẫu hợp đồng riêng, dùng lại mẫu toàn chuỗi. */
+  retireFacilityTemplate: async (p: { facilityId: string }) => { await api.delete(`/contract-templates/facility/${p.facilityId}`); },
 
   /** Nhân viên mở kho hộ khách bằng chìa tổng / thẻ tổng sau khi xác minh danh tính — server ghi nhật ký vào hợp đồng. */
   assistedOpen: async (p: { contractId: string; reason: string }) => { await api.post(`/contracts/${p.contractId}/assisted-open`, { reason: p.reason, identityVerified: true }); },

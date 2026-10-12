@@ -90,6 +90,12 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
       signedBy: refOpt('User'),
       onBehalf: { type: Boolean, default: false },
       emailedAt: { type: Date, default: null },
+      // Nguyên văn điều khoản lúc ký + phiên bản mẫu — hợp đồng đã ký không đổi theo mẫu / mã nguồn về sau.
+      clauses: {
+        type: [new Schema({ title: { type: String, required: true }, paragraphs: { type: [String], default: [] }, bullets: { type: [String], default: [] } }, subOptions)],
+        default: undefined,
+      },
+      templateVersion: { type: Number, default: null },
       emailedTo: { type: String, default: null, maxlength: 120 },
     }, subOptions),
     default: null,

@@ -7,7 +7,7 @@ import { authenticate } from '../../shared/http/authenticate';
 import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId } from '../../shared/http/validate';
-import { contractPdfFor, resendContractEmail } from './contract-document.service';
+import { contractPdfFor, contractViewForUser, resendContractEmail } from './contract-document.service';
 import {
   allocate, cancelReservation, checkIn, createReservation, createReservationsBatch, lookupForCheckIn, payDeposit,
   reissueCheckInQr, signContract, unallocate, type BookingItem,
@@ -95,6 +95,11 @@ reservationsRouter.post('/:id/sign', authorize('CUSTOMER'), validate({ params: i
   signerName: z.string().min(2).max(100), method: e(SignatureMethod), image: z.string().max(80_000).nullable().optional(),
 }) }), async (req, res) => {
   res.json(await signContract(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+
+/** Nội dung hợp đồng để xem: chưa ký → dựng từ mẫu đang áp dụng; đã ký → đúng nguyên văn lúc ký. */
+reservationsRouter.get('/:id/contract', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await contractViewForUser(req.auth!.user, req.valid.params.id));
 });
 
 /** PDF hợp đồng đã ký (có chữ ký) — khách chủ đặt chỗ hoặc nhân viên/quản lý đúng chi nhánh. */

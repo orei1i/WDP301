@@ -364,6 +364,28 @@ export const API_GROUPS: Group[] = [
     ],
   },
   {
+    name: 'Mẫu hợp đồng',
+    blurb: 'Quản lý vận hành soạn lời văn từng điều của hợp đồng thuê kho và phát hành thành phiên bản (toàn chuỗi hoặc riêng một chi nhánh). Số liệu do hệ thống điền qua biến {{...}}; các câu chứa số tiền / mức hoàn là biến khối không sửa được. Mẫu bất biến; hợp đồng đã ký lưu nguyên văn lúc ký (reservation.signature.clauses).',
+    routes: [
+      { method: 'GET', path: '/contract-templates/effective', auth: ['OPS_MANAGER', 'ADMIN', 'FACILITY_MANAGER'], summary: 'Mẫu đang áp dụng: riêng chi nhánh (?facilityId) → toàn chuỗi → mặc định hệ thống (version 0).' },
+      { method: 'GET', path: '/contract-templates', auth: ['OPS_MANAGER', 'ADMIN', 'FACILITY_MANAGER'], summary: 'Lịch sử phiên bản của một phạm vi (?facilityId, bỏ trống = toàn chuỗi).' },
+      {
+        method: 'POST', path: '/contract-templates', auth: ['OPS_MANAGER'], summary: 'Phát hành phiên bản mẫu mới.',
+        body: [
+          { name: 'facilityId', type: 'ObjectId | null', note: 'null = toàn chuỗi' },
+          { name: 'clauses[]', type: '{ key, title, numbered, paragraphs[], bullets[] }', required: true, note: 'đủ và đúng thứ tự các điều của mẫu chuẩn' },
+          { name: 'note', type: 'string ≤500', note: 'nội dung thay đổi, ghi vào lịch sử' },
+        ],
+        notes: ['Thiếu biến bắt buộc, có biến lạ / sai cú pháp, thêm-xoá-đổi chỗ điều khoản → 422 TEMPLATE_INVALID (details.errors liệt kê đủ lỗi).'],
+      },
+      { method: 'DELETE', path: '/contract-templates/facility/:id', auth: ['OPS_MANAGER'], summary: 'Chi nhánh bỏ mẫu riêng, dùng lại mẫu toàn chuỗi.' },
+      {
+        method: 'GET', path: '/reservations/:id/contract', auth: 'ANY', summary: 'Nội dung hợp đồng của một đặt chỗ để hiển thị (web/app).',
+        notes: ['Chưa ký: dựng từ mẫu đang áp dụng. Đã ký: trả đúng NGUYÊN VĂN lúc ký, kể cả khi mẫu đã đổi. Trả { clauses, templateVersion, signed, contractNumber }.'],
+      },
+    ],
+  },
+  {
     name: 'Cấp lại mã / thẻ / chìa',
     blurb: 'Khách xin đặt lại mật khẩu, làm lại thẻ khoá hoặc cấp lại chìa khoá; Quản lý chi nhánh xác nhận. Loại yêu cầu do hình thức khoá của ô quyết định. Danh sách đi qua GET /bootstrap. Phí cấp lại theo chính sách (accessFees), trả khi gửi và hoàn đủ nếu bị từ chối/huỷ.',
     routes: [

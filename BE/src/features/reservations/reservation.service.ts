@@ -12,7 +12,7 @@ import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment, randomToken, sha256, sixDigitPin } from '../payments/payment.service';
 import { encryptSecret } from '../../shared/crypto/secret-box';
-import { emailContract } from './contract-document.service';
+import { contractViewFor, emailContract } from './contract-document.service';
 
 const loadReservation = async (id: string, session?: ClientSession) => {
   const r = await ReservationModel.findById(id).session(session ?? null);
@@ -305,12 +305,15 @@ async function signInTxn(user: UserHydrated, id: string, input: { signerName: st
     if (r.signature) throw Conflict('Hợp đồng này đã được ký', 'ALREADY_SIGNED');
     if (input.method === 'DRAWN' && !input.image) throw Unprocessable('Cần vẽ chữ ký');
     if (input.image && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.image)) throw Unprocessable('Ảnh chữ ký không hợp lệ');
+    // Chốt NGUYÊN VĂN hợp đồng khách đang ký (dựng từ mẫu đang áp dụng) — về sau mẫu đổi thì hợp đồng này vẫn giữ đúng bản đã ký.
+    const view = await contractViewFor(r, { forSigning: true });
     r.signature = {
       signedAt: new Date(), signerName: input.signerName.trim(), method: input.method, image: input.method === 'DRAWN' ? input.image ?? null : null,
       termsVersion: TERMS_VERSION, policyVersion: r.quote.policyVersion, signedBy: user._id, onBehalf: false,
+      clauses: view.clauses, templateVersion: view.templateVersion,
     };
     await r.save({ session });
-    await audit({ action: 'reservation.sign', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { method: input.method } } }, session);
+    await audit({ action: 'reservation.sign', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { method: input.method, templateVersion: view.templateVersion } } }, session);
     return r;
   });
 }

@@ -11,6 +11,7 @@ import { swapsRouter } from './features/swaps/swaps.routes';
 import { servicesRouter } from './features/services/services.routes';
 import { accessRouter } from './features/access/access.routes';
 import { policiesRouter } from './features/policies/policies.routes';
+import { contractTemplatesRouter } from './features/contract-templates/contract-templates.routes';
 import { usersRouter } from './features/users/users.routes';
 import { auditRouter } from './features/audit/audit.routes';
 import { reportsRouter } from './features/reports/reports.routes';
@@ -36,6 +37,7 @@ export const API_MOUNTS: Mount[] = [
   { prefix: '/services', router: servicesRouter },
   { prefix: '/access-requests', router: accessRouter },
   { prefix: '/policies', router: policiesRouter },
+  { prefix: '/contract-templates', router: contractTemplatesRouter },
   { prefix: '/users', router: usersRouter },
   { prefix: '/audit', router: auditRouter },
   { prefix: '/reports', router: reportsRouter },

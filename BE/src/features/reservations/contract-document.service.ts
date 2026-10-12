@@ -1,4 +1,4 @@
-import { buildContractClauses } from '@ssm/shared';
+import { buildContractClauses, TERMS_VERSION, type ContractClause } from '@ssm/shared';
 import {
   FacilityModel, PolicyModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, UserModel,
   type ReservationHydrated, type UserHydrated,
@@ -8,6 +8,7 @@ import { assertCanAccess } from '../../shared/http/scope';
 import { sendMail } from '../../shared/mail/mailer';
 import { effectivePolicy } from '../policies/pricing';
 import { buildContractPdf } from '../contracts/contract-pdf';
+import { effectiveTemplate } from '../contract-templates/contract-template.service';
 
 const maskEmail = (e: string) => e.replace(/^(.)[^@]*(@.*)$/, '$1***$2');
 
@@ -17,26 +18,58 @@ async function loadSigned(id: string) {
   return r;
 }
 
-/** Gom dữ liệu từ DB rồi dựng PDF hợp đồng đã ký — nội dung điều khoản lấy từ cùng hàm dùng cho web/mobile. */
-async function renderPdf(r: ReservationHydrated, customer: { fullName: string; email: string }) {
-  if (!r.signature) throw Unprocessable('Hợp đồng chưa được ký');
-  const [facility, unit, type, contract] = await Promise.all([
+export interface ContractView {
+  clauses: ContractClause[]; templateVersion: number; signed: boolean;
+  /** Dữ liệu tiêu đề để nơi hiển thị không phải tự tra lại. */
+  facilityName: string; contractNumber: string | null;
+}
+
+/**
+ * Điều khoản của một đặt chỗ — MỘT chỗ duy nhất cho bản xem (web/app), bản lưu lúc ký và PDF:
+ *  - đã ký và có bản lưu → trả NGUYÊN VĂN lúc ký (mẫu / mã nguồn đổi về sau không ảnh hưởng);
+ *  - chưa ký (hoặc ký trước khi có bản lưu) → dựng từ mẫu đang áp dụng cho chi nhánh.
+ * `forSigning`: dựng bản sẽ được lưu khi khách ký ngay bây giờ (Điều khoản hiện hành, khoản giữ chân đã thanh toán).
+ */
+export async function contractViewFor(r: ReservationHydrated, opts: { forSigning?: boolean } = {}): Promise<ContractView> {
+  const [facility, unit, type, contract, customer] = await Promise.all([
     FacilityModel.findById(r.facilityId).lean(),
     r.unitId ? StorageUnitModel.findById(r.unitId).lean() : null,
     UnitTypeModel.findById(r.unitTypeId).lean(),
     r.contractId ? RentalContractModel.findById(r.contractId, { contractNumber: 1 }).lean() : null,
+    UserModel.findById(r.customerId, { fullName: 1 }).lean(),
   ]);
+  const head = { facilityName: facility?.name ?? '—', contractNumber: contract?.contractNumber ?? null };
+  if (!opts.forSigning && r.signature?.clauses?.length) {
+    return { ...head, clauses: r.signature.clauses.map((c) => ({ title: c.title, paragraphs: [...c.paragraphs], bullets: [...c.bullets] })), templateVersion: r.signature.templateVersion ?? 0, signed: true };
+  }
   const policy = (await PolicyModel.findById(r.quote.policyId)) ?? (await effectivePolicy(r.facilityId));
+  const template = await effectiveTemplate(r.facilityId);
   const clauses = buildContractClauses({
     code: r.code, contractNumber: contract?.contractNumber,
-    facilityName: facility?.name ?? '—', facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null,
-    customerName: customer.fullName, unitTypeName: type?.name ?? '—',
+    facilityName: head.facilityName, facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null,
+    customerName: customer?.fullName ?? '—', unitTypeName: type?.name ?? '—',
     unitNumber: unit?.unitNumber, floor: unit?.location.floor, zone: unit?.location.zone, areaM2: type?.areaM2, accessMethod: unit?.accessMethod,
     useAirConditioning: r.useAirConditioning, rentalPeriod: r.quote.rentalPeriod, periods: r.periods,
     startDate: r.startDate.toISOString(), endDate: r.endDate.toISOString(), quote: r.quote, depositPaid: !!r.depositPaymentId,
-    termsVersion: r.signature?.termsVersion, // hợp đồng đã ký giữ đúng phiên bản Điều khoản lúc ký
+    termsVersion: opts.forSigning ? TERMS_VERSION : r.signature?.termsVersion, // hợp đồng đã ký giữ đúng phiên bản Điều khoản lúc ký
     policy: policy.toObject(),
-  });
+  }, template.clauses);
+  return { ...head, clauses, templateVersion: template.version, signed: !!r.signature };
+}
+
+/** Bản xem hợp đồng cho chủ đặt chỗ hoặc nhân viên/quản lý đúng chi nhánh (cả khi chưa ký — để đọc trước khi ký). */
+export async function contractViewForUser(user: UserHydrated, id: string) {
+  const r = await loadSigned(id);
+  await assertCanAccess(user, r, 'reservation.contract_view');
+  return contractViewFor(r);
+}
+
+/** Dựng PDF hợp đồng đã ký — cùng điều khoản với bản xem trên web/mobile. */
+async function renderPdf(r: ReservationHydrated, customer: { fullName: string; email: string }) {
+  if (!r.signature) throw Unprocessable('Hợp đồng chưa được ký');
+  const { clauses, facilityName, contractNumber } = await contractViewFor(r);
+  const facility = { name: facilityName };
+  const contract = { contractNumber };
   const pdf = await buildContractPdf({
     code: r.code, contractNumber: contract?.contractNumber, facilityName: facility?.name ?? '—', customerName: customer.fullName, clauses,
     signature: { signedAt: r.signature.signedAt, signerName: r.signature.signerName, method: r.signature.method, image: r.signature.image, onBehalf: r.signature.onBehalf },

@@ -52,6 +52,7 @@ export const AREAS: Record<Area, { title: string; roles: Role[]; items: NavItem[
       { href: '/ops/inventory', label: 'Loại kho & ô kho', icon: Boxes },
       { href: '/ops/services', label: 'Dịch vụ thêm', icon: PackagePlus },
       { href: '/ops/policies', label: 'Chính sách', icon: ScrollText },
+      { href: '/ops/contract-templates', label: 'Mẫu hợp đồng', icon: FileText },
       { href: '/ops/pricing', label: 'Bảng giá', icon: Tags },
     ],
   },

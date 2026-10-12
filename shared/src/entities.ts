@@ -311,6 +311,14 @@ export interface AccessRequest<I = ID, D = string> extends BaseEntity<I, D> {
 
 // ---------- ContractSignature (chữ ký xác nhận hợp đồng, lưu trên Reservation) ----------
 export interface ContractSignature<I = ID, D = string> {
+  /**
+   * NGUYÊN VĂN các điều khoản khách đã đọc và ký — chốt lúc ký để sau này mẫu hợp đồng / mã nguồn đổi thế nào thì hợp đồng
+   * đã ký vẫn in ra đúng như lúc ký. Không gửi kèm trong /bootstrap (nặng); đọc qua GET /reservations/:id/contract.
+   * Thiếu với hợp đồng ký trước khi có tính năng này → dựng lại từ mẫu mặc định.
+   */
+  clauses?: { title: string; paragraphs: string[]; bullets: string[] }[];
+  /** Phiên bản mẫu hợp đồng dùng lúc ký (0 = mẫu mặc định của hệ thống). */
+  templateVersion?: number | null;
   signedAt: D;
   signerName: string;
   method: SignatureMethod;

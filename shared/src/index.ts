@@ -7,6 +7,7 @@ export * from './format';
 export * from './labels';
 export * from './legal';
 export * from './policy-defaults';
+export * from './contract-template';
 export * from './contract-text';
 export * from './duration';
 export * from './inventory-rules';

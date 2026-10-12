@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { Reservation, SignatureMethod } from '@ssm/shared';
-import { buildContractClauses, fmtDateTime } from '@ssm/shared';
-import { byId, facilityName, typeName, useStore } from '../../shared/store/store';
+import type { ContractClause, Reservation, SignatureMethod } from '@ssm/shared';
+import { fmtDateTime } from '@ssm/shared';
+import { api } from '../../shared/api/client';
+import { useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, Field, Input, Muted } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
 import { SignaturePad, canDrawSignature, type SignaturePadHandle } from './signature-pad';
@@ -16,13 +17,25 @@ const METHODS: { value: SignatureMethod; label: string }[] = [{ value: 'DRAWN', 
  * và đồng ý. Ký xong, server tự gửi PDF hợp đồng đã ký tới email của khách; có nút gửi lại.
  */
 export function ContractSignCard({ reservation: r }: { reservation: Reservation }) {
-  const { db, user, run, toast } = useStore();
+  const { user, run, toast } = useStore();
   const [name, setName] = useState(user?.fullName ?? '');
   const [agree, setAgree] = useState(false);
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<SignatureMethod>(canDrawSignature ? 'DRAWN' : 'TYPED');
   const [hasInk, setHasInk] = useState(false);
   const pad = useRef<SignaturePadHandle>(null);
+  // Nội dung hợp đồng do SERVER dựng từ mẫu đang áp dụng (cùng nguồn với web và PDF) — không tự ghép ở app.
+  const [clauses, setClauses] = useState<ContractClause[] | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const signed = !!r.signature;
+  useEffect(() => {
+    if (signed) return;
+    let alive = true;
+    api.get<{ clauses: ContractClause[] }>(`/reservations/${r._id}/contract`)
+      .then((v) => { if (alive) { setClauses(v.clauses); setLoadError(''); } })
+      .catch((e: Error) => alive && setLoadError(e.message));
+    return () => { alive = false; };
+  }, [r._id, signed]);
 
   if (r.signature) {
     const s = r.signature;
@@ -38,17 +51,8 @@ export function ContractSignCard({ reservation: r }: { reservation: Reservation 
     );
   }
 
-  const policy = db.policies.find((p) => p._id === r.quote.policyId);
-  const facility = byId(db.facilities, r.facilityId);
-  const unit = byId(db.units, r.unitId);
-  const type = byId(db.unitTypes, r.unitTypeId);
-  const clauses = policy ? buildContractClauses({
-    code: r.code, facilityName: facilityName(db, r.facilityId), facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null,
-    customerName: user?.fullName ?? '—', unitTypeName: type?.name ?? typeName(db, r.unitTypeId), unitNumber: unit?.unitNumber, floor: unit?.location.floor,
-    zone: unit?.location.zone, areaM2: type?.areaM2, accessMethod: unit?.accessMethod, useAirConditioning: r.useAirConditioning,
-    rentalPeriod: r.quote.rentalPeriod, periods: r.periods, startDate: r.startDate, endDate: r.endDate, quote: r.quote, depositPaid: !!r.depositPaymentId, policy,
-  }) : [];
-  const valid = name.trim().length >= 2 && agree && (method === 'TYPED' || hasInk);
+  // Chưa tải được nội dung hợp đồng thì chưa cho ký — khách phải đọc được thứ mình ký.
+  const valid = name.trim().length >= 2 && agree && (method === 'TYPED' || hasInk) && !!clauses;
 
   const submit = async () => {
     let image: string | null = null;
@@ -74,11 +78,13 @@ export function ContractSignCard({ reservation: r }: { reservation: Reservation 
 
       {open && (
         <View style={st.doc}>
-          {clauses.map((c) => (
-            <View key={c.title}>
+          {loadError ? <Text style={[st.p, { color: C.red }]}>Không tải được nội dung hợp đồng: {loadError}</Text> : null}
+          {!clauses && !loadError ? <Text style={st.p}>Đang tải nội dung hợp đồng…</Text> : null}
+          {(clauses ?? []).map((c, i) => (
+            <View key={`${i}-${c.title}`}>
               <Text style={st.h}>{c.title}</Text>
-              {c.paragraphs.map((p) => <Text key={p} style={st.p}>{p}</Text>)}
-              {c.bullets.map((b) => <Text key={b} style={st.p}>• {b}</Text>)}
+              {c.paragraphs.map((p, k) => <Text key={k} style={st.p}>{p}</Text>)}
+              {c.bullets.map((b, k) => <Text key={k} style={st.p}>• {b}</Text>)}
             </View>
           ))}
           <Text style={[st.p, st.link]} onPress={() => Linking.openURL(`${WEB_ORIGIN}/dieu-khoan`)}>Xem Điều khoản thuê kho đầy đủ</Text>
