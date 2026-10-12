@@ -4,6 +4,7 @@ import { withTxn } from '../../shared/db/txn';
 import { currentActorId } from '../../shared/core/request-context';
 import { Conflict, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertFacility } from '../../shared/http/scope';
+import { geocodeAddress } from '../../shared/geo/geocode';
 import { availability } from './availability';
 import { climateEligible, effectivePolicy, quote } from '../policies/pricing';
 import { audit } from '../audit/audit.service';
@@ -50,6 +51,8 @@ export async function facilityDetailPublic(id: string, period: RentalPeriod = 'M
       cancellation: policy.cancellation, earlyTermination: earlyTerminationOf(policy), minPeriods: policy.minPeriods, maxPeriods: policy.maxPeriods,
       // Bậc giảm giá theo số tháng — web/app dùng để hiện nhãn "Tiết kiệm x%" trên bộ chọn thời gian thuê.
       discounts: policy.discounts.map((d) => ({ code: d.code, kind: d.kind, value: d.value, minPeriods: d.minPeriods, validFrom: d.validFrom, validTo: d.validTo, requiresApprovalRole: d.requiresApprovalRole })),
+      // Phụ phí của chính sách — web/app dùng để GIẢI THÍCH phụ phí trong báo giá (tên, cách tính, lý do), không chỉ ghi "Phụ phí".
+      surcharges: policy.surcharges.map((s) => ({ code: s.code, label: s.label, kind: s.kind, value: s.value, categories: s.categories })),
     },
   };
 }
@@ -70,22 +73,35 @@ export async function floorPlan(facilityId: string, unitTypeId: string) {
 }
 
 // ---------------------------------------------------------------- facilities CRUD (OPS, ADMIN)
-export async function saveFacility(id: string | null, input: { code?: string; name: string; status: FacilityStatus; line1: string; district: string; city?: string; phone: string; lng?: number; lat?: number }) {
+/** Toạ độ dự phòng (trung tâm TP.HCM) khi chi nhánh mới mà không tra được địa chỉ. */
+const DEFAULT_COORDINATES: [number, number] = [106.7, 10.78];
+
+/**
+ * Toạ độ trên bản đồ KHÔNG do người dùng nhập: tự tra từ địa chỉ (line1/district/city) khi tạo mới hoặc khi
+ * địa chỉ đổi. Tra thất bại thì không chặn lưu — giữ toạ độ cũ, chi nhánh mới dùng toạ độ mặc định.
+ * Lời gọi mạng nằm ngoài mọi transaction/ghi DB (xong mới ghi).
+ */
+export async function saveFacility(id: string | null, input: { code?: string; name: string; status: FacilityStatus; line1: string; district: string; city?: string; phone: string }) {
   if (id) {
     const f = await FacilityModel.findById(id);
     if (!f) throw NotFound('chi nhánh');
+    const city = input.city || f.address.city;
+    const addressChanged = input.line1 !== f.address.line1 || input.district !== f.address.district || city !== f.address.city;
+    const coordinates = addressChanged ? await geocodeAddress({ line1: input.line1, district: input.district, city }) : null;
     f.set({ name: input.name, status: input.status, 'address.line1': input.line1, 'address.district': input.district, 'contact.phone': input.phone });
     if (input.city) f.set('address.city', input.city);
-    if (input.lng !== undefined && input.lat !== undefined) f.set('location.coordinates', [input.lng, input.lat]);
+    if (coordinates) f.set('location.coordinates', coordinates);
     await f.save();
-    await audit({ action: 'facility.update', entityType: 'Facility', entityId: f._id, facilityId: f._id, changes: { after: input } });
+    await audit({ action: 'facility.update', entityType: 'Facility', entityId: f._id, facilityId: f._id, changes: { after: coordinates ? { ...input, coordinates } : input } });
     return f;
   }
   if (!input.code) throw Unprocessable('Thiếu mã chi nhánh');
+  const city = input.city || 'TP. Hồ Chí Minh';
+  const coordinates = (await geocodeAddress({ line1: input.line1, district: input.district, city })) ?? DEFAULT_COORDINATES;
   const f = await FacilityModel.create({
     code: input.code, name: input.name, status: input.status,
-    address: { line1: input.line1, district: input.district, city: input.city ?? 'TP. Hồ Chí Minh', country: 'VN' },
-    location: { type: 'Point', coordinates: [input.lng ?? 106.7, input.lat ?? 10.78] }, contact: { phone: input.phone },
+    address: { line1: input.line1, district: input.district, city, country: 'VN' },
+    location: { type: 'Point', coordinates }, contact: { phone: input.phone },
   });
   await audit({ action: 'facility.create', entityType: 'Facility', entityId: f._id, facilityId: f._id });
   return f;

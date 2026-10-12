@@ -46,7 +46,8 @@ export const actions = {
 
   unallocate: async (p: { reservationId: string }) => { await api.post(`/reservations/${p.reservationId}/unallocate`); },
 
-  checkIn: async (p: { reservationId: string; keyTag?: string; payMethod: PaymentMethod }) =>
+  /** `payMethod`: cách thu tiền thuê kỳ đầu tại quầy — bỏ trống với kho cỡ lớn (đã thu cùng lúc đặt chỗ). */
+  checkIn: async (p: { reservationId: string; keyTag?: string; payMethod?: PaymentMethod }) =>
     api.post<{ contract: RentalContract; unit: StorageUnit; pin?: string }>(`/reservations/${p.reservationId}/check-in`, { keyTag: p.keyTag, payMethod: p.payMethod }),
 
   requestMoveOut: async (p: { contractId: string; date: string }) => { await api.post(`/contracts/${p.contractId}/move-out`, { date: day(p.date) }); },
@@ -55,7 +56,7 @@ export const actions = {
   submitInspection: async (p: { contractId: string; checklist: InspectionLog['checklist']; damages: InspectionLog['damages']; notes?: string }) =>
     (await api.post<{ inspection: InspectionLog }>(`/contracts/${p.contractId}/inspection`, { checklist: p.checklist, damages: p.damages, notes: p.notes || undefined })).inspection,
 
-  /** Hàng bỏ lại khi LOCKED_OUT quá lâu (FM) — kiểm kê + phương án xử lý, mất cọc, đóng hợp đồng. */
+  /** Hàng bỏ lại khi LOCKED_OUT quá lâu (FM) — kiểm kê + phương án xử lý, mất tiền giữ chân, đóng hợp đồng. */
   processAbandonment: async (p: { contractId: string; items: { description: string; quantity: number }[]; disposalMethod: AbandonedItemsDisposal; notes?: string }) =>
     (await api.post<{ inspection: InspectionLog }>(`/contracts/${p.contractId}/abandonment`, { items: p.items, disposalMethod: p.disposalMethod, notes: p.notes || undefined })).inspection,
 
@@ -67,7 +68,7 @@ export const actions = {
 
   lockout: async (p: { contractId: string }) => { await api.post(`/contracts/${p.contractId}/lockout`); },
 
-  /** Đổi ô kho cùng loại. Giá thuê và tiền cọc của hợp đồng không đổi — server từ chối nếu ô mới khác loại. */
+  /** Đổi ô kho cùng loại. Giá thuê và tiền giữ chân của hợp đồng không đổi — server từ chối nếu ô mới khác loại. */
   swapUnit: async (p: { contractId: string; toUnitId: string; reason: string; keyTag?: string; fee?: number }) =>
     (await api.post<{ fromUnit: StorageUnit; toUnit: StorageUnit; fee: number }>(`/contracts/${p.contractId}/swap-unit`, {
       toUnitId: p.toUnitId, reason: p.reason, keyTag: p.keyTag || undefined, fee: p.fee || undefined,
@@ -132,7 +133,7 @@ export const actions = {
 
   emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),
 
-  // ---- ký hợp đồng sau khi trả cọc (khách tự ký, hoặc nhân viên cho khách ký tại quầy)
+  // ---- ký hợp đồng sau khi trả tiền giữ chân (khách tự ký, hoặc nhân viên cho khách ký tại quầy)
   signContract: async (p: { reservationId: string; signerName: string; method: SignatureMethod; image?: string | null }) =>
     api.post<Reservation>(`/reservations/${p.reservationId}/sign`, { signerName: p.signerName, method: p.method, image: p.image ?? null }),
 
@@ -157,8 +158,9 @@ export const actions = {
 
   withdrawClaim: async (p: { claimId: string; reason?: string }) => { await api.post(`/claims/${p.claimId}/withdraw`, { reason: p.reason || undefined }); },
 
-  saveFacility: async (p: Pick<Facility, 'name' | 'code' | 'status'> & { _id?: string; line1: string; district: string; phone: string; lng?: number; lat?: number }) => {
-    const body = { name: p.name, status: p.status, line1: p.line1, district: p.district, phone: p.phone, lng: p.lng, lat: p.lat };
+  // Toạ độ không gửi lên — BE tự tra từ địa chỉ (line1 / district / city).
+  saveFacility: async (p: Pick<Facility, 'name' | 'code' | 'status'> & { _id?: string; line1: string; district: string; city: string; phone: string }) => {
+    const body = { name: p.name, status: p.status, line1: p.line1, district: p.district, city: p.city, phone: p.phone };
     if (p._id) await api.patch(`/facilities/${p._id}`, body);
     else await api.post('/facilities', { ...body, code: p.code });
   },
@@ -173,10 +175,14 @@ export const actions = {
 
   cancelSwapRequest: async (p: { swapRequestId: string }) => { await api.post(`/swap-requests/${p.swapRequestId}/cancel`); },
 
-  decideSwapRequest: async (p: { swapRequestId: string; approve: boolean; facilityFault?: boolean; fee?: number; scheduledFor?: string; rejectReason?: string }) =>
+  decideSwapRequest: async (p: { swapRequestId: string; approve: boolean; facilityFault?: boolean; fee?: number; scheduledFor?: string; assignedStaffId?: string; rejectReason?: string }) =>
     api.post<UnitSwapRequest>(`/swap-requests/${p.swapRequestId}/decide`, {
-      approve: p.approve, facilityFault: p.facilityFault, fee: p.fee, scheduledFor: p.scheduledFor, rejectReason: p.rejectReason,
+      approve: p.approve, facilityFault: p.facilityFault, fee: p.fee, scheduledFor: p.scheduledFor, assignedStaffId: p.assignedStaffId, rejectReason: p.rejectReason,
     }),
+
+  /** FM đổi nhân viên chuyển đồ / dời ngày hẹn cho yêu cầu "Thuê người chuyển" đã duyệt. */
+  assignSwapMover: async (p: { swapRequestId: string; assignedStaffId: string; scheduledFor?: string }) =>
+    api.post<UnitSwapRequest>(`/swap-requests/${p.swapRequestId}/assign`, { assignedStaffId: p.assignedStaffId, scheduledFor: p.scheduledFor }),
 
   completeSwapRequest: async (p: { swapRequestId: string }) => api.post<{ contract: RentalContract }>(`/swap-requests/${p.swapRequestId}/complete`),
 

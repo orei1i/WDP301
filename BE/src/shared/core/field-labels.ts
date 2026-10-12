@@ -1,9 +1,9 @@
 /** Nhãn tiếng Việt của các trường hay gặp — để thông báo lỗi nói rõ "Tên chi nhánh: …" thay vì "name: …". */
 const LABELS: Record<string, string> = {
-  name: 'Tên', code: 'Mã', line1: 'Địa chỉ', district: 'Khu vực', city: 'Thành phố', phone: 'Điện thoại', lng: 'Kinh độ', lat: 'Vĩ độ', status: 'Trạng thái',
+  name: 'Tên', code: 'Mã', line1: 'Số nhà, tên đường', district: 'Quận / Huyện', city: 'Tỉnh / Thành phố', phone: 'Điện thoại', status: 'Trạng thái',
   description: 'Mô tả', category: 'Nhóm cỡ', widthM: 'Chiều rộng', depthM: 'Chiều sâu', heightM: 'Chiều cao', indoor: 'Trong nhà',
   rates: 'Giá thuê', 'rates.DAY': 'Giá theo ngày', 'rates.WEEK': 'Giá theo tuần', 'rates.MONTH': 'Giá theo tháng',
-  depositOverride: 'Tiền cọc cố định', minPeriods: 'Thuê tối thiểu', maxPeriods: 'Thuê tối đa',
+  depositOverride: 'Tiền giữ chân cố định', minPeriods: 'Thuê tối thiểu', maxPeriods: 'Thuê tối đa',
   unitTypeId: 'Loại kho', unitNumber: 'Mã ô', floor: 'Tầng', zone: 'Khu', accessMethod: 'Hình thức khoá', prefix: 'Tiền tố mã', start: 'Số bắt đầu', count: 'Số lượng',
   facilityId: 'Chi nhánh', email: 'Email', fullName: 'Họ tên', password: 'Mật khẩu', amount: 'Số tiền', reason: 'Lý do', note: 'Ghi chú',
   'location.coordinates': 'Toạ độ',

@@ -27,7 +27,3 @@ export function isValidPhone(v: string): boolean {
   const digits = v.replace(/\D/g, '').length;
   return digits >= 8 && digits <= 15;
 }
-
-export const COORDS_PAIR_MESSAGE = 'Nhập đủ cả kinh độ và vĩ độ, hoặc để trống cả hai';
-export const inLng = (n: number) => n >= -180 && n <= 180;
-export const inLat = (n: number) => n >= -90 && n <= 90;

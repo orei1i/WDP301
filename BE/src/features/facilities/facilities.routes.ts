@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import {
-  AccessMethod, COORDS_PAIR_MESSAGE, enumValues, FACILITY_CODE_MESSAGE, FACILITY_CODE_RE, FacilityStatus, isValidPhone, PHONE_MESSAGE, RATE_MAX, RATE_MIN, RATES_ORDER_MESSAGE,
+  AccessMethod, enumValues, FACILITY_CODE_MESSAGE, FACILITY_CODE_RE, FacilityStatus, isValidPhone, PHONE_MESSAGE, RATE_MAX, RATE_MIN, RATES_ORDER_MESSAGE,
   RentalPeriod, ratesOrdered, UNIT_NUMBER_MESSAGE, UNIT_NUMBER_RE, UnitCategory, UnitStatus,
 } from '@ssm/shared';
 import { FacilityModel, StorageUnitModel, UnitTypeModel } from '../../shared/db/models';
@@ -25,7 +25,9 @@ facilitiesRouter.get('/public', async (_req, res) => {
 // ac = khách có muốn dùng điều hòa (add-on) không — áp cho mọi loại kho hợp lệ trong response, không
 // gắn với ô cụ thể nào; loại kho không hợp lệ (VD Locker) tự bỏ qua cờ này (facilityDetailPublic).
 facilitiesRouter.get('/public/:id', validate({ params: idParams, query: z.object({
-  period: e(RentalPeriod).default('MONTH'), periods: z.coerce.number().int().min(1).max(365).default(1), ac: z.coerce.boolean().default(false),
+  period: e(RentalPeriod).default('MONTH'), periods: z.coerce.number().int().min(1).max(365).default(1),
+  // KHÔNG dùng z.coerce.boolean(): nó coi chuỗi "false" là true → báo giá luôn cộng phụ phí điều hòa dù khách tắt công tắc.
+  ac: z.enum(['true', 'false']).default('false').transform((v) => v === 'true'),
 }) }), async (req, res) => {
   res.json(await facilityDetailPublic(req.valid.params.id, req.valid.query.period, req.valid.query.periods, req.valid.query.ac));
 });
@@ -43,19 +45,17 @@ facilitiesRouter.get('/', authorize('STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER', 
   res.json({ items: await FacilityModel.find(filter).sort({ name: 1 }) });
 });
 
+// Không nhận toạ độ từ client: saveFacility tự tra từ địa chỉ. Client cũ vẫn gửi lng/lat thì zod bỏ qua (không strict) — không 422.
 const facilityBody = z.object({
   code: z.string().trim().regex(FACILITY_CODE_RE, FACILITY_CODE_MESSAGE).optional(), name: z.string().trim().min(3).max(150),
   status: z.enum(enumValues(FacilityStatus) as [FacilityStatus, ...FacilityStatus[]]),
   line1: z.string().trim().min(3).max(200), district: z.string().trim().min(2).max(80), city: z.string().trim().min(2).max(80).optional(),
   phone: z.string().trim().refine(isValidPhone, PHONE_MESSAGE),
-  lng: z.number().min(-180).max(180).optional(), lat: z.number().min(-90).max(90).optional(),
 });
-// Toạ độ là một cặp: nhập thiếu một nửa thì trước đây bị bỏ qua âm thầm — nay báo lỗi.
-const coordsPaired = (d: { lng?: number; lat?: number }) => (d.lng === undefined) === (d.lat === undefined);
-facilitiesRouter.post('/', authorize('OPS_MANAGER', 'ADMIN'), validate({ body: facilityBody.required({ code: true }).refine(coordsPaired, { message: COORDS_PAIR_MESSAGE, path: ['lng'] }) }), async (req, res) => {
+facilitiesRouter.post('/', authorize('OPS_MANAGER', 'ADMIN'), validate({ body: facilityBody.required({ code: true }) }), async (req, res) => {
   res.status(201).json(await saveFacility(null, req.valid.body));
 });
-facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams, body: facilityBody.omit({ code: true }).refine(coordsPaired, { message: COORDS_PAIR_MESSAGE, path: ['lng'] }) }), async (req, res) => {
+facilitiesRouter.patch('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams, body: facilityBody.omit({ code: true }) }), async (req, res) => {
   res.json(await saveFacility(req.valid.params.id, req.valid.body));
 });
 facilitiesRouter.delete('/:id', authorize('OPS_MANAGER', 'ADMIN'), validate({ params: idParams }), async (req, res) => {

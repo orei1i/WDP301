@@ -3,29 +3,25 @@
 import { useState } from 'react';
 import { Boxes, Plus, Trash2 } from 'lucide-react';
 import type { Facility, FacilityStatus } from '@ssm/shared';
-import { COORDS_PAIR_MESSAGE, FACILITY_CODE_MESSAGE, FACILITY_CODE_RE, PHONE_MESSAGE, inLat, inLng, isValidPhone } from '@ssm/shared';
+import { FACILITY_CODE_MESSAGE, FACILITY_CODE_RE, PHONE_MESSAGE, isValidPhone } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { FACILITY_STATUS } from '@/shared/lib/labels';
 import { effectivePolicy, facilityStats } from '@/shared/lib/domain';
 import { pct } from '@/shared/lib/format';
 import { Button, ButtonLink, Card, Field, Modal, PageHeader, StatusBadge, Table, inputCls } from '@/shared/ui';
 
-const EMPTY = { _id: undefined as string | undefined, name: '', code: '', status: 'UNDER_CONSTRUCTION' as FacilityStatus, line1: '', district: '', phone: '', lng: '', lat: '' };
+const DEFAULT_CITY = 'TP. Hồ Chí Minh';
+const EMPTY = { _id: undefined as string | undefined, name: '', code: '', status: 'UNDER_CONSTRUCTION' as FacilityStatus, line1: '', district: '', city: DEFAULT_CITY, phone: '' };
 
 /** Cùng luật với BE (facilityBody) — báo lỗi ngay dưới từng ô trước khi gửi lên server. */
 function facilityErrors(f: typeof EMPTY) {
-  const e: Partial<Record<'name' | 'code' | 'line1' | 'district' | 'phone' | 'lng' | 'lat', string>> = {};
+  const e: Partial<Record<'name' | 'code' | 'line1' | 'district' | 'city' | 'phone', string>> = {};
   if (f.name.trim().length < 3) e.name = 'Tên chi nhánh tối thiểu 3 ký tự';
   if (!f._id && !FACILITY_CODE_RE.test(f.code.trim())) e.code = FACILITY_CODE_MESSAGE;
-  if (f.line1.trim().length < 3) e.line1 = 'Địa chỉ tối thiểu 3 ký tự';
-  if (f.district.trim().length < 2) e.district = 'Nhập khu vực (tối thiểu 2 ký tự)';
+  if (f.line1.trim().length < 3) e.line1 = 'Số nhà, tên đường tối thiểu 3 ký tự';
+  if (f.district.trim().length < 2) e.district = 'Nhập quận / huyện (tối thiểu 2 ký tự)';
+  if (f.city.trim().length < 2) e.city = 'Nhập tỉnh / thành phố (tối thiểu 2 ký tự)';
   if (!isValidPhone(f.phone.trim())) e.phone = PHONE_MESSAGE;
-  const lng = f.lng.trim(), lat = f.lat.trim();
-  if ((lng === '') !== (lat === '')) e.lng = COORDS_PAIR_MESSAGE;
-  else if (lng !== '') {
-    if (!Number.isFinite(Number(lng)) || !inLng(Number(lng))) e.lng = 'Kinh độ phải là số từ -180 đến 180';
-    if (!Number.isFinite(Number(lat)) || !inLat(Number(lat))) e.lat = 'Vĩ độ phải là số từ -90 đến 90';
-  }
   return e;
 }
 
@@ -38,10 +34,9 @@ export default function OpsFacilities() {
   const save = () => {
     if (!form) return;
     if (Object.keys(facilityErrors(form)).length) { setShowErr(true); toast('Vui lòng sửa các mục báo đỏ trước khi lưu', 'error'); return; }
-    void run('saveFacility', { ...form, lng: num(form.lng), lat: num(form.lat) }, 'Đã lưu chi nhánh', () => setForm(null));
+    void run('saveFacility', form, 'Đã lưu chi nhánh', () => setForm(null));
   };
-  const edit = (f: Facility) => open({ _id: f._id, name: f.name, code: f.code, status: f.status, line1: f.address.line1, district: f.address.district, phone: f.contact.phone, lng: String(f.location.coordinates[0]), lat: String(f.location.coordinates[1]) });
-  const num = (v: string) => (v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
+  const edit = (f: Facility) => open({ _id: f._id, name: f.name, code: f.code, status: f.status, line1: f.address.line1, district: f.address.district, city: f.address.city || DEFAULT_CITY, phone: f.contact.phone });
 
   return (
     <>
@@ -74,15 +69,13 @@ export default function OpsFacilities() {
               <Field label="Tên chi nhánh" error={errs.name}><input className={inputCls} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
               <Field label="Mã" error={errs.code}><input className={inputCls} value={form.code} disabled={!!form._id} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="HCM-GV-01" /></Field>
             </div>
-            <Field label="Địa chỉ" error={errs.line1}><input className={inputCls} value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} /></Field>
+            <Field label="Số nhà, tên đường" error={errs.line1}><input className={inputCls} value={form.line1} onChange={(e) => setForm({ ...form, line1: e.target.value })} placeholder="VD 123 Nguyễn Văn Linh" /></Field>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Khu vực" error={errs.district}><input className={inputCls} value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} /></Field>
-              <Field label="Điện thoại" error={errs.phone}><input className={inputCls} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
+              <Field label="Quận / Huyện" error={errs.district}><input className={inputCls} value={form.district} onChange={(e) => setForm({ ...form, district: e.target.value })} placeholder="VD Quận 7" /></Field>
+              <Field label="Tỉnh / Thành phố" error={errs.city}><input className={inputCls} value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Kinh độ (lng)" hint="Để trống cả kinh độ và vĩ độ: dùng toạ độ mặc định TP.HCM" error={errs.lng}><input className={inputCls} inputMode="decimal" value={form.lng} onChange={(e) => setForm({ ...form, lng: e.target.value })} placeholder="106.7009" /></Field>
-              <Field label="Vĩ độ (lat)" error={errs.lat}><input className={inputCls} inputMode="decimal" value={form.lat} onChange={(e) => setForm({ ...form, lat: e.target.value })} placeholder="10.7385" /></Field>
-            </div>
+            <p className="-mt-2 text-xs text-stone-500">Vị trí trên bản đồ được xác định tự động từ địa chỉ này — không cần nhập kinh độ / vĩ độ.</p>
+            <Field label="Điện thoại" error={errs.phone}><input className={inputCls} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></Field>
             <Field label="Trạng thái" hint="Chi nhánh không ở trạng thái 'Đang hoạt động' sẽ không nhận đặt chỗ mới.">
               <select className={inputCls} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as FacilityStatus })}>
                 {Object.entries(FACILITY_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
