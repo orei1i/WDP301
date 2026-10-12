@@ -8,7 +8,6 @@ Next.js (App Router) + Tailwind v4, backed by the real API in `BE/` and Firebase
 3. `cp Webapp/.env.local.example Webapp/.env.local` (git-ignored) and fill:
    - `NEXT_PUBLIC_API_URL` (default `http://localhost:4000/api`)
    - `NEXT_PUBLIC_FIREBASE_API_KEY / AUTH_DOMAIN / PROJECT_ID / APP_ID`
-   - optional `NEXT_PUBLIC_DEMO_PASSWORD` (= `SEED_PASSWORD` in BE) → one-click demo logins on `/login`
 4. From the repo root: `npm install` then `npm run web` → http://localhost:3000
 
 `localhost` is an authorised domain in Firebase by default; add your deployed domain under *Authentication → Settings → Authorized domains*.

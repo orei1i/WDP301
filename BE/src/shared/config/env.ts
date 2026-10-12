@@ -20,9 +20,6 @@ const schema = z.object({
   // Web API key của Firebase (Console → Project settings → General → Web app → apiKey).
   // Key này vốn public — nó nằm trong bundle trình duyệt của Webapp. Có key thì trang /api hiện ô đăng nhập lấy token.
   FIREBASE_WEB_API_KEY: z.string().optional(),
-  // Tùy chọn: điền sẵn mật khẩu cho nút tài khoản demo trên trang /api.
-  // CẢNH BÁO: trang /api công khai, đặt biến này là công bố mật khẩu demo. Chỉ dùng cho DB demo.
-  DOC_DEMO_PASSWORD: z.string().optional(),
   // Gửi email hợp đồng PDF cho khách. Gmail: SMTP_HOST=smtp.gmail.com, SMTP_PORT=465, SMTP_USER=<gmail>, SMTP_PASS=<Mật khẩu ứng dụng 16 ký tự>.
   // Bỏ trống thì hệ thống vẫn chạy bình thường, chỉ không gửi được email (khách vẫn tải được PDF).
   SMTP_HOST: z.string().optional(),

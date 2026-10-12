@@ -56,7 +56,7 @@ npm run api          # API   → http://localhost:4000/api   (Swagger: /api/docs
 npm run web          # Web   → http://localhost:3000
 npm run mobile       # Mobile → Expo dev server
 ```
-Web và Mobile đều gọi API thật nên phải chạy `npm run api` trước. Tài khoản demo và mật khẩu: `BE/README.md` mục 3.
+Web và Mobile đều gọi API thật nên phải chạy `npm run api` trước. Danh sách tài khoản demo nằm trong file cục bộ `TAI-KHOAN-DEMO.txt` (không đưa lên git); mật khẩu là `SEED_PASSWORD` trong `BE/.env`.
 
 **Debug Mobile ngay trên trình duyệt:** sau `npm run mobile` bấm phím `w` (hoặc mở `http://localhost:8081`). Web của Expo chạy
 ở origin `http://localhost:8081`, nên thêm origin đó vào `CORS_ORIGINS` trong `BE/.env`

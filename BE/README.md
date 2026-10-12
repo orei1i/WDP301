@@ -23,10 +23,9 @@ cp .env.example .env     # chạy trong BE/ ; BE/.env đã nằm trong .gitignor
 |---|---|---|
 | `PORT` | `4000` | Cổng API |
 | `CORS_ORIGINS` | `http://localhost:3000` | Các origin được gọi API, cách nhau bằng dấu phẩy — thêm domain Webapp đã deploy |
-| `SEED_PASSWORD` | `Demo@12345` | Mật khẩu các tài khoản demo do `npm run seed` tạo |
+| `SEED_PASSWORD` | có sẵn trong `src/shared/config/env.ts` | Mật khẩu các tài khoản demo do `npm run seed` tạo (>= 8 ký tự) |
 | `AUTH_DEV_BYPASS` | `false` | Chỉ để dev: nhận header `x-dev-user`. Bị bỏ qua khi `NODE_ENV=production` |
 | `FIREBASE_WEB_API_KEY` | — | Có thì trang `/api` hiện ô đăng nhập lấy token (mục 3) |
-| `DOC_DEMO_PASSWORD` | — | Điền sẵn mật khẩu cho nút tài khoản demo trên `/api` — **công bố mật khẩu**, chỉ dùng với DB demo |
 
 > The service-account key is full admin access to your Firebase project. Keep it only in `BE/.env` (git-ignored). Never commit it or paste it anywhere.
 
@@ -81,8 +80,6 @@ change under `features/*/*.model.ts`.
 
 **Getting a token for *Try it out*.** Set `FIREBASE_WEB_API_KEY` (Firebase Console → Project settings → General → Your apps → Web app → `apiKey` — already public, it ships in the Webapp bundle) and `GET /api` grows an email/password box. The browser calls Firebase directly, so this server never sees the password; the token is stored in `localStorage` on this origin and `/api/docs` picks it up and presses Authorize for you.
 
-Optionally set `DOC_DEMO_PASSWORD` to make the demo-account buttons fill the password too. **That publishes the password on a page anyone can open** — only ever point it at a throwaway demo database.
-
 **How the spec stays in sync.** `src/features/docs/openapi.ts` walks the routers listed in `src/routes.ts`
 and reads what the route handlers were tagged with:
 
@@ -95,17 +92,7 @@ So adding an endpoint or changing a zod schema updates Swagger on the next page 
 Only the prose descriptions come from the `API_GROUPS` table in `src/features/docs/docs.routes.ts`; a route missing from
 that table still shows up in Swagger, just without a description.
 
-Demo logins created by the seed (password = `SEED_PASSWORD`, default `Demo@12345`):
-
-| Role | Email |
-|---|---|
-| CUSTOMER | khach.demo@khoan.dev |
-| STAFF (Quận 7) | nhanvien.q7@khoan.dev |
-| FACILITY_MANAGER (Quận 7) | quanly.q7@khoan.dev |
-| FACILITY_MANAGER (Thủ Đức) | quanly.td@khoan.dev |
-| FACILITY_MANAGER (Tân Bình) | quanly.tb@khoan.dev |
-| OPS_MANAGER | vanhanh@khoan.dev |
-| ADMIN | admin@khoan.dev |
+Demo logins created by the seed: danh sách email nằm trong file cục bộ `TAI-KHOAN-DEMO.txt` (không đưa lên git); mật khẩu là `SEED_PASSWORD` trong `BE/.env`.
 
 ## 4. Auth flow
 ```
@@ -119,7 +106,7 @@ BE     ── verifyIdToken(token, checkRevoked) → User by firebaseUid → rol
 
 **Testing without a client (dev only):** set `AUTH_DEV_BYPASS=true` and send `x-dev-user: <email>` instead of a token.
 ```bash
-curl -H "x-dev-user: quanly.q7@khoan.dev" http://localhost:4000/api/reservations?status=CONFIRMED
+curl -H "x-dev-user: <email-tai-khoan-demo>" http://localhost:4000/api/reservations?status=CONFIRMED
 ```
 
 ## 5. Endpoints (`/api`)

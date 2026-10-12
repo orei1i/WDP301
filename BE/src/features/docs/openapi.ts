@@ -106,7 +106,7 @@ const INFO_MD = [
   '### Đăng nhập để bấm "Try it out"',
   '1. Đăng nhập Firebase ở Webapp, lấy ID token: `await auth.currentUser.getIdToken()`',
   '2. Bấm **Authorize** ở góc phải → dán token vào `bearerAuth`',
-  '3. Ở môi trường dev, nếu `AUTH_DEV_BYPASS=true` thì có thể bỏ qua Firebase: dùng `devUser` và điền email (vd `quanly.q7@khoan.dev`). Header này bị bỏ qua hoàn toàn khi `NODE_ENV=production`.',
+  '3. Ở môi trường dev, nếu `AUTH_DEV_BYPASS=true` thì có thể bỏ qua Firebase: dùng `devUser` và điền email của một tài khoản đã có trong DB. Header này bị bỏ qua hoàn toàn khi `NODE_ENV=production`.',
   '',
   '### Quy ước',
   '- Mọi số tiền là **số nguyên VND**.',

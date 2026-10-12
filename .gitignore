@@ -37,3 +37,6 @@ npm-debug.log*
 *.swo
 Claude outputs/
 .commitmsg
+
+# Danh sach tai khoan demo (co mat khau) - chi de tren may, khong dua len git
+TAI-KHOAN-DEMO.txt

@@ -10,17 +10,6 @@ import { ROLE } from '@/shared/lib/labels';
 import { PRIVACY_VERSION, TERMS_VERSION } from '@/features/legal/legal-content';
 import { Badge, Button, Card, Field, cx, inputCls } from '@/shared/ui';
 
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
-const DEMO_ACCOUNTS = [
-  { email: 'khach.demo@khoan.dev', label: 'Khách hàng' },
-  { email: 'nhanvien.q7@khoan.dev', label: 'Nhân viên kho · Quận 7' },
-  { email: 'quanly.q7@khoan.dev', label: 'Quản lý chi nhánh · Quận 7' },
-  { email: 'quanly.td@khoan.dev', label: 'Quản lý chi nhánh · Thủ Đức' },
-  { email: 'quanly.tb@khoan.dev', label: 'Quản lý chi nhánh · Tân Bình' },
-  { email: 'vanhanh@khoan.dev', label: 'Quản lý vận hành' },
-  { email: 'admin@khoan.dev', label: 'Quản trị hệ thống' },
-];
-
 function GoogleIcon() {
   return (
     <svg viewBox="0 0 48 48" className="size-4" aria-hidden>
@@ -101,7 +90,7 @@ function LoginInner() {
   }
 
   return (
-    <main className="mx-auto grid max-w-5xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_360px]">
+    <main className="mx-auto max-w-lg px-4 py-12">
       <Card className="p-6 sm:p-8">
         <div className="flex gap-1 rounded-lg bg-stone-100 p-1 text-sm font-medium">
           {(['login', 'register'] as const).map((m) => (
@@ -153,22 +142,6 @@ function LoginInner() {
           {' '}Đã đăng nhập bằng Google và muốn thêm mật khẩu? <Link href="/dat-mat-khau" className="text-brand-700 hover:underline">Đặt mật khẩu</Link>.
         </p>
       </Card>
-
-      {DEMO_PASSWORD && (
-        <div>
-          <p className="flex items-center gap-2 text-sm font-semibold"><KeyRound className="size-4" />Tài khoản demo (dev)</p>
-          <p className="mt-1 text-xs text-stone-500">Tạo bởi <code>npm run seed</code>. Chỉ hiện khi có <code>NEXT_PUBLIC_DEMO_PASSWORD</code>.</p>
-          <div className="mt-3 grid gap-2">
-            {DEMO_ACCOUNTS.map((a) => (
-              <button key={a.email} disabled={busy} onClick={async () => { if (await loginEmail(a.email, DEMO_PASSWORD)) setWaiting(true); }}
-                className="rounded-lg bg-white px-4 py-3 text-left ring-1 ring-stone-200 transition hover:ring-brand-500 disabled:opacity-50">
-                <p className="text-sm font-medium">{a.label}</p>
-                <p className="text-xs text-stone-500">{a.email}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </main>
   );
 }
