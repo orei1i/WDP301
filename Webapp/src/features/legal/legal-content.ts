@@ -25,7 +25,7 @@ export const TERMS: LegalSection[] = [
     body: [
       'Từ đủ 18 tuổi, có năng lực hành vi dân sự đầy đủ.',
       'Cung cấp thông tin định danh chính xác: họ tên, số điện thoại, email, giấy tờ tùy thân.',
-      'Thông tin sai lệch là căn cứ để KhoAn đơn phương chấm dứt hợp đồng và không hoàn tiền cọc.',
+      'Thông tin sai lệch là căn cứ để KhoAn đơn phương chấm dứt hợp đồng và không hoàn tiền giữ chân.',
     ],
   },
   {
@@ -33,8 +33,11 @@ export const TERMS: LegalSection[] = [
     body: [
       'Thời hạn thuê tối thiểu và tối đa theo chính sách đang áp dụng tại thời điểm ký.',
       'Giá thuê và toàn bộ điều khoản được chốt tại thời điểm xác nhận hợp đồng. KhoAn điều chỉnh bảng giá không làm thay đổi hợp đồng đang có hiệu lực.',
-      'Trước khi sử dụng kho, khách hàng thanh toán hai khoản riêng biệt: (1) tiền cọc, trả khi đặt chỗ; (2) tiền thuê kỳ đầu, trả thêm khi nhận kho. Số tiền từng khoản được hiển thị trên màn hình đặt chỗ và ghi trong hợp đồng; khách hàng xác nhận đã đọc trước khi giữ chỗ. Các kỳ sau thanh toán theo từng kỳ vào đầu mỗi kỳ.',
-      'Tiền cọc được hoàn khi trả kho, sau khi trừ dư nợ và chi phí khắc phục hư hỏng nếu có.',
+      'Trước khi sử dụng kho, khách hàng thanh toán hai khoản riêng biệt: (1) tiền giữ chân (còn gọi là tiền cọc), trả khi đặt chỗ để giữ ô kho đã chọn; (2) tiền thuê kỳ đầu. Số tiền từng khoản được hiển thị trên màn hình đặt chỗ và ghi trong hợp đồng; khách hàng xác nhận đã đọc trước khi giữ chỗ. Các kỳ sau thanh toán theo từng kỳ vào đầu mỗi kỳ.',
+      'Kho thường (tủ locker, phòng S, phòng M): tiền giữ chân bằng một kỳ tiền thuê; tiền thuê kỳ đầu trả thêm tại quầy khi nhận kho.',
+      'Kho cỡ lớn (phòng L, phòng XL): tiền giữ chân tối thiểu bằng hai kỳ tiền thuê, và tiền thuê kỳ đầu thanh toán cùng lúc đặt chỗ; khi nhận kho không phải trả thêm tiền thuê kỳ đầu.',
+      'Phụ phí (nếu có) luôn được ghi rõ tên, cách tính và lý do trên báo giá và trong hợp đồng. Hiện chỉ có phụ phí điều hòa nhiệt độ: chi phí điện và vận hành máy lạnh, chỉ tính khi khách hàng chọn sử dụng điều hòa.',
+      'Tiền giữ chân được giữ đến khi trả kho, không trừ vào tiền thuê, và được hoàn khi trả kho sau khi trừ dư nợ và chi phí khắc phục hư hỏng nếu có.',
       'Thanh toán chậm phát sinh phí trễ hạn theo biểu phí trong chính sách.',
     ],
   },
@@ -91,6 +94,7 @@ export const TERMS: LegalSection[] = [
     heading: 'Điều 8. Đổi ô kho',
     body: [
       'Khách hàng được đổi sang ô kho khác cùng loại, cùng diện tích, khi chi nhánh còn ô trống.',
+      'Khách hàng tự chuyển đồ, hoặc thuê người chuyển: khi đó quản lý chi nhánh phân công một nhân viên của chi nhánh và hẹn ngày chuyển; tên nhân viên và ngày chuyển hiển thị trong tài khoản của khách hàng.',
       'Đổi sang loại kho khác diện tích không phải là đổi ô — đây là chấm dứt hợp đồng cũ và ký hợp đồng mới theo bảng giá hiện hành.',
       'Giá thuê giữ nguyên theo hợp đồng gốc, không tính lại theo bảng giá tại thời điểm đổi.',
     ],
@@ -101,19 +105,31 @@ export const TERMS: LegalSection[] = [
       'Khách hàng đăng ký ngày trả kho trên hệ thống, tối thiểu trước 7 ngày.',
       'Ô kho phải được dọn sạch, không để lại rác hoặc tài sản.',
       'Nhân viên lập biên bản kiểm tra có xác nhận của hai bên.',
-      'Tiền cọc được quyết toán trong vòng 7 ngày làm việc kể từ ngày lập biên bản.',
+      'Tiền giữ chân được quyết toán trong vòng 7 ngày làm việc kể từ ngày lập biên bản.',
       'Tài sản để lại quá 14 ngày sau ngày trả kho được coi là từ bỏ quyền sở hữu; KhoAn xử lý và tính chi phí cho khách hàng.',
     ],
   },
   {
     heading: 'Điều 10. Chấm dứt hợp đồng',
     body: [
-      'Khách hàng chấm dứt trước hạn: hoàn cọc theo bậc thời gian trong chính sách. Tiền thuê đã thanh toán cho kỳ đang sử dụng không được hoàn.',
+      'Khách hàng chấm dứt trước hạn: hoàn tiền giữ chân theo bậc thời gian trong chính sách. Tiền thuê đã thanh toán cho kỳ đang sử dụng không được hoàn.',
       'KhoAn chấm dứt ngay lập tức nếu khách hàng vi phạm Điều 4 hoặc cung cấp thông tin gian dối.',
     ],
   },
   {
-    heading: 'Điều 11. Giải quyết tranh chấp',
+    heading: 'Điều 11. Xác nhận thuê kho, hủy đặt chỗ và giới hạn trách nhiệm',
+    body: [
+      'Hợp đồng thuê kho được lập và ký trực tuyến trên hệ thống KhoAn: khách hàng ký bằng chữ ký vẽ tay hoặc gõ họ tên trên tài khoản đã đăng nhập của chính mình; nhân viên không ký thay. Hợp đồng điện tử có giá trị như hợp đồng bằng văn bản giấy theo Luật Giao dịch điện tử; mọi thao tác thực hiện từ tài khoản của khách hàng được coi là do khách hàng thực hiện.',
+      'Khách hàng xác định sẽ thuê kho sau khi thanh toán tiền giữ chân và ký hợp đồng. Việc thuê kho là quyết định tự nguyện, độc lập của khách hàng, sau khi đã được cung cấp đầy đủ thông tin về loại kho, kích thước, hình thức khoá, giá, các khoản phải thanh toán và điều kiện hủy, hoàn tiền.',
+      'Khách hàng tự chịu trách nhiệm đánh giá kho có phù hợp với nhu cầu của mình hay không. Nếu phát sinh bất trắc, hoặc kho không phù hợp với khách hàng, KhoAn không chịu trách nhiệm đối với mọi hoạt động của khách hàng cũng như mọi hậu quả, chi phí, thiệt hại phát sinh từ việc khách hàng tự quyết định thuê kho, bao gồm chi phí vận chuyển, đóng gói, nhân công, lưu kho nơi khác và mọi khoản đã chi cho bên thứ ba.',
+      'Khách hàng có quyền hủy đặt chỗ hoặc trả kho trước hạn bất cứ lúc nào và tự chịu trách nhiệm về quyết định đó. Nếu KhoAn không bàn giao được ô kho đã đặt do lỗi của mình, KhoAn hoàn 100% số tiền khách hàng đã thanh toán khi đặt chỗ; hai bên thoả thuận đây là toàn bộ trách nhiệm của KhoAn trong trường hợp này.',
+      'Hủy đặt chỗ trước ngày nhận kho: khoản đã thanh toán khi đặt chỗ (tiền giữ chân, và tiền thuê kỳ đầu nếu đã trả cùng lúc đặt) được hoàn theo các mốc thời gian ghi trong hợp đồng và chính sách đang áp dụng; hủy sát ngày nhận hoặc không đến nhận kho thì không được hoàn. Việc hoàn tiền thực hiện tối đa trong 7 ngày làm việc.',
+      'Trong các trường hợp trên, quyền lợi duy nhất của khách hàng đối với khoản đã thanh toán là được hoàn tiền theo đúng mức ghi trong hợp đồng. KhoAn không bồi thường, đền bù hay hỗ trợ thêm bất kỳ khoản nào khác.',
+      'Thiệt hại đối với tài sản trong ô kho do lỗi trực tiếp của KhoAn trong thời gian thuê vẫn được xử lý theo Điều 6.',
+    ],
+  },
+  {
+    heading: 'Điều 12. Giải quyết tranh chấp',
     body: ['Hai bên thương lượng trước. Không đạt được thỏa thuận trong 30 ngày thì đưa ra Tòa án có thẩm quyền tại TP. Hồ Chí Minh. Áp dụng pháp luật Việt Nam.'],
   },
 ];
