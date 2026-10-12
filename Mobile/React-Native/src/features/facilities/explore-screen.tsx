@@ -45,7 +45,8 @@ export default function ExploreScreen() {
         ) : catalog.facilities.map((f) => {
           const available = f.availability.reduce((s, a) => s + a.available, 0);
           return (
-            <Pressable key={f._id} onPress={() => router.push(`/facility/${f._id}`)}>
+            // Vào màn giới thiệu (hình ảnh, cỡ kho) trước, từ đó mới sang màn chọn ô & đặt kho.
+            <Pressable key={f._id} onPress={() => router.push(`/facility/intro/${f._id}`)}>
               <Card>
                 <View style={st.rowBetween}>
                   <Text style={st.name}>{f.name}</Text>

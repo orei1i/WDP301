@@ -69,9 +69,12 @@ function FacilityList() {
               </div>
               <div className="text-right">
                 {from > 0 && <p className="text-sm text-stone-500">từ <b className="text-lg text-ink">{vnd(from)}</b>/tháng</p>}
-                {f.status === 'ACTIVE'
-                  ? <ButtonLink href={`/facilities/${f._id}`} className="mt-2">Xem & đặt kho</ButtonLink>
-                  : <p className="mt-2 text-sm text-amber-700">Sắp khai trương — chưa nhận đặt chỗ</p>}
+                {/* Xem giới thiệu (hình ảnh, cỡ kho) trước, rồi mới sang trang chọn ô & đặt kho. */}
+                <div className="mt-2 flex flex-wrap justify-end gap-2">
+                  <ButtonLink href={`/facilities/${f._id}/gioi-thieu`} variant={f.status === 'ACTIVE' ? 'secondary' : 'primary'}>Xem giới thiệu kho</ButtonLink>
+                  {f.status === 'ACTIVE' && <ButtonLink href={`/facilities/${f._id}`}>Đặt kho</ButtonLink>}
+                </div>
+                {f.status !== 'ACTIVE' && <p className="mt-2 text-sm text-amber-700">Sắp khai trương — chưa nhận đặt chỗ</p>}
               </div>
             </div>
             {f.status === 'ACTIVE' && (

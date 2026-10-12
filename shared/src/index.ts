@@ -13,3 +13,4 @@ export * from './inventory-rules';
 export * from './tier-rules';
 export * from './payment-schedule';
 export * from './surcharge';
+export * from './facility-intro';
