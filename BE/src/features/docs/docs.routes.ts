@@ -88,10 +88,10 @@ export const API_GROUPS: Group[] = [
           { name: 'district', type: 'string', required: true },
           { name: 'city', type: 'string' },
           { name: 'phone', type: 'string', required: true },
-          { name: 'lng / lat', type: 'number' },
         ],
+        notes: ['Toạ độ trên bản đồ do server tự xác định từ line1 / district / city (OpenStreetMap Nominatim) — không cần gửi lng / lat; nếu gửi sẽ bị bỏ qua. Không tra được địa chỉ thì vẫn lưu bình thường.'],
       },
-      { method: 'PATCH', path: '/facilities/:id', auth: ['OPS_MANAGER', 'ADMIN'], summary: 'Cập nhật chi nhánh (không đổi được code).' },
+      { method: 'PATCH', path: '/facilities/:id', auth: ['OPS_MANAGER', 'ADMIN'], summary: 'Cập nhật chi nhánh (không đổi được code). Đổi line1 / district / city thì toạ độ được tra lại từ địa chỉ.' },
       {
         method: 'DELETE', path: '/facilities/:id', auth: ['OPS_MANAGER', 'ADMIN'], summary: 'Xoá mềm chi nhánh.',
         notes: ['Chỉ xoá được khi chưa có ô kho, đặt chỗ hay hợp đồng nào — ngược lại 409, dùng trạng thái "Tạm ngưng".'],
@@ -197,29 +197,30 @@ export const API_GROUPS: Group[] = [
       },
       { method: 'GET', path: '/reservations/:id', auth: 'ANY', summary: 'Chi tiết một đặt chỗ.' },
       {
-        method: 'POST', path: '/reservations', auth: R.CUS, summary: 'Giữ chỗ một loại ô kho và sinh khoản thanh toán tiền cọc.',
+        method: 'POST', path: '/reservations', auth: R.CUS, summary: 'Giữ chỗ một ô kho và sinh khoản thanh toán tiền giữ chân (kho cỡ lớn: thêm khoản tiền thuê kỳ đầu).',
         body: [
           { name: 'unitTypeId', type: 'ObjectId', required: true },
           { name: 'startDate', type: 'date', required: true },
           { name: 'months', type: 'int 1..60', required: true },
           { name: 'source', type: "'WEB' | 'MOBILE'", note: 'mặc định WEB' },
           { name: 'idempotencyKey', type: 'string 8..100', note: 'hoặc dùng header Idempotency-Key' },
-          { name: 'consent', type: '{ termsVersion, privacyVersion, paymentScheduleAck: true }', required: true, note: 'paymentScheduleAck = khách xác nhận đã đọc lịch thanh toán (cọc khi đặt + tiền thuê kỳ đầu trả THÊM khi nhận kho); thiếu → 400. Server đóng dấu consent.paymentScheduleAckAt.' },
+          { name: 'consent', type: '{ termsVersion, privacyVersion, paymentScheduleAck: true }', required: true, note: 'paymentScheduleAck = khách xác nhận đã đọc lịch thanh toán (tiền giữ chân khi đặt + tiền thuê kỳ đầu: trả THÊM khi nhận kho, hoặc cùng lúc đặt với kho cỡ lớn); thiếu → 400. Server đóng dấu consent.paymentScheduleAckAt.' },
         ],
         notes: [
-          'Trả 201 với đặt chỗ ở trạng thái PENDING + payment DEPOSIT đang chờ.',
+          'Trả 201 với đặt chỗ ở trạng thái PENDING + payment DEPOSIT (tiền giữ chân) đang chờ.',
+          'Kho cỡ lớn (category LARGE, XL — shared/tier-rules.ts): tiền giữ chân ≥ 2 kỳ tiền thuê (quote.depositPeriods) và tiền thuê kỳ đầu thu cùng lúc đặt (quote.firstPeriodAtBooking = true) → sinh thêm payment PREPAID_RENT; quote.totalDueAtBooking = giữ chân + tiền thuê kỳ đầu.',
           'Giá và chính sách được đóng băng (snapshot) ngay tại đây.',
           'Hết hạn giữ chỗ (reservationHoldMinutes) thì job nền tự chuyển sang EXPIRED.',
           'Hết ô trống → 409 SOLD_OUT.',
         ],
       },
       {
-        method: 'POST', path: '/reservations/:id/pay-deposit', auth: R.CUS, summary: 'Thanh toán cọc (cổng thanh toán đang ở chế độ giả lập).',
+        method: 'POST', path: '/reservations/:id/pay-deposit', auth: R.CUS, summary: 'Thanh toán khoản phải trả khi đặt chỗ: tiền giữ chân, cộng tiền thuê kỳ đầu nếu là kho cỡ lớn (cổng thanh toán giả lập).',
         body: [{ name: 'method', type: "'VNPAY' | 'MOMO' | 'CARD' | 'BANK_TRANSFER'", required: true }],
         notes: ['Thành công → CONFIRMED và trả qrPayload dạng SSM:<code>:<token> đúng một lần; server chỉ lưu SHA-256 của token.'],
       },
       {
-        method: 'POST', path: '/reservations/:id/sign', auth: R.CUS, summary: 'Ký xác nhận hợp đồng sau khi trả cọc, trước khi nhận kho.',
+        method: 'POST', path: '/reservations/:id/sign', auth: R.CUS, summary: 'Ký xác nhận hợp đồng sau khi trả tiền giữ chân, trước khi nhận kho.',
         body: [
           { name: 'signerName', type: 'string 2..100', required: true },
           { name: 'method', type: 'DRAWN | TYPED', required: true, note: 'DRAWN = vẽ tay (cần image), TYPED = gõ họ tên' },
@@ -240,7 +241,7 @@ export const API_GROUPS: Group[] = [
         notes: ['Tối thiểu 60 giây giữa hai lần (409 TOO_SOON). Chưa cấu hình SMTP → 503 MAIL_NOT_CONFIGURED; gửi lỗi → 502 MAIL_FAILED.'],
       },
       {
-        method: 'POST', path: '/reservations/:id/cancel', auth: 'ANY', summary: 'Hủy đặt chỗ, hoàn cọc theo bậc trong chính sách.',
+        method: 'POST', path: '/reservations/:id/cancel', auth: 'ANY', summary: 'Hủy đặt chỗ; hoàn theo bậc trong chính sách, tính trên TẤT CẢ số tiền đã trả khi đặt chỗ (giữ chân + tiền thuê kỳ đầu trả trước).',
         body: [
           { name: 'reason', type: 'CancellationReason', note: 'khách hàng luôn bị ép về CUSTOMER_REQUEST' },
           { name: 'note', type: 'string ≤500' },
@@ -257,7 +258,7 @@ export const API_GROUPS: Group[] = [
         body: [
           { name: 'accessMethod', type: 'AccessMethod', required: true },
           { name: 'keyTag', type: 'string ≤40' },
-          { name: 'payMethod', type: 'PaymentMethod (≠ INTERNAL)', required: true },
+          { name: 'payMethod', type: 'PaymentMethod (≠ INTERNAL)', note: 'cách thu tiền thuê kỳ đầu tại quầy — bắt buộc với kho thường (thiếu → 422 PAY_METHOD_REQUIRED); bỏ trống với kho cỡ lớn vì đã thu lúc đặt' },
           { name: 'qrToken', type: 'string', note: 'token quét từ mã QR của khách' },
         ],
         notes: ['Mã PIN chỉ trả về đúng một lần trong response này — không có endpoint nào đọc lại được.'],
@@ -299,7 +300,7 @@ export const API_GROUPS: Group[] = [
       },
       { method: 'POST', path: '/contracts/:id/receive', auth: R.STAFF, summary: 'Xác nhận đã nhận lại ô kho từ khách.' },
       {
-        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền cọc và đóng hợp đồng.',
+        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng.',
         body: [
           { name: 'checklist[]', type: '{ item, condition: ItemCondition, note? } ≤100', required: true },
           { name: 'damages[]', type: '{ description, severity: MINOR|MODERATE|SEVERE, cost, photoUrls[] } ≤50', required: true },
@@ -308,7 +309,7 @@ export const API_GROUPS: Group[] = [
         notes: ['Kết thúc: hợp đồng CLOSED, đặt chỗ COMPLETED, ô kho về AVAILABLE (hoặc MAINTENANCE nếu có hư hỏng nặng).'],
       },
       {
-        method: 'POST', path: '/contracts/:id/abandonment', auth: R.FM, summary: 'Xử lý đồ đạc bỏ lại khi hợp đồng LOCKED_OUT quá lâu → mất cọc, đóng hợp đồng, giải phóng ô.',
+        method: 'POST', path: '/contracts/:id/abandonment', auth: R.FM, summary: 'Xử lý đồ đạc bỏ lại khi hợp đồng LOCKED_OUT quá lâu → mất tiền giữ chân, đóng hợp đồng, giải phóng ô.',
         body: [
           { name: 'items[]', type: '{ description, quantity } 1..200', required: true },
           { name: 'disposalMethod', type: 'AUCTION | DONATE | DISCARD', required: true },
@@ -316,7 +317,7 @@ export const API_GROUPS: Group[] = [
         ],
         notes: [
           'Chỉ gọi được khi status = LOCKED_OUT và đã khóa đủ policy.abandonAfterLockedOutDays ngày, ngược lại 422.',
-          'Không theo dõi tiền bán thanh lý — mất toàn bộ tiền cọc (FORFEITED) coi như tất toán, không truy thu thêm.',
+          'Không theo dõi tiền bán thanh lý — mất toàn bộ tiền giữ chân (FORFEITED) coi như tất toán, không truy thu thêm.',
         ],
       },
       {
@@ -476,7 +477,7 @@ export const API_GROUPS: Group[] = [
           { name: 'patch.deposit', type: "{ mode: 'MONTHS_OF_RENT' | 'FIXED', value }" },
           { name: 'patch.lateFees[]', type: '{ afterDays, kind, value, recurringEveryDays } ≤10' },
           { name: 'patch.cancellation[]', type: '{ minHoursBeforeStart, depositRefundPct } ≤10', note: 'huỷ Reservation trước khi nhận kho' },
-          { name: 'patch.earlyTermination[]', type: '{ maxElapsedPct, depositRefundPct } ≤10', note: 'trả kho sớm khi hợp đồng đang OCCUPIED, trần hoàn cọc theo % thời gian kỳ hạn đã dùng' },
+          { name: 'patch.earlyTermination[]', type: '{ maxElapsedPct, depositRefundPct } ≤10', note: 'trả kho sớm khi hợp đồng đang OCCUPIED, trần hoàn tiền giữ chân theo % thời gian kỳ hạn đã dùng' },
           { name: 'patch.discounts[]', type: '{ code, kind, value, minPeriods (số THÁNG tối thiểu, chỉ áp cho chu kỳ MONTH; khách hưởng bậc giảm cao nhất đủ điều kiện), validFrom, validTo, requiresApprovalRole } ≤20' },
         ],
         notes: ['patch là strict: gửi field lạ sẽ bị 400 UNKNOWN_FIELD.'],
@@ -552,17 +553,6 @@ export const ERROR_CODES: { status: number; code: string; meaning: string }[] = 
   { status: 500, code: 'INTERNAL', meaning: 'Lỗi hệ thống. Ngoài production, details có stack trace.' },
 ];
 
-/** Tài khoản do npm run seed tạo — chỉ dùng cho DB demo. */
-const DEMO_ACCOUNTS = [
-  { email: 'khach.demo@khoan.dev', role: 'CUSTOMER' },
-  { email: 'nhanvien.q7@khoan.dev', role: 'STAFF' },
-  { email: 'quanly.q7@khoan.dev', role: 'FACILITY_MANAGER' },
-  { email: 'quanly.td@khoan.dev', role: 'FACILITY_MANAGER' },
-  { email: 'quanly.tb@khoan.dev', role: 'FACILITY_MANAGER' },
-  { email: 'vanhanh@khoan.dev', role: 'OPS_MANAGER' },
-  { email: 'admin@khoan.dev', role: 'ADMIN' },
-];
-
 const docsPayload = (baseUrl: string) => ({
   name: 'Self-Storage Management API',
   version: 1,
@@ -586,8 +576,6 @@ const docsPayload = (baseUrl: string) => ({
   login: {
     enabled: Boolean(env.FIREBASE_WEB_API_KEY),
     apiKey: env.FIREBASE_WEB_API_KEY ?? null,
-    demoPassword: env.DOC_DEMO_PASSWORD ?? null,
-    accounts: DEMO_ACCOUNTS,
   },
 });
 
@@ -639,8 +627,6 @@ const PAGE = (json: string, nonce: string) => `<!doctype html>
   .btn{padding:9px 15px;border:0;border-radius:8px;background:var(--blue);color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
   .btn:disabled{opacity:.5;cursor:default}
   .btn.alt{background:var(--green)}
-  .pill{padding:4px 10px;margin:3px 4px 0 0;border:1px solid var(--line);border-radius:20px;background:var(--card);color:var(--ink);font-size:11.5px;cursor:pointer}
-  .pill:hover{border-color:var(--blue);color:var(--blue)}
   .tok{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:var(--code);font-family:ui-monospace,monospace;font-size:11.5px;word-break:break-all;max-height:96px;overflow:auto}
   .who{margin-top:8px;font-size:13px}
   .err{color:var(--orange);margin-top:8px;font-size:13px}
@@ -690,8 +676,6 @@ if (!D.login.enabled) {
     '(Firebase Console → Project settings → General → Your apps → Web app → <code>apiKey</code>) rồi khởi động lại. ' +
     'Key này vốn public — nó đã nằm trong bundle trình duyệt của Webapp.</p>';
 } else {
-  const accts = D.login.accounts.map(a =>
-    '<button class="pill" data-em="' + esc(a.email) + '" title="' + esc(a.email) + '">' + esc(a.role) + '</button>').join('');
   A.innerHTML =
     '<p class="label">Lấy token để thử API</p>' +
     '<div class="row">' +
@@ -699,20 +683,12 @@ if (!D.login.enabled) {
       '<input id="pw" class="f" type="password" placeholder="mật khẩu" autocomplete="current-password">' +
       '<button id="go" class="btn">Đăng nhập</button>' +
     '</div>' +
-    '<p class="blurb mt">Tài khoản demo — bấm để điền' +
-      (D.login.demoPassword ? ' cả mật khẩu' : ' email') + ':<br>' + accts + '</p>' +
     '<div id="out"></div>';
 
   const em = document.getElementById('em');
   const pw = document.getElementById('pw');
   const go = document.getElementById('go');
   const out = document.getElementById('out');
-
-  A.querySelectorAll('.pill').forEach(b => b.addEventListener('click', () => {
-    em.value = b.dataset.em;
-    if (D.login.demoPassword) pw.value = D.login.demoPassword;
-    (D.login.demoPassword ? go : pw).focus();
-  }));
 
   let timer = null;
   function show(t, who) {

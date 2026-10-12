@@ -145,7 +145,12 @@ export interface PriceQuote<I = ID> {
   surchargeAmount: number;
   appliedRuleCodes: string[];
   firstPeriodRent: number;
+  /** Tổng phải trả khi đặt chỗ = tiền giữ chân + (tiền thuê kỳ đầu nếu `firstPeriodAtBooking`). */
   totalDueAtBooking: number;
+  /** Tiền giữ chân (`depositAmount`) bằng bấy nhiêu kỳ tiền thuê — kho cỡ lớn ≥ 2, xem tier-rules.ts. Thiếu ở báo giá cũ = 1. */
+  depositPeriods?: number;
+  /** Tiền thuê kỳ đầu thu CÙNG LÚC đặt chỗ (kho cỡ lớn) thay vì khi nhận kho. Thiếu ở báo giá cũ = false. */
+  firstPeriodAtBooking?: boolean;
   policyId: I;
   policyVersion: number;
 }
@@ -334,6 +339,10 @@ export interface UnitSwapRequest<I = ID, D = string> extends BaseEntity<I, D> {
   /** FM đánh dấu lúc duyệt — có phải lỗi từ chi nhánh không (quyết định miễn phí). null khi chưa duyệt. */
   facilityFault?: boolean | null;
   scheduledFor?: D | null;                // hẹn ngày chi nhánh cử người chuyển (method DELIVERY)
+  /** Nhân viên chi nhánh được phân công chuyển đồ (method DELIVERY) — Quản lý chi nhánh chọn lúc duyệt, đổi được khi còn APPROVED. */
+  assignedStaffId?: I | null;
+  /** Tên nhân viên lúc phân công — lưu kèm để KHÁCH thấy ai đến chuyển (khách không đọc được danh sách nhân viên). */
+  assignedStaffName?: string | null;
   moveDeadline?: D | null;                // hạn 7 ngày tự chuyển (method SELF), tính từ lúc duyệt
   decidedBy?: I | null;
   decidedAt?: D | null;

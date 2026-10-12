@@ -1,6 +1,6 @@
 import type { BusinessPolicy, Facility, PriceQuote, RentalContract, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
-import { OPEN_CONTRACT_STATUSES, pickDiscount } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, dueAtBooking, pickDiscount, tierTermsOf } from '@ssm/shared';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
 export class DomainError extends Error {
@@ -47,11 +47,17 @@ export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: numbe
   const gross = rate + surcharge;
   const picked = pickDiscount(policy.discounts, period, periods, gross);
   const discountAmount = picked?.amount ?? 0;
-  const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value : Math.round(gross * policy.deposit.value));
+  // Tiền giữ chân: kho cỡ lớn tối thiểu 2 kỳ + thu tiền thuê kỳ đầu cùng lúc đặt (xem tier-rules.ts trong @ssm/shared).
+  const tier = tierTermsOf(ut.category);
+  const rentPeriods = policy.deposit.mode === 'PERIODS_OF_RENT' ? Math.max(policy.deposit.value, tier.depositPeriods) : 1;
+  const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value * tier.depositPeriods : Math.round(gross * rentPeriods));
+  const firstPeriodRent = gross - discountAmount;
   return {
     currency: 'VND', rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount: surcharge,
     appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
-    firstPeriodRent: gross - discountAmount, totalDueAtBooking: depositAmount,
+    firstPeriodRent, totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
+    depositPeriods: ut.depositOverride == null && policy.deposit.mode === 'PERIODS_OF_RENT' ? rentPeriods : 1,
+    firstPeriodAtBooking: tier.firstPeriodAtBooking,
     policyId: policy._id, policyVersion: policy.version,
     discountPct: picked?.tier.kind === 'PERCENT' ? picked.tier.value : 0, periods,
   };
@@ -74,7 +80,7 @@ export function cancellationRefund(db: DB, r: Reservation, nowIso = new Date().t
   const policy = db.policies.find((p) => p._id === r.quote.policyId) ?? effectivePolicy(db, r.facilityId);
   const tier = [...policy.cancellation].sort((a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart).find((t) => hours >= t.minHoursBeforeStart);
   const pct = tier?.depositRefundPct ?? 0;
-  return { pct, amount: Math.round((r.quote.depositAmount * pct) / 100) };
+  return { pct, amount: Math.round((dueAtBooking(r.quote) * pct) / 100) };
 }
 
 /** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. Cùng công thức với BE. */
@@ -85,7 +91,7 @@ export function elapsedTermPct(startDate: string, endDate: string, scheduledFor:
 }
 
 /**
- * TRẦN % hoàn cọc nếu trả kho vào ngày `scheduledForIso` — dùng để xem trước lúc khách CHỌN NGÀY
+ * TRẦN % hoàn tiền giữ chân nếu trả kho vào ngày `scheduledForIso` — dùng để xem trước lúc khách CHỌN NGÀY
  * (chưa gửi đăng ký) lẫn lúc nhân viên quyết toán (contract đã có `moveOut.scheduledFor`). Trả kho
  * đúng/quá hạn (scheduledFor >= endDate) không bị phạt — trả về null. Cùng công thức với BE
  * (`earlyTerminationRefundPct` ở BE/src/features/policies/pricing.ts) để hai bên khớp nhau.

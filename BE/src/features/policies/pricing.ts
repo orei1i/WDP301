@@ -1,5 +1,5 @@
 import type { ClientSession, Types } from 'mongoose';
-import { earlyTerminationOf, pickDiscount, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
+import { dueAtBooking, earlyTerminationOf, pickDiscount, tierTermsOf, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
 import { FacilityModel, PolicyModel, type PolicyDoc, type UnitTypeDoc, type ReservationDoc } from '../../shared/db/models';
 
 /** Facility override if active, otherwise the active GLOBAL policy. */
@@ -42,23 +42,32 @@ export function quote(
   // Ưu đãi thuê dài hạn theo số THÁNG — chỉ chu kỳ THÁNG được hưởng (xem pickDiscount trong @ssm/shared).
   const picked = pickDiscount(policy.discounts, period, periods, gross);
   const discountAmount = picked?.amount ?? 0;
-  // Cọc = value chu kỳ tiền thuê (mặc định 1 chu kỳ) hoặc số tiền cố định, hoặc override theo loại kho.
-  const depositAmount = ut.depositOverride ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value : Math.round(gross * policy.deposit.value));
+  // Tiền giữ chân (cọc): bằng N chu kỳ tiền thuê (mặc định 1) hoặc số tiền cố định của chính sách, hoặc số tiền riêng
+  // của loại kho (`depositOverride`). Kho cỡ lớn (xem tier-rules.ts): tối thiểu 2 chu kỳ, và tiền thuê kỳ đầu thu cùng lúc đặt chỗ.
+  const tier = tierTermsOf(ut.category);
+  const rentPeriods = policy.deposit.mode === 'PERIODS_OF_RENT' ? Math.max(policy.deposit.value, tier.depositPeriods) : 1;
+  const depositAmount = ut.depositOverride
+    ?? (policy.deposit.mode === 'FIXED' ? policy.deposit.value * tier.depositPeriods : Math.round(gross * rentPeriods));
+  const firstPeriodRent = gross - discountAmount;
   return {
     currency: 'VND', rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount: surcharge,
     appliedRuleCodes: [...(surcharge ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
-    firstPeriodRent: gross - discountAmount, totalDueAtBooking: depositAmount,
+    firstPeriodRent,
+    totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
+    depositPeriods: ut.depositOverride == null && policy.deposit.mode === 'PERIODS_OF_RENT' ? rentPeriods : 1,
+    firstPeriodAtBooking: tier.firstPeriodAtBooking,
     policyId: policy._id, policyVersion: policy.version,
   };
 }
 
+/** Hoàn khi HỦY ĐẶT CHỖ: % theo bậc giờ trước ngày nhận, tính trên TẤT CẢ số tiền đã trả lúc đặt chỗ (giữ chân + tiền thuê kỳ đầu nếu kho cỡ lớn). */
 export async function cancellationRefund(r: Pick<ReservationDoc, 'status' | 'depositPaymentId' | 'startDate' | 'quote' | 'facilityId'>, session?: ClientSession) {
   if (r.status === 'PENDING' || !r.depositPaymentId) return { pct: 0, amount: 0 };
   const policy = (await PolicyModel.findById(r.quote.policyId).session(session ?? null)) ?? (await effectivePolicy(r.facilityId, session));
   const hours = (r.startDate.getTime() - Date.now()) / 3_600_000;
   const tier = [...policy.cancellation].sort((a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart).find((t) => hours >= t.minHoursBeforeStart);
   const pct = tier?.depositRefundPct ?? 0;
-  return { pct, amount: Math.round((r.quote.depositAmount * pct) / 100) };
+  return { pct, amount: Math.round((dueAtBooking(r.quote) * pct) / 100) };
 }
 
 /** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. */

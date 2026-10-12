@@ -10,4 +10,6 @@ export * from './policy-defaults';
 export * from './contract-text';
 export * from './duration';
 export * from './inventory-rules';
+export * from './tier-rules';
 export * from './payment-schedule';
+export * from './surcharge';

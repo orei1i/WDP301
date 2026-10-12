@@ -270,7 +270,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const outcome: InspectionLog['outcome'] = input.damages.some((d) => d.severity === 'SEVERE') ? 'MAINTENANCE_REQUIRED' : input.damages.length ? 'PASS_WITH_DAMAGE' : 'PASS';
     const now = new Date();
 
-    if (refundAmount > 0 && !c.deposit.paymentId) throw Conflict('Hợp đồng thiếu tham chiếu khoản cọc');
+    if (refundAmount > 0 && !c.deposit.paymentId) throw Conflict('Hợp đồng thiếu tham chiếu khoản tiền giữ chân');
     const damagePay = damageFee > 0
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'DAMAGE_FEE', amount: damageFee, status: 'SUCCEEDED', method: 'INTERNAL' }, session)
       : null;

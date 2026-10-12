@@ -74,6 +74,11 @@ async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSe
   const useAc = input.useAirConditioning && climateEligible(policy, ut.category);
   const q = quote(ut, policy, input.rentalPeriod, input.periods, useAc);
   const deposit = await createPayment({ facilityId: facility._id, customerId: user._id, reservationId: id, type: 'DEPOSIT', amount: q.depositAmount, status: 'PENDING', method: 'VNPAY' }, session);
+  // Kho cỡ lớn: tiền thuê kỳ đầu thu CÙNG LÚC đặt chỗ — ghi thành khoản riêng (PREPAID_RENT) để sổ sách tách bạch với tiền giữ chân
+  // (tiền giữ chân hoàn khi trả kho, tiền thuê thì không). Hai khoản được thanh toán trong cùng một lần ở payDeposit.
+  if (q.firstPeriodAtBooking) {
+    await createPayment({ facilityId: facility._id, customerId: user._id, reservationId: id, type: 'PREPAID_RENT', amount: q.firstPeriodRent, status: 'PENDING', method: 'VNPAY' }, session);
+  }
   const [r] = await ReservationModel.create([{
     _id: id, facilityId: facility._id, customerId: user._id, unitTypeId: ut._id, unitId: unit._id, status: 'PENDING',
     startDate: start, periods: input.periods, endDate: addPeriodsUTC(start, input.rentalPeriod, input.periods), quote: q,
@@ -122,20 +127,29 @@ export async function payDeposit(user: UserHydrated, id: string, method: Payment
     await assertCanAccess(user, r, 'reservation.pay_deposit');
     if (r.holdExpiresAt && r.holdExpiresAt < new Date()) throw Conflict('Đã hết thời gian giữ chỗ, vui lòng đặt lại', 'HOLD_EXPIRED');
     const pay = await PaymentModel.findById(r.depositPaymentId).session(session);
-    if (!pay) throw NotFound('khoản cọc');
+    if (!pay) throw NotFound('khoản tiền giữ chân');
     pay.method = method;
     pay.provider = { name: method, txnRef: `${method}-${randomToken(9)}`, rawStatus: 'MOCK_SUCCESS' };
     pay.transitionTo('SUCCEEDED', { actor: 'SYSTEM', reason: 'Gateway callback (mock)' });
     await pay.save({ session });
+    // Kho cỡ lớn: tiền thuê kỳ đầu trả CÙNG LẦN với tiền giữ chân (một lần bấm thanh toán, hai khoản ghi sổ riêng).
+    if (r.quote.firstPeriodAtBooking) {
+      const rentPay = await PaymentModel.findOne({ reservationId: r._id, type: 'PREPAID_RENT', status: 'PENDING' }).session(session);
+      if (!rentPay) throw Conflict('Thiếu khoản tiền thuê kỳ đầu của đặt chỗ — liên hệ quản lý', 'PREPAID_RENT_MISSING');
+      rentPay.method = method;
+      rentPay.provider = { name: method, txnRef: `${method}-${randomToken(9)}`, rawStatus: 'MOCK_SUCCESS' };
+      rentPay.transitionTo('SUCCEEDED', { actor: 'SYSTEM', reason: 'Gateway callback (mock)' });
+      await rentPay.save({ session });
+    }
 
     const qrToken = randomToken(12);
-    r.transitionTo('CONFIRMED', { actor: 'SYSTEM', reason: `Đặt cọc qua ${method}` });
+    r.transitionTo('CONFIRMED', { actor: 'SYSTEM', reason: `Thanh toán giữ chân qua ${method}` });
     r.checkIn = { qrTokenHash: sha256(qrToken), qrExpiresAt: addDays(r.startDate, 2), checkedInAt: null, checkedInBy: null };
     // Ô đã được chọn ngay lúc đặt (bookOne) — không còn bước Quản lý chi nhánh phân kho riêng, nên
     // trả cọc xong là chuyển thẳng sang ALLOCATED để màn "sẵn sàng nhận kho" nhận đúng reservation này.
     if (r.unitId) r.transitionTo('ALLOCATED', { actor: 'SYSTEM', reason: 'Ô đã chọn lúc đặt' });
     await r.save({ session });
-    await audit({ action: 'payment.deposit', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { amount: pay.amount, method } } }, session);
+    await audit({ action: 'payment.deposit', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, changes: { after: { amount: pay.amount, rentPaid: r.quote.firstPeriodAtBooking ? r.quote.firstPeriodRent : 0, method } } }, session);
     // QR payload shown to the customer; only its hash is stored.
     return { reservation: r, qrPayload: `SSM:${r.code}:${qrToken}` };
   });
@@ -177,9 +191,13 @@ export async function cancelReservation(actorUser: UserHydrated | null, id: stri
     if (actorUser) await assertCanAccess(actorUser, r, 'reservation.cancel');
     const actor = actorUser ? actorUser.role : 'SYSTEM';
     const wasPending = r.status === 'PENDING';
-    const refund = reason === 'CUSTOMER_REQUEST' ? await cancellationRefund(r, session)
-      : reason === 'HOLD_EXPIRED' || reason === 'NO_SHOW' || wasPending ? { pct: 0, amount: 0 }
-      : { pct: 100, amount: r.depositPaymentId ? r.quote.depositAmount : 0 }; // facility-side cancellation: full refund
+    // Các khoản đã thu lúc đặt chỗ: tiền giữ chân (+ tiền thuê kỳ đầu của kho cỡ lớn). Hoàn theo cùng một %.
+    const booked = await PaymentModel.find({ reservationId: r._id, type: { $in: ['DEPOSIT', 'PREPAID_RENT'] } }).session(session);
+    const refundPct = reason === 'CUSTOMER_REQUEST' ? (await cancellationRefund(r, session)).pct
+      : reason === 'HOLD_EXPIRED' || reason === 'NO_SHOW' || wasPending ? 0
+      : 100; // facility-side cancellation: full refund
+    const toRefund = booked.filter((p) => p.status === 'SUCCEEDED').map((p) => ({ p, amount: Math.round((p.amount * refundPct) / 100) }));
+    const refund = { pct: refundPct, amount: toRefund.reduce((s, x) => s + x.amount, 0) };
 
     const unitId = r.unitId;
     r.transitionTo('CANCELLED', { actor, by: actorUser?._id ?? null, reason: note ?? reason });
@@ -196,13 +214,15 @@ export async function cancelReservation(actorUser: UserHydrated | null, id: stri
       if (released.matchedCount !== 1) throw Conflict('Trạng thái kho không khớp đặt chỗ — liên hệ quản lý');
     }
 
-    const deposit = r.depositPaymentId ? await PaymentModel.findById(r.depositPaymentId).session(session) : null;
-    if (deposit && deposit.status === 'PENDING') { deposit.transitionTo('CANCELLED', { actor: 'SYSTEM' }); await deposit.save({ session }); }
-    if (deposit && refund.amount > 0) {
-      await createPayment({ facilityId: r.facilityId, customerId: r.customerId, reservationId: r._id, type: 'REFUND', amount: refund.amount, status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: deposit._id }, session);
-      deposit.refundedAmount = refund.amount;
-      deposit.transitionTo(refund.amount >= deposit.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED', { actor: 'SYSTEM' });
-      await deposit.save({ session });
+    for (const p of booked) {
+      if (p.status === 'PENDING') { p.transitionTo('CANCELLED', { actor: 'SYSTEM' }); await p.save({ session }); }
+    }
+    for (const { p, amount } of toRefund) {
+      if (amount <= 0) continue;
+      await createPayment({ facilityId: r.facilityId, customerId: r.customerId, reservationId: r._id, type: 'REFUND', amount, status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: p._id }, session);
+      p.refundedAmount = amount;
+      p.transitionTo(amount >= p.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED', { actor: 'SYSTEM' });
+      await p.save({ session });
     }
     await audit({ action: 'reservation.cancel', entityType: 'Reservation', entityId: r._id, facilityId: r.facilityId, reason, changes: { after: { refund: refund.amount } } }, session);
     return { reservation: r, refund };
@@ -281,7 +301,7 @@ async function signInTxn(user: UserHydrated, id: string, input: { signerName: st
   return withTxn(async (session) => {
     const r = await loadReservation(id, session);
     await assertCanAccess(user, r, 'reservation.sign');
-    if (r.status !== 'CONFIRMED' && r.status !== 'ALLOCATED') throw Unprocessable('Chỉ ký hợp đồng sau khi đã trả cọc và trước khi nhận kho');
+    if (r.status !== 'CONFIRMED' && r.status !== 'ALLOCATED') throw Unprocessable('Chỉ ký hợp đồng sau khi đã trả tiền giữ chân và trước khi nhận kho');
     if (r.signature) throw Conflict('Hợp đồng này đã được ký', 'ALREADY_SIGNED');
     if (input.method === 'DRAWN' && !input.image) throw Unprocessable('Cần vẽ chữ ký');
     if (input.image && !/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.image)) throw Unprocessable('Ảnh chữ ký không hợp lệ');
@@ -296,7 +316,7 @@ async function signInTxn(user: UserHydrated, id: string, input: { signerName: st
 }
 
 // ---------------------------------------------------------------- check-in (STAFF, FM)
-export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: string; payMethod: PaymentMethod; qrToken?: string }) {
+export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: string; payMethod?: PaymentMethod; qrToken?: string }) {
   return withTxn(async (session) => {
     const r = await loadReservation(id, session);
     await assertFacility(user, r.facilityId, 'reservation.check_in');
@@ -309,6 +329,14 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
 
     // Chu kỳ thuê là khách đã chọn lúc đặt, chốt sẵn trong quote — không suy ra từ loại kho.
     const period = r.quote.rentalPeriod;
+
+    // Kho cỡ lớn: tiền thuê kỳ đầu đã thu CÙNG LÚC đặt chỗ → không thu lại. Kho thường: thu tại quầy bằng phương thức nhân viên chọn.
+    if (r.quote.firstPeriodAtBooking) {
+      const prepaid = await PaymentModel.exists({ reservationId: r._id, type: 'PREPAID_RENT', status: 'SUCCEEDED' }).session(session);
+      if (!prepaid) throw Unprocessable('Chưa ghi nhận tiền thuê kỳ đầu đã trả khi đặt chỗ — liên hệ quản lý', 'PREPAID_RENT_MISSING');
+    } else if (!input.payMethod) {
+      throw Unprocessable('Chọn phương thức thu tiền thuê kỳ đầu', 'PAY_METHOD_REQUIRED');
+    }
 
     const policy = await effectivePolicy(r.facilityId, session);
     const now = new Date();
@@ -327,13 +355,15 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     const pin = unit.accessMethod === 'PIN' ? sixDigitPin() : undefined;
     const nextBilling = addPeriodsUTC(today, period, 1);
     const periodEnd = addDays(nextBilling, -1);
-    const rent = await createPayment({
-      facilityId: r.facilityId, customerId: r.customerId, contractId, reservationId: r._id, type: 'RENT',
-      amount: r.quote.firstPeriodRent, status: 'SUCCEEDED', method: input.payMethod,
-      recordedBy: input.payMethod === 'CASH' ? user._id : null, period: { start: today, end: periodEnd },
-      // Mỗi đặt chỗ chỉ có đúng một khoản thu tiền thuê kỳ đầu — bấm nhận kho hai lần cũng không thu thêm được.
-      idempotencyKey: `checkin-rent-${r._id}`,
-    }, session);
+    if (!r.quote.firstPeriodAtBooking && input.payMethod) {
+      await createPayment({
+        facilityId: r.facilityId, customerId: r.customerId, contractId, reservationId: r._id, type: 'RENT',
+        amount: r.quote.firstPeriodRent, status: 'SUCCEEDED', method: input.payMethod,
+        recordedBy: input.payMethod === 'CASH' ? user._id : null, period: { start: today, end: periodEnd },
+        // Mỗi đặt chỗ chỉ có đúng một khoản thu tiền thuê kỳ đầu — bấm nhận kho hai lần cũng không thu thêm được.
+        idempotencyKey: `checkin-rent-${r._id}`,
+      }, session);
+    }
 
     const [contract] = await RentalContractModel.create([{
       _id: contractId, facilityId: r.facilityId, customerId: r.customerId, unitId: unit._id, unitTypeId: r.unitTypeId, reservationId: r._id,
@@ -351,7 +381,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     r.contractId = contractId;
     r.checkIn = { qrTokenHash: r.checkIn?.qrTokenHash ?? null, qrExpiresAt: r.checkIn?.qrExpiresAt ?? null, checkedInAt: now, checkedInBy: user._id };
     await r.save({ session });
-    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: unit.accessMethod, rent: rent.amount } } }, session);
+    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: unit.accessMethod, rent: r.quote.firstPeriodRent, rentPrepaid: !!r.quote.firstPeriodAtBooking } } }, session);
     return { contract, unit, pin }; // PIN is returned exactly once; only its hash is stored
   });
 }

@@ -16,6 +16,9 @@ const quoteSchema = new Schema<PriceQuote<OID>>({
   rate: money(), depositAmount: money(), discountAmount: money(), surchargeAmount: money(),
   appliedRuleCodes: { type: [String], default: [] },
   firstPeriodRent: money(), totalDueAtBooking: money(),
+  // Báo giá cũ không có hai trường này: giữ chân = 1 kỳ, tiền thuê kỳ đầu trả khi nhận kho.
+  depositPeriods: { type: Number, default: 1, min: 1, max: 12 },
+  firstPeriodAtBooking: { type: Boolean, default: false },
   policyId: refReq('BusinessPolicy'),
   policyVersion: { type: Number, required: true, min: 1 },
 }, subOptions);
@@ -67,7 +70,7 @@ const schema = new Schema<ReservationDoc, ReservationModelType, Methods>({
       termsVersion: { type: String, required: true, maxlength: 20 },
       privacyVersion: { type: String, required: true, maxlength: 20 },
       acceptedAt: { type: Date, required: true },
-      // Lúc khách xác nhận đã được báo trước lịch thanh toán (cọc hôm nay + tiền thuê kỳ đầu khi nhận kho). null với dữ liệu cũ.
+      // Lúc khách xác nhận đã được báo trước lịch thanh toán (tiền giữ chân hôm nay + tiền thuê kỳ đầu: khi nhận kho, hoặc cùng lúc đặt với kho cỡ lớn). null với dữ liệu cũ.
       paymentScheduleAckAt: { type: Date, default: null },
       ip: { type: String, default: null, maxlength: 64 },
       userAgent: { type: String, default: null, maxlength: 300 },

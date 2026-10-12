@@ -53,7 +53,8 @@ export const DEPOSIT_STATUS: LabelMap<DepositStatus> = {
 };
 
 export const PAYMENT_TYPE: LabelMap<PaymentType> = {
-  DEPOSIT: { label: 'Tiền cọc', tone: 'blue' },
+  DEPOSIT: { label: 'Tiền giữ chân', tone: 'blue' },
+  PREPAID_RENT: { label: 'Tiền thuê kỳ đầu (trả khi đặt)', tone: 'teal' },
   RENT: { label: 'Tiền thuê', tone: 'teal' },
   RENEWAL: { label: 'Gia hạn', tone: 'teal' },
   LATE_FEE: { label: 'Phí trễ hạn', tone: 'amber' },

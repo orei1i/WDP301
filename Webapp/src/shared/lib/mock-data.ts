@@ -3,7 +3,7 @@ import type {
   PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, ServiceOffering, ServiceOrder, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { ACCESS_METHOD, TERMS_VERSION, pickDiscount } from '@ssm/shared';
+import { ACCESS_METHOD, TERMS_VERSION, pickDiscount, tierTermsOf } from '@ssm/shared';
 import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
@@ -245,10 +245,15 @@ export function createSeed(): DB {
     const gross = rate + surchargeAmount;
     const picked = pickDiscount(policyBody.discounts, period, periods, gross);
     const discountAmount = picked?.amount ?? 0;
+    // Kho cỡ lớn (L, XL): giữ chân 2 kỳ + tiền thuê kỳ đầu thu cùng lúc đặt chỗ — xem tier-rules.ts.
+    const tier = tierTermsOf(ut.category);
+    const depositAmount = gross * tier.depositPeriods;
+    const firstPeriodRent = gross - discountAmount;
     return {
-      currency: 'VND' as const, rentalPeriod: period, rate, depositAmount: gross, discountAmount, surchargeAmount,
+      currency: 'VND' as const, rentalPeriod: period, rate, depositAmount, discountAmount, surchargeAmount,
       appliedRuleCodes: [...(surchargeAmount ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
-      firstPeriodRent: gross - discountAmount, totalDueAtBooking: gross,
+      firstPeriodRent, totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
+      depositPeriods: tier.depositPeriods, firstPeriodAtBooking: tier.firstPeriodAtBooking,
       policyId: ut.facilityId === 'f-td' ? 'pol-td-1' : 'pol-g-3', policyVersion: ut.facilityId === 'f-td' ? 1 : 3,
     };
   };
@@ -390,6 +395,8 @@ export function createSeed(): DB {
     if (status !== 'PENDING' && status !== 'CANCELLED') {
       const p = pay({ facilityId: fid, customerId, reservationId: id, type: 'DEPOSIT', amount: q.depositAmount, status: 'SUCCEEDED', paidAt: createdAt });
       payments.push(p); depositPaymentId = p._id;
+      // Kho cỡ lớn: tiền thuê kỳ đầu đã trả cùng lúc đặt chỗ (check-in sẽ không thu lại).
+      if (q.firstPeriodAtBooking) payments.push(pay({ facilityId: fid, customerId, reservationId: id, type: 'PREPAID_RENT', amount: q.firstPeriodRent, status: 'SUCCEEDED', paidAt: createdAt }));
     }
     reservations.push({
       ...base(id, createdAt), code: makeCode('RSV'), facilityId: fid, customerId, unitTypeId: ut._id, unitId, status,

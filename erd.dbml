@@ -10,7 +10,7 @@
 // Thay đổi thiết kế mới:
 //  - Bỏ loại kho nhà xe (VEHICLE) và bỏ phân hạng giá (price tier).
 //  - Khách TỰ CHỌN chu kỳ thuê lúc đặt (ngày/tuần/tháng), không cố định theo loại kho — mỗi loại
-//    kho niêm yết sẵn 3 giá (rate_day/rate_week/rate_month). Cọc = 1 chu kỳ theo giá đã chọn.
+//    kho niêm yết sẵn 3 giá (rate_day/rate_week/rate_month). Tiền giữ chân (cọc) = 1 chu kỳ theo giá đã chọn; kho cỡ lớn (LARGE, XL) = 2 chu kỳ + thu tiền thuê kỳ đầu cùng lúc đặt.
 //  - Hình thức khoá (access_method: PHYSICAL_KEY/chìa, RFID_CARD/thẻ, PIN/mật khẩu) là thuộc tính của
 //    TỪNG Ô (storage_units.access_method), không phải loại kho — cùng loại kho có thể có ô khoá khác nhau,
 //    khách lọc/chọn ngay trên sơ đồ lúc đặt.
@@ -90,6 +90,7 @@ Enum deposit_status {
 }
 Enum payment_type {
   DEPOSIT
+  PREPAID_RENT
   RENT
   RENEWAL
   LATE_FEE
@@ -198,8 +199,8 @@ Table facilities {
   status facility_status
   district varchar
   city varchar
-  lng float
-  lat float
+  lng float [note: 'tự tra từ địa chỉ (line1/district/city) bằng OSM Nominatim khi tạo / đổi địa chỉ — không nhập tay; lỗi tra thì giữ toạ độ cũ hoặc mặc định TP.HCM']
+  lat float [note: 'như lng']
   policy_id objectid [note: 'null -> dùng chính sách GLOBAL đang hiệu lực']
 }
 
@@ -214,7 +215,7 @@ Table unit_types {
   rate_month int [note: 'giá 1 tháng — giá KHÔNG dùng điều hòa; điều hòa là add-on cộng phụ phí CLIMATE lúc đặt, không phải giá gốc khác nhau']
   area_m2 float
   indoor boolean
-  deposit_override int [note: 'null -> cọc = 1 chu kỳ theo chính sách']
+  deposit_override int [note: 'null -> tiền giữ chân theo chính sách: 1 chu kỳ, kho cỡ lớn (LARGE, XL) 2 chu kỳ']
   min_periods int
   is_active boolean
   inventory_version int [note: 'token chống race khi đặt/đổi ô']
@@ -256,12 +257,15 @@ Table reservations {
   "quote.rate" int
   "quote.deposit_amount" int
   "quote.first_period_rent" int
+  "quote.total_due_at_booking" int [note: 'giữ chân + tiền thuê kỳ đầu nếu thu lúc đặt']
+  "quote.deposit_periods" int [note: 'giữ chân = bấy nhiêu kỳ tiền thuê; kho cỡ lớn ≥ 2']
+  "quote.first_period_at_booking" boolean [note: 'true: tiền thuê kỳ đầu thu cùng lúc đặt (khoản PREPAID_RENT), check-in không thu lại']
   "quote.policy_id" objectid
   deposit_payment_id objectid
   contract_id objectid
   hold_expires_at datetime [note: 'chỉ khi PENDING']
   qr_token_hash varchar [note: 'checkIn — chỉ lưu hash']
-  "signature.signed_at" datetime [note: 'khách ký sau khi trả cọc, trước khi nhận kho — chưa ký thì check-in bị chặn']
+  "signature.signed_at" datetime [note: 'khách ký sau khi trả tiền giữ chân, trước khi nhận kho — chưa ký thì check-in bị chặn']
   "signature.signer_name" varchar
   "signature.method" signature_method
   "signature.image" varchar [note: 'PNG data URL của chữ ký vẽ tay, ≤ ~60KB; null nếu gõ họ tên']
@@ -392,6 +396,8 @@ Table unit_swap_requests {
   from_unit_id objectid
   to_unit_id objectid [note: 'khách chọn trên sơ đồ lúc gửi yêu cầu']
   method swap_method
+  assigned_staff_id objectid [note: 'DELIVERY: nhân viên chi nhánh được FM phân công chuyển đồ (lúc duyệt, đổi được khi còn APPROVED)']
+  assigned_staff_name varchar [note: 'tên lưu kèm để khách xem được ai đến chuyển']
   reason varchar [note: 'lý do khách tự khai']
   status swap_request_status
   fee int [note: '0 nếu lỗi cơ sở hoặc lần đổi đầu; chốt lúc FM duyệt']
@@ -511,6 +517,7 @@ Ref: unit_swap_requests.unit_type_id > unit_types.id
 Ref: unit_swap_requests.from_unit_id > storage_units.id
 Ref: unit_swap_requests.to_unit_id > storage_units.id
 Ref: unit_swap_requests.decided_by > users.id
+Ref: unit_swap_requests.assigned_staff_id > users.id
 Ref: unit_swap_requests.payment_id - payment_transactions.id
 Ref: storage_units.current_swap_request_id - unit_swap_requests.id
 Ref: service_offerings.facility_id > facilities.id

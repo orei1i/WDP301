@@ -56,9 +56,10 @@ const bookingItemBody = z.object({
 // thời điểm và IP do server tự đóng dấu để khách không tự khai được.
 const consentBody = z.object({
   termsVersion: z.string().min(1).max(20), privacyVersion: z.string().min(1).max(20),
-  // Khách phải xác nhận đã được báo trước KHOẢN THỨ HAI (tiền thuê kỳ đầu, trả THÊM khi nhận kho) — tránh tranh chấp
-  // "không được báo". Chỉ dùng để chặn ở API; thời điểm xác nhận do server đóng dấu (consent.paymentScheduleAckAt).
-  paymentScheduleAck: z.literal(true, { errorMap: () => ({ message: 'Cần xác nhận đã đọc lịch thanh toán: tiền cọc hôm nay + tiền thuê kỳ đầu trả thêm khi nhận kho' }) }),
+  // Khách phải xác nhận đã được báo trước các khoản phải trả (tiền giữ chân hôm nay + tiền thuê kỳ đầu: trả THÊM khi nhận kho,
+  // hoặc cùng lúc đặt chỗ với kho cỡ lớn) — tránh tranh chấp "không được báo". Chỉ dùng để chặn ở API; thời điểm xác nhận
+  // do server đóng dấu (consent.paymentScheduleAckAt).
+  paymentScheduleAck: z.literal(true, { errorMap: () => ({ message: 'Cần xác nhận đã đọc lịch thanh toán: tiền giữ chân + tiền thuê kỳ đầu (trả khi đặt chỗ hoặc khi nhận kho)' }) }),
 });
 
 reservationsRouter.post('/', authorize('CUSTOMER'), validate({ body: bookingItemBody.extend({ consent: consentBody }) }), async (req, res) => {
@@ -130,7 +131,8 @@ reservationsRouter.post('/:id/unallocate', authorize('FACILITY_MANAGER'), valida
 
 // Hình thức khoá do loại kho quyết định (server tự lấy) — nhân viên chỉ nhập mã thẻ/chìa nếu cần.
 reservationsRouter.post('/:id/check-in', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
-  keyTag: z.string().max(40).optional(), payMethod: e(PaymentMethod).refine((m) => m !== 'INTERNAL'), qrToken: z.string().optional(),
+  // payMethod: phương thức thu tiền thuê kỳ đầu — bắt buộc với kho thường; kho cỡ lớn đã thu lúc đặt chỗ nên có thể bỏ trống.
+  keyTag: z.string().max(40).optional(), payMethod: e(PaymentMethod).refine((m) => m !== 'INTERNAL').optional(), qrToken: z.string().optional(),
 }) }), async (req, res) => {
   res.json(await checkIn(req.auth!.user, req.valid.params.id, req.valid.body));
 });
