@@ -138,7 +138,7 @@ export default function Home() {
             <Card key={i} className="h-full p-5"><Skeleton className="h-5 w-40" /><Skeleton className="mt-2 h-3 w-56" /><Skeleton className="mt-4 h-3 w-48" /></Card>
           ))}
           {facilities.map((f) => (
-            <Link key={f._id} href={`/facilities/${f._id}`} className="group">
+            <Link key={f._id} href={`/facilities/${f._id}/gioi-thieu`} className="group">
               <Card className="h-full p-5 transition-shadow group-hover:shadow-md">
                 <h3 className="font-semibold group-hover:text-brand-700">{f.name}</h3>
                 <p className="mt-1 flex items-center gap-1.5 text-sm text-stone-500"><MapPin className="size-3.5" />{f.address.line1}, {f.address.district}</p>
