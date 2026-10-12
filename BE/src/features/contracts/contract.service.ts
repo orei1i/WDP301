@@ -1,6 +1,6 @@
 import { Types, type ClientSession } from 'mongoose';
-import { abandonDaysOf, PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
-import { InspectionModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
+import { abandonDaysOf, discountClawback, PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
+import { InspectionModel, PaymentModel, PolicyModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
 import { earlyTerminationRefundPct, effectivePolicy, elapsedTermPct } from '../policies/pricing';
@@ -259,12 +259,27 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     // Trả kho SỚM (trước endDate của kỳ hạn hiện tại) bị áp trần hoàn cọc theo % thời gian đã dùng —
     // trả đúng/quá hạn (scheduledFor >= endDate) là move-out bình thường, không bị phạt thêm.
     let earlyTermination: NonNullable<InspectionLog['depositSettlement']>['earlyTermination'] = null;
+    let clawback = 0;
     if (c.moveOut?.scheduledFor && c.moveOut.scheduledFor.getTime() < c.endDate.getTime()) {
       const policy = await effectivePolicy(c.facilityId, session);
       const elapsedPct = elapsedTermPct(c.startDate, c.endDate, c.moveOut.scheduledFor);
       const refundCapPct = earlyTerminationRefundPct(policy, elapsedPct);
       refundAmount = Math.min(refundAmount, Math.round((c.deposit.amount * refundCapPct) / 100));
       earlyTermination = { elapsedPct: Math.round(elapsedPct), refundCapPct };
+
+      // Thu hồi ưu đãi thuê dài hạn: giảm giá vì cam kết thuê dài, trả sớm thì chỉ được mức giảm của số tháng thực dùng.
+      // Tính theo báo giá và chính sách ĐÃ CHỐT lúc đặt; trừ vào phần tiền giữ chân còn lại (không truy thu vượt quá).
+      const rsv = await ReservationModel.findById(c.reservationId, { quote: 1 }).session(session).lean();
+      const quoted = rsv ? await PolicyModel.findById(rsv.quote.policyId, { discounts: 1 }).session(session).lean() : null;
+      const claw = rsv && quoted ? discountClawback({
+        rentalPeriod: rsv.quote.rentalPeriod, rate: rsv.quote.rate, surchargeAmount: rsv.quote.surchargeAmount, discountAmount: rsv.quote.discountAmount,
+        discounts: quoted.discounts, startDate: c.startDate.toISOString(), moveOutDate: c.moveOut.scheduledFor.toISOString(),
+      }) : null;
+      if (claw) {
+        clawback = Math.min(refundAmount, claw.amount);
+        refundAmount -= clawback;
+        earlyTermination = { ...earlyTermination, discountClawback: clawback, usedPeriods: claw.usedPeriods };
+      }
     }
     const deductions = c.deposit.amount - refundAmount;
     const outcome: InspectionLog['outcome'] = input.damages.some((d) => d.severity === 'SEVERE') ? 'MAINTENANCE_REQUIRED' : input.damages.length ? 'PASS_WITH_DAMAGE' : 'PASS';
@@ -274,6 +289,8 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const damagePay = damageFee > 0
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'DAMAGE_FEE', amount: damageFee, status: 'SUCCEEDED', method: 'INTERNAL' }, session)
       : null;
+    // Khoản thu hồi ưu đãi ghi sổ riêng (cấn trừ nội bộ vào tiền giữ chân) để khách và kế toán thấy rõ vì sao bị trừ.
+    if (clawback > 0) await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'DISCOUNT_CLAWBACK', amount: clawback, status: 'SUCCEEDED', method: 'INTERNAL' }, session);
     const refundPay = refundAmount > 0
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: refundAmount, status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: c.deposit.paymentId ?? null }, session)
       : null;
@@ -306,7 +323,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const r = await ReservationModel.findById(c.reservationId).session(session);
     if (r && r.status === 'CHECKED_IN') { r.transitionTo('COMPLETED', { actor: 'SYSTEM' }); await r.save({ session }); }
 
-    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome } } }, session);
+    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome, discountClawback: clawback } } }, session);
     return { inspection, contract: c };
   });
 }

@@ -102,6 +102,12 @@ export const actions = {
   requestAccess: async (p: { contractId: string; reason?: string; method?: PaymentMethod }) =>
     api.post<AccessRequest>('/access-requests', { contractId: p.contractId, reason: p.reason || undefined, method: p.method }),
 
+  // ---- người được uỷ quyền ra vào kho (tối đa 3, chỉ chủ hợp đồng thêm / xoá)
+  addAuthorizedPerson: async (p: { contractId: string; fullName: string; phone: string; idNumberLast4: string; relationship?: string }) => {
+    await api.post(`/contracts/${p.contractId}/authorized-persons`, { fullName: p.fullName, phone: p.phone, idNumberLast4: p.idNumberLast4, relationship: p.relationship || undefined });
+  },
+  removeAuthorizedPerson: async (p: { contractId: string; personId: string }) => { await api.delete(`/contracts/${p.contractId}/authorized-persons/${p.personId}`); },
+
   cancelAccessRequest: async (p: { requestId: string }) => {
     await api.post(`/access-requests/${p.requestId}/cancel`, {});
   },

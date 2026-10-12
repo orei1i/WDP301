@@ -1,5 +1,5 @@
 import { Schema, model, type HydratedDocument, type Model } from 'mongoose';
-import { AccessMethod, CONTRACT_MACHINE, ContractStatus, DepositStatus, enumValues, OPEN_CONTRACT_STATUSES, RentalPeriod, type RentalContract } from '@ssm/shared';
+import { AccessMethod, CONTRACT_MACHINE, ContractStatus, DepositStatus, enumValues, MAX_AUTHORIZED_PERSONS, OPEN_CONTRACT_STATUSES, RentalPeriod, type RentalContract } from '@ssm/shared';
 import { baseOptions, enumOf, humanCode, maxLen, money, refOpt, refReq, statusHistorySchema, subOptions, type OID } from '../../shared/db/schema-kit';
 import { actorStampPlugin, appendOnlyPlugin } from '../../shared/db/plugins';
 import { applyTransition, type TransitionCtx } from '../../shared/db/apply-transition';
@@ -62,7 +62,7 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
       lostReportedAt: { type: Date, default: null },
       // Nhật ký nhân viên mở kho HỘ khách bằng chìa tổng / thẻ tổng — khách xem được, không sửa xoá.
       assistedOpens: {
-        type: [new Schema({ at: { type: Date, required: true }, by: refReq('User'), byName: { type: String, required: true, maxlength: 100 }, reason: { type: String, required: true, maxlength: 300 } }, subOptions)],
+        type: [new Schema({ at: { type: Date, required: true }, by: refReq('User'), byName: { type: String, required: true, maxlength: 100 }, reason: { type: String, required: true, maxlength: 300 }, forName: { type: String, default: null, maxlength: 100 } }, subOptions)],
         default: [],
       },
     }, subOptions),
@@ -75,6 +75,18 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
       signedAt: { type: Date, required: true }, signatureRef: String, signerName: { type: String, default: null },
     }, subOptions),
     required: true, immutable: true,
+  },
+  // Người được chủ hợp đồng uỷ quyền ra vào / lấy đồ — nhân viên đối chiếu tại quầy. Tối đa 3.
+  authorizedPersons: {
+    type: [new Schema({
+      _id: { type: String, required: true },
+      fullName: { type: String, required: true, trim: true, minlength: 2, maxlength: 100 },
+      phone: { type: String, required: true, maxlength: 20 },
+      idNumberLast4: { type: String, required: true, match: /^\d{4}$/ },
+      relationship: { type: String, default: null, maxlength: 60 },
+      addedAt: { type: Date, required: true },
+    }, { ...subOptions, _id: false })],
+    default: [], validate: maxLen(MAX_AUTHORIZED_PERSONS),
   },
   renewals: {
     type: [new Schema({

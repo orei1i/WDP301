@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ClipboardCheck, KeyRound, Plus, Trash2 } from 'lucide-react';
 import type { InspectionLog, ItemCondition, RentalContract } from '@ssm/shared';
+import { contractClawback } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { INSPECTION_OUTCOME } from '@/shared/lib/labels';
 import { byId, earlyTerminationCap, typeName, unitLabel, userName } from '@/shared/lib/domain';
@@ -29,7 +30,12 @@ export default function MoveOutPage() {
   const damageTotal = damages.reduce((s, d) => s + (d.cost || 0), 0);
   const earlyTermination = c ? earlyTerminationCap(db, c) : null;
   const normalRefund = c ? c.deposit.amount - Math.min(c.deposit.amount, damageTotal + c.balance.outstanding) : 0;
-  const refundAmount = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
+  const cappedRefund = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
+  // Thu hồi ưu đãi thuê dài hạn khi trả sớm — cùng công thức với server (shared), trừ vào phần tiền giữ chân còn lại.
+  const rsv = c ? byId(db.reservations, c.reservationId) : undefined;
+  const claw = c && c.moveOut?.scheduledFor ? contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, c.moveOut.scheduledFor) : null;
+  const clawback = claw ? Math.min(cappedRefund, claw.amount) : 0;
+  const refundAmount = cappedRefund - clawback;
 
   const start = (x: RentalContract) => { setActive(x); setChecklist(Object.fromEntries(ITEMS.map((i) => [i, 'OK']))); setDamages([]); setNotes(''); };
   const submit = async () => {
@@ -128,6 +134,12 @@ export default function MoveOutPage() {
                         <div className="flex justify-between text-amber-800">
                           <dt>Trả kho sớm (đã dùng {earlyTermination.elapsedPct}% kỳ hạn)</dt>
                           <dd className="tabular-nums">trần {earlyTermination.refundCapPct}% tiền giữ chân</dd>
+                        </div>
+                      )}
+                      {claw && (
+                        <div className="flex justify-between text-amber-800">
+                          <dt>Thu hồi ưu đãi thuê dài hạn (mới dùng {claw.usedPeriods} tháng)</dt>
+                          <dd className="tabular-nums">−{vnd(clawback)}</dd>
                         </div>
                       )}
                       <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(refundAmount)}</dd></div>

@@ -1,4 +1,5 @@
 import type { RentalPeriod } from './enums';
+import { addPeriods } from './format';
 
 /**
  * Ưu đãi thuê dài hạn tính theo SỐ THÁNG (`minPeriods` = số tháng tối thiểu). Chỉ chu kỳ THÁNG mới được hưởng —
@@ -28,6 +29,38 @@ export function pickDiscount<T extends DiscountTier>(
     if (amount > 0 && (!best || amount > best.amount)) best = { tier: d, amount };
   }
   return best;
+}
+
+/**
+ * THU HỒI ƯU ĐÃI khi trả kho sớm. Khách được giảm giá vì CAM KẾT thuê dài (VD 12 tháng −20%); trả kho khi mới dùng ít
+ * tháng hơn thì chỉ được hưởng mức giảm của số tháng THỰC DÙNG (VD 2 tháng → 0%, 4 tháng → mức của bậc 3 tháng).
+ * Phần chênh mỗi tháng × số tháng đã dùng bị thu hồi, trừ vào tiền giữ chân lúc quyết toán. Một nguồn cho BE và bản xem trước.
+ *
+ * `usedPeriods` = số kỳ đã bắt đầu tính đến ngày trả kho (kỳ đang dùng dở tính trọn, tối thiểu 1).
+ */
+export function discountClawback(i: {
+  rentalPeriod: RentalPeriod; rate: number; surchargeAmount: number; discountAmount: number;
+  discounts: readonly DiscountTier[]; startDate: string; moveOutDate: string;
+}): { usedPeriods: number; entitledPerPeriod: number; amount: number } | null {
+  if (i.rentalPeriod !== 'MONTH' || !(i.discountAmount > 0)) return null;
+  let usedPeriods = 1;
+  while (usedPeriods < 120 && addPeriods(i.startDate, 'MONTH', usedPeriods) < i.moveOutDate) usedPeriods++;
+  const gross = i.rate + i.surchargeAmount;
+  // Bậc giảm xét theo thời điểm đặt (startDate) — ưu đãi hết hạn về sau không làm khách bị thu hồi oan.
+  const entitledPerPeriod = Math.min(i.discountAmount, pickDiscount(i.discounts, 'MONTH', usedPeriods, gross, new Date(i.startDate))?.amount ?? 0);
+  const amount = (i.discountAmount - entitledPerPeriod) * usedPeriods;
+  return amount > 0 ? { usedPeriods, entitledPerPeriod, amount } : null;
+}
+
+/** Bản xem trước thu hồi ưu đãi cho một hợp đồng nếu trả kho vào `moveOutDate` (null: không trả sớm / không có ưu đãi / thiếu dữ liệu). */
+export function contractClawback(
+  c: { startDate: string; endDate: string },
+  quote: { rentalPeriod: RentalPeriod; rate: number; surchargeAmount: number; discountAmount: number } | null | undefined,
+  discounts: readonly DiscountTier[] | null | undefined,
+  moveOutDate: string,
+) {
+  if (!quote || !discounts || moveOutDate >= c.endDate) return null;
+  return discountClawback({ ...quote, discounts, startDate: c.startDate, moveOutDate });
 }
 
 /** % giảm cao nhất khách được hưởng khi thuê `months` tháng (chỉ tính bậc theo %) — dùng cho nhãn "Tiết kiệm x%". */

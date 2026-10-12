@@ -28,6 +28,7 @@ export function startJobs() {
     every(60_000, 'hold-expiry', expireHolds),
     every(60 * 60_000, 'billing', runBilling),
     every(60 * 60_000, 'swap-expiry', expireSwapRequests),
+    every(30 * 60_000, 'no-show', cancelNoShows),
   ];
   return () => timers.forEach(clearInterval);
 }
@@ -39,6 +40,27 @@ export async function expireHolds() {
     try { await cancelReservation(null, String(r._id), 'HOLD_EXPIRED'); } catch (e) { console.error('expire hold', r._id, e); }
   }
   if (stale.length) console.log(`[job:hold-expiry] cancelled ${stale.length}`);
+}
+
+/**
+ * Khách đã trả tiền giữ chân nhưng KHÔNG đến nhận kho: quá `noShowAfterHours` giờ sau khi hết ngày nhận đã đặt thì hủy
+ * đặt chỗ (lý do NO_SHOW — không hoàn tiền, đúng điều khoản hợp đồng) và nhả ô kho cho người khác thuê.
+ * Hạn tính từ CUỐI ngày nhận (startDate là 00:00 của ngày đó) để khách đến trong ngày không bao giờ bị hủy oan.
+ */
+export async function cancelNoShows() {
+  const now = Date.now();
+  // Lọc thô theo ngày (ít nhất đã qua hết ngày nhận), rồi mới xét hạn chính xác theo chính sách của từng chi nhánh.
+  const candidates = await ReservationModel.find({ status: { $in: ['CONFIRMED', 'ALLOCATED'] }, startDate: { $lt: addDays(todayUTC(), 0) } }, { _id: 1, facilityId: 1, startDate: 1 }).limit(200).lean();
+  const hoursByFacility = new Map<string, number>();
+  let cancelled = 0;
+  for (const r of candidates) {
+    const fid = String(r.facilityId);
+    if (!hoursByFacility.has(fid)) hoursByFacility.set(fid, (await effectivePolicy(r.facilityId)).noShowAfterHours);
+    const deadline = addDays(r.startDate, 1).getTime() + hoursByFacility.get(fid)! * 3_600_000;
+    if (now < deadline) continue;
+    try { await cancelReservation(null, String(r._id), 'NO_SHOW', 'Khách không đến nhận kho trong thời gian quy định'); cancelled++; } catch (e) { console.error('no-show', r._id, e); }
+  }
+  if (cancelled) console.log(`[job:no-show] cancelled ${cancelled}`);
 }
 
 /** Issues rent for due periods, then escalates overdue contracts ACTIVE → DELINQUENT → LOCKED_OUT per policy. */

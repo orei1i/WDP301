@@ -60,7 +60,7 @@ export const TERMS: LegalSection[] = [
     heading: 'Điều 5. Quyền ra vào',
     body: [
       'Khách hàng ra vào trong giờ quy định của chi nhánh, bằng phương thức được cấp: chìa khóa, mã PIN hoặc thẻ từ.',
-      'Không chuyển giao phương thức truy cập cho người thứ ba khi chưa đăng ký với KhoAn.',
+      'Không chuyển giao phương thức truy cập cho người thứ ba khi chưa đăng ký với KhoAn. Khách hàng đăng ký người được ủy quyền (tối đa 3 người: họ tên, số điện thoại, 4 số cuối giấy tờ tùy thân) ngay trong tài khoản; nhân viên đối chiếu thông tin này khi người được ủy quyền đến chi nhánh. Khách hàng chịu trách nhiệm về mọi việc người được ủy quyền thực hiện tại ô kho, và có thể xóa ủy quyền bất cứ lúc nào.',
       'Mất chìa, mất thẻ hoặc quên mật khẩu: khách hàng xem lại mật khẩu hoặc gửi yêu cầu cấp lại trong tài khoản; quản lý chi nhánh xác nhận, phí cấp lại (nếu có) theo chính sách. Khi khách hàng báo mất thẻ, thẻ cũ bị vô hiệu ngay.',
       'Cần mở kho gấp khi chưa kịp cấp lại: khách hàng đến quầy trong giờ hoạt động và yêu cầu mở hộ. Nhân viên xác minh danh tính (tài khoản của khách hàng và giấy tờ tùy thân), mở bằng chìa tổng hoặc thẻ tổng với sự có mặt của khách hàng và không vào bên trong ô kho. Mỗi lần mở hộ được ghi vào nhật ký hệ thống (người mở, thời điểm, lý do) và khách hàng xem được trong tài khoản.',
       'KhoAn được quyền mở ô kho mà không cần sự có mặt của khách hàng trong các trường hợp: (a) tình huống khẩn cấp như cháy, ngập, rò rỉ; (b) có căn cứ hợp lý cho rằng bên trong chứa hàng hóa bị cấm tại Điều 4; (c) có yêu cầu bằng văn bản hoặc quyết định của cơ quan nhà nước có thẩm quyền; (d) khách hàng quá hạn thanh toán vượt ngưỡng tại Điều 7.',
@@ -116,6 +116,7 @@ export const TERMS: LegalSection[] = [
     heading: 'Điều 10. Chấm dứt hợp đồng',
     body: [
       'Khách hàng chấm dứt trước hạn: hoàn tiền giữ chân theo bậc thời gian trong chính sách. Tiền thuê đã thanh toán cho kỳ đang sử dụng không được hoàn.',
+      'Ưu đãi thuê dài hạn được áp dụng vì khách hàng cam kết thuê đủ thời hạn. Trả kho trước khi dùng đủ thời hạn đó, khách hàng chỉ được hưởng mức ưu đãi tương ứng với số tháng thực dùng; phần ưu đãi đã hưởng vượt mức bị thu hồi và trừ vào tiền giữ chân khi quyết toán. Cách tính ghi rõ trong hợp đồng.',
       'KhoAn chấm dứt ngay lập tức nếu khách hàng vi phạm Điều 4 hoặc cung cấp thông tin gian dối.',
     ],
   },
@@ -126,7 +127,7 @@ export const TERMS: LegalSection[] = [
       'Khách hàng xác định sẽ thuê kho sau khi thanh toán tiền giữ chân và ký hợp đồng. Việc thuê kho là quyết định tự nguyện, độc lập của khách hàng, sau khi đã được cung cấp đầy đủ thông tin về loại kho, kích thước, hình thức khoá, giá, các khoản phải thanh toán và điều kiện hủy, hoàn tiền.',
       'Khách hàng tự chịu trách nhiệm đánh giá kho có phù hợp với nhu cầu của mình hay không. Nếu phát sinh bất trắc, hoặc kho không phù hợp với khách hàng, KhoAn không chịu trách nhiệm đối với mọi hoạt động của khách hàng cũng như mọi hậu quả, chi phí, thiệt hại phát sinh từ việc khách hàng tự quyết định thuê kho, bao gồm chi phí vận chuyển, đóng gói, nhân công, lưu kho nơi khác và mọi khoản đã chi cho bên thứ ba.',
       'Khách hàng có quyền hủy đặt chỗ hoặc trả kho trước hạn bất cứ lúc nào và tự chịu trách nhiệm về quyết định đó. Nếu KhoAn không bàn giao được ô kho đã đặt do lỗi của mình, KhoAn hoàn 100% số tiền khách hàng đã thanh toán khi đặt chỗ; hai bên thoả thuận đây là toàn bộ trách nhiệm của KhoAn trong trường hợp này.',
-      'Hủy đặt chỗ trước ngày nhận kho: khoản đã thanh toán khi đặt chỗ (tiền giữ chân, và tiền thuê kỳ đầu nếu đã trả cùng lúc đặt) được hoàn theo các mốc thời gian ghi trong hợp đồng và chính sách đang áp dụng; hủy sát ngày nhận hoặc không đến nhận kho thì không được hoàn. Việc hoàn tiền thực hiện tối đa trong 7 ngày làm việc.',
+      'Hủy đặt chỗ trước ngày nhận kho: khoản đã thanh toán khi đặt chỗ (tiền giữ chân, và tiền thuê kỳ đầu nếu đã trả cùng lúc đặt) được hoàn theo các mốc thời gian ghi trong hợp đồng và chính sách đang áp dụng; hủy sát ngày nhận thì không được hoàn. Không đến nhận kho trong thời gian quy định sau ngày nhận đã đặt (mặc định 24 giờ) và không hủy trước: hệ thống tự hủy đặt chỗ, giải phóng ô kho và không hoàn tiền. Việc hoàn tiền thực hiện tối đa trong 7 ngày làm việc.',
       'Trong các trường hợp trên, quyền lợi duy nhất của khách hàng đối với khoản đã thanh toán là được hoàn tiền theo đúng mức ghi trong hợp đồng. KhoAn không bồi thường, đền bù hay hỗ trợ thêm bất kỳ khoản nào khác.',
       'Thiệt hại đối với tài sản trong ô kho do lỗi trực tiếp của KhoAn trong thời gian thuê vẫn được xử lý theo Điều 6.',
     ],

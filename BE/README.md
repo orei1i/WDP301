@@ -155,6 +155,7 @@ Errors: `{ "error": { "code", "message", "details" } }`. Codes include `SOLD_OUT
 
 ## 6. Background jobs (in-process)
 - every minute: expire unpaid holds → `CANCELLED(HOLD_EXPIRED)`
+- every 30 minutes: paid bookings not checked in within `noShowAfterHours` after the end of the start day → `CANCELLED(NO_SHOW)`, no refund, unit released
 - hourly: issue due rent, mark `DELINQUENT` after the grace period (late fee), auto `LOCKED_OUT` after `lockoutAfterDays`
 
 Run one API instance, or move `src/jobs` to a single worker before scaling out.

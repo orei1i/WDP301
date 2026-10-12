@@ -4,6 +4,7 @@ import { fmtDate, vnd } from './format';
 import { ACCESS_METHOD, PERIOD_UNIT, periodLabel } from './labels';
 import { TERMS_VERSION } from './legal';
 import { abandonDaysOf, earlyTerminationOf } from './policy-defaults';
+import { pickDiscount, type DiscountTier } from './duration';
 import { surchargeLines } from './surcharge';
 import { DEFAULT_CONTRACT_CLAUSES, renderContractTemplate, type ContractTemplateClause, type ContractVariableValues, type RenderedClause } from './contract-template';
 
@@ -35,7 +36,9 @@ export interface ContractTextInput {
   /** Phiên bản Điều khoản khách đã ký (signature.termsVersion). Bỏ trống = phiên bản hiện hành (hợp đồng chưa ký). */
   termsVersion?: string | null;
   policy: Pick<BusinessPolicy, 'gracePeriodDays' | 'lockoutAfterDays' | 'cancellation'>
-    & Partial<Pick<BusinessPolicy, 'earlyTermination' | 'abandonAfterLockedOutDays' | 'surcharges'>>;
+    & Partial<Pick<BusinessPolicy, 'earlyTermination' | 'abandonAfterLockedOutDays' | 'surcharges' | 'noShowAfterHours'>>
+    // Bậc ưu đãi của chính sách lúc đặt — để ghi rõ mức thu hồi khi trả kho sớm (ngày ở dạng chuỗi hoặc Date đều được).
+    & { discounts?: readonly DiscountTier[] };
 }
 
 export type ContractClause = RenderedClause;
@@ -67,7 +70,9 @@ function cancellationLines(policy: ContractTextInput['policy'], base: string) {
       : upper === undefined ? 'Hủy bất kỳ lúc nào trước ngày nhận kho' : `Hủy trước ngày nhận kho dưới ${hoursText(upper)}`;
     return `${when}: ${t.depositRefundPct > 0 ? `hoàn ${t.depositRefundPct}%` : 'KHÔNG hoàn'} ${base}.`;
   });
-  lines.push(`Không đến nhận kho theo lịch đã đặt và không hủy trước: KHÔNG hoàn ${base}.`);
+  // Hệ thống tự hủy đặt chỗ khi khách không đến: quá `noShowAfterHours` giờ sau khi hết ngày nhận kho.
+  const noShow = policy.noShowAfterHours;
+  lines.push(`Không đến nhận kho${noShow ? ` trong vòng ${hoursText(noShow)} sau ngày nhận kho đã đặt` : ' theo lịch đã đặt'} và không hủy trước: đặt chỗ bị hủy, ô kho được giải phóng và KHÔNG hoàn ${base}.`);
   return lines;
 }
 
@@ -79,6 +84,18 @@ function earlyTerminationLines(policy: ContractTextInput['policy']) {
     const range = prev === undefined ? `đã dùng đến ${t.maxElapsedPct}% kỳ hạn` : i === tiers.length - 1 ? `đã dùng trên ${prev}% kỳ hạn` : `đã dùng trên ${prev}% đến ${t.maxElapsedPct}% kỳ hạn`;
     return `Trả kho sớm khi ${range}: hoàn ${t.depositRefundPct}% tiền giữ chân.`;
   });
+}
+
+/** Điều khoản thu hồi ưu đãi thuê dài hạn khi trả kho sớm — chỉ có khi hợp đồng này thật sự được giảm giá. */
+function clawbackLines(i: ContractTextInput) {
+  const q = i.quote;
+  if (i.rentalPeriod !== 'MONTH' || !(q.discountAmount > 0)) return [];
+  const gross = q.rate + q.surchargeAmount;
+  const tiers = (i.policy.discounts ?? []).filter((d) => !d.requiresApprovalRole && d.minPeriods <= i.periods).map((d) => d.minPeriods).sort((a, b) => a - b);
+  const steps = [...new Set(tiers)].map((m) => `dùng từ ${m} tháng: giảm ${vnd(Math.min(q.discountAmount, pickDiscount(i.policy.discounts ?? [], 'MONTH', m, gross, new Date(i.startDate))?.amount ?? 0))}/tháng`);
+  return [
+    `Ưu đãi thuê dài hạn ${vnd(q.discountAmount)}/tháng được áp dụng vì Bên thuê cam kết thuê ${periodLabel(i.rentalPeriod, i.periods)}. Nếu trả kho trước khi dùng đủ thời hạn đó, Bên thuê chỉ được hưởng mức ưu đãi của số tháng thực dùng${steps.length ? ` (${steps.join('; ')}; ít hơn thì không giảm)` : ''}; phần ưu đãi đã hưởng vượt mức bị thu hồi và trừ vào tiền giữ chân khi quyết toán.`,
+  ];
 }
 
 /**
@@ -141,7 +158,7 @@ export function contractVariables(i: ContractTextInput): ContractVariableValues 
           : `Khoản 2 — Tiền thuê ${unit} đầu: ${vnd(q.firstPeriodRent)}, thanh toán THÊM ngoài tiền giữ chân, tại quầy khi nhân viên bàn giao kho.`,
       ],
       muc_hoan_khi_huy: cancellationLines(i.policy, refundBase),
-      muc_hoan_tra_som: earlyTerminationLines(i.policy),
+      muc_hoan_tra_som: [...earlyTerminationLines(i.policy), ...clawbackLines(i)],
     },
   };
 }

@@ -300,7 +300,7 @@ export const API_GROUPS: Group[] = [
       },
       { method: 'POST', path: '/contracts/:id/receive', auth: R.STAFF, summary: 'Xác nhận đã nhận lại ô kho từ khách.' },
       {
-        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng.',
+        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng. Trả sớm: áp trần hoàn theo % kỳ hạn đã dùng, rồi THU HỒI ƯU ĐÃI thuê dài hạn vượt mức của số tháng thực dùng (khoản DISCOUNT_CLAWBACK, trừ vào tiền giữ chân; depositSettlement.earlyTermination.discountClawback).',
         body: [
           { name: 'checklist[]', type: '{ item, condition: ItemCondition, note? } ≤100', required: true },
           { name: 'damages[]', type: '{ description, severity: MINOR|MODERATE|SEVERE, cost, photoUrls[] } ≤50', required: true },
@@ -408,6 +408,17 @@ export const API_GROUPS: Group[] = [
           'Ô khoá mật khẩu → 422 NO_MASTER_FOR_PIN (không có mã tổng). Hợp đồng bị khoá do công nợ / đã kết thúc → 422 ACCESS_SUSPENDED.',
         ],
       },
+      {
+        method: 'POST', path: '/contracts/:id/authorized-persons', auth: R.CUS, summary: 'Chủ hợp đồng đăng ký người được uỷ quyền ra vào / lấy đồ (tối đa 3).',
+        body: [
+          { name: 'fullName', type: 'string 2..100', required: true },
+          { name: 'phone', type: 'số điện thoại VN', required: true },
+          { name: 'idNumberLast4', type: '4 chữ số', required: true, note: '4 số cuối giấy tờ tùy thân — nhân viên đối chiếu tại quầy' },
+          { name: 'relationship', type: 'string ≤60' },
+        ],
+        notes: ['Quá 3 người → 422 AUTHORIZED_LIMIT; trùng họ tên + 4 số cuối → 409. Nhân viên thấy danh sách qua contract.authorizedPersons và chọn được khi ghi "mở kho hộ" (authorizedPersonId).'],
+      },
+      { method: 'DELETE', path: '/contracts/:id/authorized-persons/:personId', auth: R.CUS, summary: 'Chủ hợp đồng xoá một người được uỷ quyền.' },
       {
         method: 'POST', path: '/access-requests', auth: R.CUS, summary: 'Gửi yêu cầu cấp lại (PIN_RESET / CARD_REISSUE / KEY_REISSUE) cho hợp đồng của mình.',
         body: [

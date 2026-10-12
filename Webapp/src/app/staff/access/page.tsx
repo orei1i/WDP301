@@ -26,7 +26,7 @@ export default function StaffAccessRequests() {
   const [text, setText] = useState('');
   const [showErr, setShowErr] = useState(false);
   // Mở kho hộ khách bằng chìa tổng / thẻ tổng (khách mất chìa, mất thẻ, cần vào gấp).
-  const [openFor, setOpenFor] = useState<{ contractId: string; reason: string; verified: boolean } | null>(null);
+  const [openFor, setOpenFor] = useState<{ contractId: string; reason: string; verified: boolean; personId: string } | null>(null);
 
   const all = db.accessRequests.filter((r) => scope.facilityIds.includes(r.facilityId)).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const open = all.filter((r) => r.status === 'REQUESTED' || r.status === 'APPROVED');
@@ -61,7 +61,7 @@ export default function StaffAccessRequests() {
           <p className="flex items-center gap-2 font-semibold text-amber-950"><DoorOpen className="size-4" />Khách cần mở kho gấp (mất chìa, mất thẻ)</p>
           <p className="mt-1 text-sm leading-relaxed text-amber-900">Xác minh danh tính khách tại quầy, ghi nhận ở đây rồi mới dùng <b>chìa tổng / thẻ tổng</b> để mở — có mặt khách, không vào trong ô kho. Mỗi lần mở được ghi nhật ký và khách xem được. Ô khoá mật khẩu không có mã tổng: khách xem lại mã trong tài khoản hoặc xin đặt lại.</p>
         </div>
-        <Button onClick={() => setOpenFor({ contractId: '', reason: '', verified: false })}><DoorOpen className="size-4" />Mở kho hộ khách</Button>
+        <Button onClick={() => setOpenFor({ contractId: '', reason: '', verified: false, personId: '' })}><DoorOpen className="size-4" />Mở kho hộ khách</Button>
       </Card>
 
       <Tabs tabs={[{ key: 'open', label: 'Đang xử lý', count: open.length }, { key: 'all', label: 'Tất cả', count: all.length }]} value={tab} onChange={setTab} />
@@ -102,17 +102,18 @@ export default function StaffAccessRequests() {
         <Table rows={openLog} rowKey={(o) => `${o.c._id}-${o.at}`} empty={<EmptyState icon={<DoorOpen className="size-5" />} title="Chưa có lần mở hộ nào" />} columns={[
           { key: 't', header: 'Thời điểm', cell: (o) => fmtDateTime(o.at) },
           { key: 'k', header: 'Khách / kho', cell: (o) => <div><p className="font-medium">{userName(db, o.c.customerId)}</p><p className="text-xs text-stone-500">Kho {unitLabel(db, o.c.unitId)} · khoá {ACCESS_METHOD[o.c.access.method].toLowerCase()}</p></div> },
+          { key: 'f', header: 'Mở cho', cell: (o) => (o.forName ? <span>{o.forName} <span className="text-xs text-stone-500">(được uỷ quyền)</span></span> : 'Chủ hợp đồng') },
           { key: 'b', header: 'Nhân viên mở', cell: (o) => o.byName },
           { key: 'r', header: 'Lý do', cell: (o) => o.reason },
         ]} />
       </Card>
 
       <Modal open={!!openFor} onClose={() => setOpenFor(null)} title="Mở kho hộ khách" description="Dùng chìa tổng / thẻ tổng của chi nhánh — chỉ khi khách có mặt và đã xác minh danh tính."
-        footer={<><Button variant="secondary" onClick={() => setOpenFor(null)}>Đóng</Button><Button disabled={!openReady} onClick={() => openFor && void run('assistedOpen', { contractId: openFor.contractId, reason: openFor.reason.trim() }, 'Đã ghi nhận — có thể mở kho cho khách', () => setOpenFor(null))}>Ghi nhận & mở kho</Button></>}>
+        footer={<><Button variant="secondary" onClick={() => setOpenFor(null)}>Đóng</Button><Button disabled={!openReady} onClick={() => openFor && void run('assistedOpen', { contractId: openFor.contractId, reason: openFor.reason.trim(), authorizedPersonId: openFor.personId || undefined }, 'Đã ghi nhận — có thể mở kho cho khách', () => setOpenFor(null))}>Ghi nhận & mở kho</Button></>}>
         {openFor && (
           <div className="space-y-4">
             <Field label="Kho cần mở" hint="Chỉ liệt kê kho khoá bằng chìa / thẻ, đang còn quyền ra vào.">
-              <select className={inputCls} value={openFor.contractId} onChange={(e) => setOpenFor({ ...openFor, contractId: e.target.value, verified: false })}>
+              <select className={inputCls} value={openFor.contractId} onChange={(e) => setOpenFor({ ...openFor, contractId: e.target.value, verified: false, personId: '' })}>
                 <option value="">— Chọn kho —</option>
                 {openable.map((c) => <option key={c._id} value={c._id}>{unitLabel(db, c.unitId)} · {userName(db, c.customerId)} · {ACCESS_METHOD[c.access.method]}</option>)}
               </select>
@@ -124,12 +125,20 @@ export default function StaffAccessRequests() {
                 {openTarget.access.lostReportedAt && <p className="mt-1 flex items-center gap-1.5 font-medium text-amber-700"><ShieldAlert className="size-4" />Khách đã báo mất từ {fmtDateTime(openTarget.access.lostReportedAt)}</p>}
               </div>
             )}
+            {openTarget && (
+              <Field label="Người đến quầy" hint="Chỉ chủ hợp đồng hoặc người chủ hợp đồng đã đăng ký uỷ quyền mới được mở hộ.">
+                <select className={inputCls} value={openFor.personId} onChange={(e) => setOpenFor({ ...openFor, personId: e.target.value, verified: false })}>
+                  <option value="">Chủ hợp đồng — {userName(db, openTarget.customerId)}</option>
+                  {(openTarget.authorizedPersons ?? []).map((p) => <option key={p._id} value={p._id}>Người được uỷ quyền — {p.fullName} (giấy tờ •••• {p.idNumberLast4}, {p.phone})</option>)}
+                </select>
+              </Field>
+            )}
             <Field label="Lý do mở hộ" hint="VD: Khách làm mất thẻ, cần lấy hồ sơ gấp">
               <textarea className={inputCls} rows={2} maxLength={300} value={openFor.reason} onChange={(e) => setOpenFor({ ...openFor, reason: e.target.value })} />
             </Field>
             <label className="flex cursor-pointer gap-2.5 text-sm leading-relaxed">
               <input type="checkbox" className="mt-0.5 size-4 shrink-0" checked={openFor.verified} onChange={(e) => setOpenFor({ ...openFor, verified: e.target.checked })} />
-              <span>Tôi đã xác minh danh tính: khách đăng nhập đúng tài khoản và giấy tờ tùy thân khớp 4 số cuối ở trên. Khách có mặt khi mở kho.</span>
+              <span>{openFor.personId ? 'Tôi đã xác minh danh tính người được uỷ quyền: họ tên và 4 số cuối giấy tờ tùy thân khớp với thông tin chủ hợp đồng đã đăng ký. Người này có mặt khi mở kho.' : 'Tôi đã xác minh danh tính: khách đăng nhập đúng tài khoản và giấy tờ tùy thân khớp 4 số cuối ở trên. Khách có mặt khi mở kho.'}</span>
             </label>
           </div>
         )}

@@ -60,6 +60,7 @@ export const PAYMENT_TYPE: LabelMap<PaymentType> = {
   LATE_FEE: { label: 'Phí trễ hạn', tone: 'amber' },
   DAMAGE_FEE: { label: 'Phí hư hại', tone: 'red' },
   PENALTY: { label: 'Phí phạt', tone: 'red' },
+  DISCOUNT_CLAWBACK: { label: 'Thu hồi ưu đãi (trả kho sớm)', tone: 'amber' },
   REFUND: { label: 'Hoàn tiền', tone: 'violet' },
   WAIVER: { label: 'Miễn giảm', tone: 'gray' },
   COMPENSATION: { label: 'Bồi thường', tone: 'violet' },

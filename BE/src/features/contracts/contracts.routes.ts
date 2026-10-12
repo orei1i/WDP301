@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { enumValues, AbandonedItemsDisposal, ContractStatus, ItemCondition, PaymentMethod } from '@ssm/shared';
+import { enumValues, AbandonedItemsDisposal, ContractStatus, isValidPhone, ItemCondition, PaymentMethod, PHONE_MESSAGE } from '@ssm/shared';
 import { InspectionModel, PaymentModel, RentalContractModel } from '../../shared/db/models';
 import { NotFound } from '../../shared/core/errors';
 import { authenticate } from '../../shared/http/authenticate';
@@ -12,7 +12,7 @@ import {
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
-import { assistedOpen, getContractAccess } from '../access/access.service';
+import { addAuthorizedPerson, assistedOpen, getContractAccess, removeAuthorizedPerson } from '../access/access.service';
 
 export const contractsRouter = Router();
 contractsRouter.use(authenticate);
@@ -51,8 +51,23 @@ contractsRouter.get('/:id/access', authorize('CUSTOMER'), validate({ params: idP
 contractsRouter.post('/:id/assisted-open', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
   reason: z.string().trim().min(5, 'Ghi lý do mở hộ (ít nhất 5 ký tự)').max(300),
   identityVerified: z.literal(true, { errorMap: () => ({ message: 'Cần xác minh danh tính khách trước khi mở kho hộ' }) }),
+  // Người đến quầy là người được uỷ quyền (không phải chủ hợp đồng) → id trong contract.authorizedPersons.
+  authorizedPersonId: z.string().max(60).optional(),
 }) }), async (req, res) => {
-  res.json(await assistedOpen(req.auth!.user, req.valid.params.id, { reason: req.valid.body.reason }));
+  res.json(await assistedOpen(req.auth!.user, req.valid.params.id, { reason: req.valid.body.reason, authorizedPersonId: req.valid.body.authorizedPersonId }));
+});
+
+// Người được uỷ quyền ra vào / lấy đồ — chỉ chủ hợp đồng thêm, xoá (tối đa 3). Nhân viên đối chiếu tại quầy.
+contractsRouter.post('/:id/authorized-persons', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({
+  fullName: z.string().trim().min(2).max(100),
+  phone: z.string().trim().refine(isValidPhone, PHONE_MESSAGE),
+  idNumberLast4: z.string().regex(/^\d{4}$/, 'Nhập đúng 4 số cuối giấy tờ tùy thân'),
+  relationship: z.string().trim().max(60).optional(),
+}) }), async (req, res) => {
+  res.status(201).json(await addAuthorizedPerson(req.auth!.user, req.valid.params.id, req.valid.body));
+});
+contractsRouter.delete('/:id/authorized-persons/:personId', authorize('CUSTOMER'), validate({ params: idParams.extend({ personId: z.string().min(1).max(60) }) }), async (req, res) => {
+  res.json(await removeAuthorizedPerson(req.auth!.user, req.valid.params.id, req.valid.params.personId));
 });
 
 contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm }) }), async (req, res) => {

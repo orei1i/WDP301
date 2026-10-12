@@ -135,7 +135,13 @@ export const actions = {
   retireFacilityTemplate: async (p: { facilityId: string }) => { await api.delete(`/contract-templates/facility/${p.facilityId}`); },
 
   /** Nhân viên mở kho hộ khách bằng chìa tổng / thẻ tổng sau khi xác minh danh tính — server ghi nhật ký vào hợp đồng. */
-  assistedOpen: async (p: { contractId: string; reason: string }) => { await api.post(`/contracts/${p.contractId}/assisted-open`, { reason: p.reason, identityVerified: true }); },
+  assistedOpen: async (p: { contractId: string; reason: string; authorizedPersonId?: string }) => { await api.post(`/contracts/${p.contractId}/assisted-open`, { reason: p.reason, identityVerified: true, authorizedPersonId: p.authorizedPersonId }); },
+
+  /** Chủ hợp đồng đăng ký / xoá người được uỷ quyền ra vào kho (tối đa 3). */
+  addAuthorizedPerson: async (p: { contractId: string; fullName: string; phone: string; idNumberLast4: string; relationship?: string }) => {
+    await api.post(`/contracts/${p.contractId}/authorized-persons`, { fullName: p.fullName, phone: p.phone, idNumberLast4: p.idNumberLast4, relationship: p.relationship || undefined });
+  },
+  removeAuthorizedPerson: async (p: { contractId: string; personId: string }) => { await api.delete(`/contracts/${p.contractId}/authorized-persons/${p.personId}`); },
 
   completeAccessRequest: async (p: { requestId: string; keyTag: string }) => { await api.post(`/access-requests/${p.requestId}/complete`, { keyTag: p.keyTag }); },
 

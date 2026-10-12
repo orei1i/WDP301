@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
   ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
-  addDays, addPeriods, fmtDate, paymentDueDate, periodLabel, todayISO, vnd,
+  addDays, addPeriods, contractClawback, fmtDate, paymentDueDate, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, DateStepper, EmptyState, KV, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
@@ -100,6 +100,16 @@ export default function ContractScreen() {
           <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền giữ chân hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
           <Text style={st.hint}>Trả kho trước hạn hợp đồng còn bị giới hạn % hoàn tiền giữ chân theo thời gian đã sử dụng — dùng trên 50% kỳ hạn sẽ không được hoàn tiền giữ chân.</Text>
           <DateStepper label="Ngày trả kho dự kiến" value={moveOutDate} onChange={setMoveOutDate} min={todayISO()} />
+          {(() => {
+            // Thu hồi ưu đãi thuê dài hạn nếu trả vào ngày đang chọn — cùng công thức với server (shared).
+            const rsv = byId(db.reservations, c.reservationId);
+            const claw = contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, moveOutDate);
+            return claw ? (
+              <Text style={[st.hint, { color: C.amber }]}>
+                Thu hồi ưu đãi: bạn mới dùng {claw.usedPeriods} tháng nên chỉ được giảm {vnd(claw.entitledPerPeriod)}/tháng thay vì {vnd(rsv!.quote.discountAmount)}/tháng — phần đã hưởng vượt {vnd(claw.amount)} sẽ trừ vào tiền giữ chân được hoàn.
+              </Text>
+            ) : null;
+          })()}
           <Button
             title="Đăng ký trả kho"
             variant="secondary"

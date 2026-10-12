@@ -3,10 +3,10 @@ import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, AccessRequestType, PaymentMethod } from '@ssm/shared';
-import { ACCESS_METHOD, ACCESS_REQUEST_STATUS, ACCESS_REQUEST_TYPE, PAYMENT_METHOD, accessFeeOf, fmtDate, fmtDateTime, vnd } from '@ssm/shared';
+import { ACCESS_METHOD, ACCESS_REQUEST_STATUS, ACCESS_REQUEST_TYPE, MAX_AUTHORIZED_PERSONS, PAYMENT_METHOD, accessFeeOf, fmtDate, fmtDateTime, isValidPhone, vnd } from '@ssm/shared';
 import { api } from '../../shared/api/client';
 import { byId, facilityName, unitLabel, useStore } from '../../shared/store/store';
-import { Button, Card, Chips, EmptyState, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
+import { Button, Card, Chips, EmptyState, Field, Input, Muted, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
 
 const METHODS: { value: PaymentMethod; label: string }[] = (['VNPAY', 'MOMO', 'CARD', 'BANK_TRANSFER'] as PaymentMethod[])
@@ -36,6 +36,8 @@ export default function AccessScreen() {
   const [reveal, setReveal] = useState(false);
   const [reason, setReason] = useState<string | null>(null);
   const [method, setMethod] = useState<PaymentMethod>('VNPAY');
+  // Form thêm người được uỷ quyền ra vào kho.
+  const [person, setPerson] = useState({ fullName: '', phone: '', idNumberLast4: '' });
 
   const requests = db.accessRequests.filter((r) => r.contractId === c?._id).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const latestKey = requests[0] ? `${requests[0]._id}:${requests[0].status}` : '';
@@ -135,11 +137,40 @@ export default function AccessScreen() {
           {(c.access.assistedOpens ?? []).length === 0 ? <Muted style={{ marginTop: S.sm } as never}>Chưa có lần mở hộ nào.</Muted> : [...(c.access.assistedOpens ?? [])].reverse().map((o) => (
             <View key={o.at} style={st.openRow}>
               <Text style={st.name}>{fmtDateTime(o.at)}</Text>
-              <Muted>Nhân viên {o.byName} · {o.reason}</Muted>
+              <Muted>{o.forName ? `Mở cho ${o.forName} (được uỷ quyền) · ` : ''}Nhân viên {o.byName} · {o.reason}</Muted>
             </View>
           ))}
         </Card>
       )}
+
+      {/* ---- người được uỷ quyền ---- */}
+      <Card style={{ marginTop: S.md }}>
+        <Text style={st.title}>Người được uỷ quyền</Text>
+        <Muted style={{ marginTop: 2 } as never}>
+          Người có tên dưới đây được thay bạn ra vào và lấy đồ (tối đa {MAX_AUTHORIZED_PERSONS}). Nhân viên đối chiếu họ tên và 4 số cuối giấy tờ tùy thân khi họ đến chi nhánh. Bạn chịu trách nhiệm về việc họ làm tại ô kho.
+        </Muted>
+        {(c.authorizedPersons ?? []).length === 0 ? <Muted style={{ marginTop: S.sm } as never}>Chưa uỷ quyền cho ai.</Muted> : (c.authorizedPersons ?? []).map((p) => (
+          <View key={p._id} style={[st.openRow, st.rowBetween]}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.name}>{p.fullName}</Text>
+              <Muted>{p.phone} · giấy tờ •••• {p.idNumberLast4}</Muted>
+            </View>
+            <Button title="Xoá" variant="ghost" onPress={() => void run('removeAuthorizedPerson', { contractId: c._id, personId: p._id }, `Đã xoá uỷ quyền của ${p.fullName}`)} />
+          </View>
+        ))}
+        {c.status !== 'CLOSED' && (c.authorizedPersons ?? []).length < MAX_AUTHORIZED_PERSONS && (
+          <View style={{ marginTop: S.md, gap: S.sm }}>
+            <Field label="Họ tên"><Input value={person.fullName} onChangeText={(v) => setPerson({ ...person, fullName: v })} autoCapitalize="words" maxLength={100} /></Field>
+            <Field label="Số điện thoại"><Input value={person.phone} onChangeText={(v) => setPerson({ ...person, phone: v })} keyboardType="phone-pad" maxLength={15} /></Field>
+            <Field label="4 số cuối giấy tờ tùy thân"><Input value={person.idNumberLast4} onChangeText={(v) => setPerson({ ...person, idNumberLast4: v.replace(/\D/g, '').slice(0, 4) })} keyboardType="number-pad" maxLength={4} /></Field>
+            <Button
+              title="Thêm người được uỷ quyền" icon="person-add-outline" variant="secondary"
+              disabled={!(person.fullName.trim().length >= 2 && isValidPhone(person.phone.trim()) && /^\d{4}$/.test(person.idNumberLast4))}
+              onPress={() => void run('addAuthorizedPerson', { contractId: c._id, fullName: person.fullName.trim(), phone: person.phone.trim(), idNumberLast4: person.idNumberLast4 }, 'Đã thêm người được uỷ quyền', () => setPerson({ fullName: '', phone: '', idNumberLast4: '' }))}
+            />
+          </View>
+        )}
+      </Card>
 
       {/* ---- xin cấp lại ---- */}
       <Card style={{ marginTop: S.md }}>

@@ -233,8 +233,14 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
     /** Khách đã báo mất thẻ / chìa (đang có yêu cầu cấp lại): thẻ cũ bị vô hiệu từ lúc này cho đến khi bàn giao thẻ mới. */
     lostReportedAt?: D | null;
     /** Nhật ký các lần nhân viên MỞ KHO HỘ theo yêu cầu của khách bằng chìa tổng / thẻ tổng (khách mất chìa, mất thẻ, cần mở gấp). */
-    assistedOpens?: { at: D; by: I; byName: string; reason: string }[];
+    /** `forName`: mở cho NGƯỜI ĐƯỢC UỶ QUYỀN (tên lúc mở) thay vì chính chủ hợp đồng. */
+    assistedOpens?: { at: D; by: I; byName: string; reason: string; forName?: string | null }[];
   };
+  /**
+   * Người được chủ hợp đồng UỶ QUYỀN ra vào / lấy đồ (tối đa 3). Nhân viên đối chiếu họ tên + 4 số cuối giấy tờ tại quầy.
+   * Chỉ chủ hợp đồng thêm / xoá; mọi thay đổi ghi nhật ký.
+   */
+  authorizedPersons?: AuthorizedPerson<D>[];
   terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string; signerName?: string | null };
   renewals: { previousEndDate: D; newEndDate: D; periods: number; paymentId?: I | null; at: D }[];
   /**
@@ -334,6 +340,9 @@ export interface ContractSignature<I = ID, D = string> {
   emailedTo?: string | null;
 }
 
+export interface AuthorizedPerson<D = string> { _id: string; fullName: string; phone: string; idNumberLast4: string; relationship?: string | null; addedAt: D }
+export const MAX_AUTHORIZED_PERSONS = 3;
+
 // ---------- UnitSwapRequest (đổi ô kho theo yêu cầu — A1b) ----------
 export interface UnitSwapRequest<I = ID, D = string> extends BaseEntity<I, D> {
   requestNumber: string;                  // "SWP-260930-7K2Q9M"
@@ -406,7 +415,8 @@ export interface InspectionLog<I = ID, D = string> extends BaseEntity<I, D> {
     depositHeld: number; deductions: number; refundAmount: number;
     refundPaymentId?: I | null; damagePaymentId?: I | null; approvedBy?: I | null; approvedAt?: D | null;
     /** Chỉ có khi trả kho SỚM (trước endDate của kỳ hạn) — % thời gian kỳ hạn đã dùng và trần hoàn cọc theo đó. */
-    earlyTermination?: { elapsedPct: number; refundCapPct: number } | null;
+    /** `discountClawback`: phần ưu đãi thuê dài hạn bị thu hồi (đã trừ vào tiền giữ chân) vì mới dùng `usedPeriods` kỳ. */
+    earlyTermination?: { elapsedPct: number; refundCapPct: number; discountClawback?: number; usedPeriods?: number } | null;
   } | null;
   /** Chỉ có khi type = ABANDONMENT — danh sách đồ đạc khách bỏ lại và phương án xử lý (LOCKED_OUT quá lâu). */
   abandonment?: { items: { description: string; quantity: number }[]; disposalMethod: AbandonedItemsDisposal } | null;

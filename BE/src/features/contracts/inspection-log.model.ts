@@ -34,7 +34,11 @@ const schema = new Schema<InspectionDoc>({
       refundPaymentId: refOpt('PaymentTransaction'), damagePaymentId: refOpt('PaymentTransaction'),
       approvedBy: refOpt('User'), approvedAt: { type: Date, default: null },
       earlyTermination: {
-        type: new Schema({ elapsedPct: { type: Number, required: true, min: 0, max: 100 }, refundCapPct: { type: Number, required: true, min: 0, max: 100 } }, subOptions),
+        type: new Schema({
+          elapsedPct: { type: Number, required: true, min: 0, max: 100 }, refundCapPct: { type: Number, required: true, min: 0, max: 100 },
+          // Ưu đãi thuê dài hạn bị thu hồi vì mới dùng `usedPeriods` kỳ (đã trừ vào tiền giữ chân).
+          discountClawback: { ...money(false) }, usedPeriods: { type: Number, default: null },
+        }, subOptions),
         default: null,
       },
     }, subOptions),

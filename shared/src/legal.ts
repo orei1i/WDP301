@@ -13,7 +13,9 @@
 //                   Điều 11 mới: ký hợp đồng điện tử, xác nhận thuê kho, hủy/hoàn tiền và giới hạn trách nhiệm; Điều 8: phân công nhân viên chuyển đồ khi đổi ô.
 // 1.3 (12/10/2026): Điều 1 và Điều 5 — chi nhánh giữ chìa tổng / thẻ tổng; mở kho hộ theo yêu cầu của khách có xác minh và ghi nhật ký;
 //                   báo mất thẻ thì thẻ cũ bị khoá ngay.
-export const TERMS_VERSION = '1.3';
+// 1.4 (12/10/2026): Điều 5 — đăng ký người được uỷ quyền; Điều 10 — thu hồi ưu đãi thuê dài hạn khi trả kho sớm;
+//                   Điều 11 — không đến nhận kho thì đặt chỗ tự hủy.
+export const TERMS_VERSION = '1.4';
 export const PRIVACY_VERSION = '1.0';
 /** Ngày áp dụng Điều khoản (bản TERMS_VERSION). */
 export const TERMS_EFFECTIVE = '12/10/2026';

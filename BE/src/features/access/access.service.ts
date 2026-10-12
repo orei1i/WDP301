@@ -1,5 +1,6 @@
 import { Types, type ClientSession } from 'mongoose';
-import { accessFeeOf, type AccessMethod, type AccessRequestType, type PaymentMethod } from '@ssm/shared';
+import { randomUUID } from 'node:crypto';
+import { accessFeeOf, MAX_AUTHORIZED_PERSONS, type AccessMethod, type AccessRequestType, type PaymentMethod } from '@ssm/shared';
 import {
   PaymentModel, RentalContractModel, type UserHydrated,
 } from '../../shared/db/models';
@@ -43,6 +44,42 @@ export async function getContractAccess(user: UserHydrated, contractId: string) 
   return { method, keyTag: c.access.keyTag ?? null, issuedAt: c.access.issuedAt ?? null, suspended, pin, reason };
 }
 
+// ---------------------------------------------------------------- người được uỷ quyền (CUSTOMER chủ hợp đồng)
+/** Chỉ CHỦ hợp đồng thêm / xoá. Tối đa 3 người; trùng 4 số cuối giấy tờ + họ tên thì coi là đã có. Mỗi thay đổi ghi nhật ký. */
+export async function addAuthorizedPerson(user: UserHydrated, contractId: string, input: { fullName: string; phone: string; idNumberLast4: string; relationship?: string }) {
+  return withTxn(async (session) => {
+    const c = await RentalContractModel.findById(contractId).session(session);
+    if (!c) throw NotFound('hợp đồng');
+    await assertCanAccess(user, c, 'contract.authorize_person');
+    if (user.role !== 'CUSTOMER') throw Forbidden('Chỉ chủ hợp đồng đăng ký người được uỷ quyền', 'OWNER_ONLY');
+    if (c.status === 'CLOSED') throw Unprocessable('Hợp đồng đã kết thúc');
+    const list = c.authorizedPersons ?? [];
+    if (list.length >= MAX_AUTHORIZED_PERSONS) throw Unprocessable(`Mỗi hợp đồng tối đa ${MAX_AUTHORIZED_PERSONS} người được uỷ quyền`, 'AUTHORIZED_LIMIT');
+    const fullName = input.fullName.trim();
+    if (list.some((p) => p.idNumberLast4 === input.idNumberLast4 && p.fullName.toLowerCase() === fullName.toLowerCase())) throw Conflict('Người này đã có trong danh sách', 'AUTHORIZED_DUPLICATE');
+    const person = { _id: randomUUID(), fullName, phone: input.phone.trim(), idNumberLast4: input.idNumberLast4, relationship: input.relationship?.trim() || null, addedAt: new Date() };
+    c.authorizedPersons = [...list, person];
+    await c.save({ session });
+    await audit({ action: 'contract.authorize_person', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { fullName, idNumberLast4: person.idNumberLast4 } } }, session);
+    return c;
+  });
+}
+
+export async function removeAuthorizedPerson(user: UserHydrated, contractId: string, personId: string) {
+  return withTxn(async (session) => {
+    const c = await RentalContractModel.findById(contractId).session(session);
+    if (!c) throw NotFound('hợp đồng');
+    await assertCanAccess(user, c, 'contract.revoke_person');
+    if (user.role !== 'CUSTOMER') throw Forbidden('Chỉ chủ hợp đồng xoá người được uỷ quyền', 'OWNER_ONLY');
+    const person = (c.authorizedPersons ?? []).find((p) => p._id === personId);
+    if (!person) throw NotFound('người được uỷ quyền');
+    c.authorizedPersons = (c.authorizedPersons ?? []).filter((p) => p._id !== personId);
+    await c.save({ session });
+    await audit({ action: 'contract.revoke_person', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { before: { fullName: person.fullName, idNumberLast4: person.idNumberLast4 } } }, session);
+    return c;
+  });
+}
+
 // ---------------------------------------------------------------- mở kho hộ khách (STAFF, FM)
 /**
  * Khách mất chìa / mất thẻ mà cần vào kho GẤP: nhân viên xác minh danh tính tại quầy rồi mở bằng chìa tổng / thẻ tổng
@@ -52,7 +89,7 @@ export async function getContractAccess(user: UserHydrated, contractId: string) 
  * Không áp dụng cho ô khoá mật khẩu (không có "mã tổng": khách xem lại mã trong app hoặc xin đặt lại), và không dùng
  * để vượt lệnh khoá do công nợ.
  */
-export async function assistedOpen(user: UserHydrated, contractId: string, input: { reason: string }) {
+export async function assistedOpen(user: UserHydrated, contractId: string, input: { reason: string; authorizedPersonId?: string }) {
   return withTxn(async (session) => {
     const c = await RentalContractModel.findById(contractId).session(session);
     if (!c) throw NotFound('hợp đồng');
@@ -61,11 +98,14 @@ export async function assistedOpen(user: UserHydrated, contractId: string, input
       throw Unprocessable('Hợp đồng đang bị khoá truy cập do công nợ hoặc đã kết thúc — không mở hộ được', 'ACCESS_SUSPENDED');
     }
     if (c.access.method === 'PIN') throw Unprocessable('Ô khoá mật khẩu: khách xem lại mật khẩu trong tài khoản hoặc xin đặt lại, không có mã tổng', 'NO_MASTER_FOR_PIN');
+    // Người đến quầy là NGƯỜI ĐƯỢC UỶ QUYỀN chứ không phải chủ hợp đồng → phải có trong danh sách khách đã đăng ký.
+    const person = input.authorizedPersonId ? (c.authorizedPersons ?? []).find((p) => p._id === input.authorizedPersonId) : null;
+    if (input.authorizedPersonId && !person) throw Unprocessable('Người này không có trong danh sách được uỷ quyền của hợp đồng', 'NOT_AUTHORIZED_PERSON');
     const now = new Date();
-    const entry = { at: now, by: user._id, byName: user.fullName, reason: input.reason.trim() };
+    const entry = { at: now, by: user._id, byName: user.fullName, reason: input.reason.trim(), forName: person?.fullName ?? null };
     c.set('access.assistedOpens', [...(c.access.assistedOpens ?? []), entry].slice(-50));
     await c.save({ session });
-    await audit({ action: 'contract.assisted_open', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: entry.reason, changes: { after: { method: c.access.method, by: user.fullName } } }, session);
+    await audit({ action: 'contract.assisted_open', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: entry.reason, changes: { after: { method: c.access.method, by: user.fullName, forAuthorizedPerson: person?.fullName ?? null } } }, session);
     return c;
   });
 }
