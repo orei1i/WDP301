@@ -103,6 +103,16 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
       periods: { type: Number, required: true, min: 1 },
       gross: money(), discountAmount: money(false), rate: money(),
       policyId: refOpt('BusinessPolicy'), at: { type: Date, default: Date.now },
+      // Phụ lục gia hạn khách đã xác nhận điện tử — lưu NGUYÊN VĂN lúc xác nhận, cùng dấu vết (ai, lúc nào, từ đâu).
+      appendix: {
+        type: new Schema({
+          number: { type: Number, required: true, min: 1 }, title: { type: String, required: true, maxlength: 200 },
+          acceptedAt: { type: Date, required: true }, signerName: { type: String, required: true, maxlength: 120 }, signedBy: refOpt('User'),
+          termsVersion: { type: String, required: true }, ip: { type: String, default: null }, userAgent: { type: String, default: null, maxlength: 400 },
+          clauses: { type: [new Schema({ title: { type: String, required: true }, paragraphs: { type: [String], default: [] }, bullets: { type: [String], default: [] } }, subOptions)], default: [] },
+        }, subOptions),
+        default: null,
+      },
     }, subOptions)],
     default: [], validate: maxLen(120),
   },

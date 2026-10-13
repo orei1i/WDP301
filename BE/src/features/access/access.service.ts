@@ -97,7 +97,8 @@ export async function assistedOpen(user: UserHydrated, contractId: string, input
     if (!REQUESTABLE_CONTRACT_STATUS.includes(c.status) || c.access.suspendedAt) {
       throw Unprocessable('Hợp đồng đang bị khoá truy cập do công nợ hoặc đã kết thúc — không mở hộ được', 'ACCESS_SUSPENDED');
     }
-    if (c.access.method === 'PIN') throw Unprocessable('Ô khoá mật khẩu: khách xem lại mật khẩu trong tài khoản hoặc xin đặt lại, không có mã tổng', 'NO_MASTER_FOR_PIN');
+    // Ô khoá mật khẩu là khoá số VẬT LÝ, khách tự đặt mật khẩu trên ổ khoá nên hệ thống không biết mật khẩu hiện tại. Khách quên
+    // thì cũng ra quầy như mất chìa / mất thẻ: nhân viên xác minh danh tính rồi mở và đặt lại ổ khoá tại chỗ — vẫn ghi nhật ký ở đây.
     // Người đến quầy là NGƯỜI ĐƯỢC UỶ QUYỀN chứ không phải chủ hợp đồng → phải có trong danh sách khách đã đăng ký.
     const person = input.authorizedPersonId ? (c.authorizedPersons ?? []).find((p) => p._id === input.authorizedPersonId) : null;
     if (input.authorizedPersonId && !person) throw Unprocessable('Người này không có trong danh sách được uỷ quyền của hợp đồng', 'NOT_AUTHORIZED_PERSON');
@@ -122,6 +123,8 @@ export async function createAccessRequest(user: UserHydrated, input: { contractI
       throw Conflict('Kho này đang có một yêu cầu cấp lại chưa xử lý xong', 'REQUEST_PENDING');
     }
 
+    // Ổ khoá mật khẩu là khoá vật lý: khách tự đổi mật khẩu ngay trên ổ khoá, hệ thống không cấp / đặt lại mật khẩu.
+    if (c.access.method === 'PIN') throw Unprocessable('Ô kho này dùng ổ khoá mật khẩu vật lý — bạn tự đổi mật khẩu ngay trên ổ khoá. Nếu quên mật khẩu, hãy đến quầy chi nhánh để nhân viên xác minh danh tính và mở, đặt lại ổ khoá giúp bạn.', 'PIN_SELF_SERVICE');
     const type = TYPE_BY_METHOD[c.access.method];
     const policy = await effectivePolicy(c.facilityId, session);
     const fee = accessFeeOf(policy, type);

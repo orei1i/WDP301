@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from 'mongoose';
-import { dueAtCheckIn, PERIOD_UNIT, TERMS_VERSION, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation, type SignatureMethod } from '@ssm/shared';
+import { allowsRentalPeriod, dueAtCheckIn, MONTH_ONLY_MESSAGE, PERIOD_UNIT, TERMS_VERSION, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation, type SignatureMethod } from '@ssm/shared';
 import {
   FacilityModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, UserModel,
   type ReservationHydrated, type UserHydrated,
@@ -51,6 +51,7 @@ async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSe
 
   const ut = await UnitTypeModel.findOne({ _id: input.unitTypeId, isActive: true }).session(session);
   if (!ut) throw NotFound('loại kho');
+  if (!allowsRentalPeriod(ut.category, input.rentalPeriod)) throw Unprocessable(`${MONTH_ONLY_MESSAGE} — ${ut.name} không thuê theo ngày / tuần được`, 'PERIOD_NOT_ALLOWED');
   const facility = await FacilityModel.findById(ut.facilityId).session(session);
   if (!facility || facility.status !== 'ACTIVE') throw Unprocessable('Chi nhánh chưa nhận đặt chỗ');
   const policy = await effectivePolicy(facility._id, session);

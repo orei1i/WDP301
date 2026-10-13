@@ -8,7 +8,7 @@ import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../../shared/http/validate';
 import {
-  cancelMoveOut, extendContract, extensionQuote, lockout, payBalance, writeOffDebt, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  appendixPdfFor, cancelMoveOut, extendContract, extensionQuote, lockout, payBalance, writeOffDebt, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
@@ -75,8 +75,17 @@ contractsRouter.get('/:id/extension-quote', authorize('CUSTOMER'), validate({ pa
   res.json(await extensionQuote(req.auth!.user, req.valid.params.id, req.valid.query.periods));
 });
 // `method` chỉ cần khi thuê theo ngày / tuần (trả trọn kỳ gia hạn ngay); thuê tháng không thu tiền lúc gia hạn.
-contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm.optional() }) }), async (req, res) => {
-  res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.periods, req.valid.body.method));
+// `acceptAppendix`: Bên B xác nhận Phụ lục gia hạn (bản xem trước ở /extension-quote) — bắt buộc, kèm ip / user-agent làm dấu vết.
+contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm.optional(), acceptAppendix: z.boolean().default(false) }) }), async (req, res) => {
+  res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.periods, req.valid.body.method,
+    { accepted: req.valid.body.acceptAppendix, ip: req.ip ?? null, userAgent: req.header('user-agent')?.slice(0, 300) ?? null }));
+});
+/** PDF phụ lục gia hạn đã xác nhận. */
+contractsRouter.get('/:id/appendices/:number.pdf', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams.extend({ number: z.coerce.number().int().min(1).max(200) }) }), async (req, res) => {
+  const { pdf, filename } = await appendixPdfFor(req.auth!.user, req.valid.params.id, req.valid.params.number);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(pdf);
 });
 contractsRouter.post('/:id/pay-balance', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ method: pm }) }), async (req, res) => {
   res.json(await payBalance(req.auth!.user, req.valid.params.id, req.valid.body.method));

@@ -10,6 +10,24 @@ import { effectivePolicy } from '../policies/pricing';
 import { buildContractPdf } from '../contracts/contract-pdf';
 import { effectiveTemplate } from '../contract-templates/contract-template.service';
 
+/**
+ * Thông tin hai bên in trên hợp đồng và phụ lục: Bên B lấy từ hồ sơ khách; người đại diện Bên A là Quản lý chi nhánh đang hoạt
+ * động của chi nhánh đó (theo uỷ quyền) — chưa gán quản lý thì hợp đồng ghi người đại diện theo pháp luật của công ty.
+ */
+export async function contractParties(facilityId: unknown, customerId: unknown) {
+  const [facility, customer, manager] = await Promise.all([
+    FacilityModel.findById(facilityId).lean(),
+    UserModel.findById(customerId, { fullName: 1, phone: 1, email: 1, 'customerProfile.idNumberLast4': 1 }).lean(),
+    UserModel.findOne({ role: 'FACILITY_MANAGER', facilityIds: facilityId, status: 'ACTIVE' }, { fullName: 1 }).sort({ createdAt: 1 }).lean(),
+  ]);
+  return {
+    facilityName: facility?.name ?? '—', facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}, ${facility.address.city}` : null,
+    lessorRepresentative: manager?.fullName ?? null,
+    customerName: customer?.fullName ?? '—', customerPhone: customer?.phone ?? null, customerEmail: customer?.email ?? null,
+    customerIdLast4: customer?.customerProfile?.idNumberLast4 ?? null,
+  };
+}
+
 const maskEmail = (e: string) => e.replace(/^(.)[^@]*(@.*)$/, '$1***$2');
 
 async function loadSigned(id: string) {
@@ -22,6 +40,8 @@ export interface ContractView {
   clauses: ContractClause[]; templateVersion: number; signed: boolean;
   /** Dữ liệu tiêu đề để nơi hiển thị không phải tự tra lại. */
   facilityName: string; contractNumber: string | null;
+  /** Quản lý chi nhánh đại diện Bên A (để in ở khối chữ ký). */
+  lessorRepresentative?: string | null;
 }
 
 /**
@@ -31,14 +51,13 @@ export interface ContractView {
  * `forSigning`: dựng bản sẽ được lưu khi khách ký ngay bây giờ (Điều khoản hiện hành, khoản giữ chân đã thanh toán).
  */
 export async function contractViewFor(r: ReservationHydrated, opts: { forSigning?: boolean } = {}): Promise<ContractView> {
-  const [facility, unit, type, contract, customer] = await Promise.all([
-    FacilityModel.findById(r.facilityId).lean(),
+  const [parties, unit, type, contract] = await Promise.all([
+    contractParties(r.facilityId, r.customerId),
     r.unitId ? StorageUnitModel.findById(r.unitId).lean() : null,
     UnitTypeModel.findById(r.unitTypeId).lean(),
     r.contractId ? RentalContractModel.findById(r.contractId, { contractNumber: 1 }).lean() : null,
-    UserModel.findById(r.customerId, { fullName: 1 }).lean(),
   ]);
-  const head = { facilityName: facility?.name ?? '—', contractNumber: contract?.contractNumber ?? null };
+  const head = { facilityName: parties.facilityName, contractNumber: contract?.contractNumber ?? null, lessorRepresentative: parties.lessorRepresentative };
   if (!opts.forSigning && r.signature?.clauses?.length) {
     return { ...head, clauses: r.signature.clauses.map((c) => ({ title: c.title, paragraphs: [...c.paragraphs], bullets: [...c.bullets] })), templateVersion: r.signature.templateVersion ?? 0, signed: true };
   }
@@ -46,8 +65,7 @@ export async function contractViewFor(r: ReservationHydrated, opts: { forSigning
   const template = await effectiveTemplate(r.facilityId);
   const clauses = buildContractClauses({
     code: r.code, contractNumber: contract?.contractNumber,
-    facilityName: head.facilityName, facilityAddress: facility ? `${facility.address.line1}, ${facility.address.district}` : null,
-    customerName: customer?.fullName ?? '—', unitTypeName: type?.name ?? '—',
+    ...parties, unitTypeName: type?.name ?? '—',
     unitNumber: unit?.unitNumber, floor: unit?.location.floor, zone: unit?.location.zone, areaM2: type?.areaM2, accessMethod: unit?.accessMethod,
     useAirConditioning: r.useAirConditioning, rentalPeriod: r.quote.rentalPeriod, periods: r.periods,
     startDate: r.startDate.toISOString(), endDate: r.endDate.toISOString(), quote: r.quote, depositPaid: !!r.depositPaymentId,
@@ -67,11 +85,11 @@ export async function contractViewForUser(user: UserHydrated, id: string) {
 /** Dựng PDF hợp đồng đã ký — cùng điều khoản với bản xem trên web/mobile. */
 async function renderPdf(r: ReservationHydrated, customer: { fullName: string; email: string }) {
   if (!r.signature) throw Unprocessable('Hợp đồng chưa được ký');
-  const { clauses, facilityName, contractNumber } = await contractViewFor(r);
+  const { clauses, facilityName, contractNumber, lessorRepresentative } = await contractViewFor(r);
   const facility = { name: facilityName };
   const contract = { contractNumber };
   const pdf = await buildContractPdf({
-    code: r.code, contractNumber: contract?.contractNumber, facilityName: facility?.name ?? '—', customerName: customer.fullName, clauses,
+    code: r.code, contractNumber: contract?.contractNumber, facilityName: facility?.name ?? '—', customerName: customer.fullName, clauses, lessorRepresentative,
     signature: { signedAt: r.signature.signedAt, signerName: r.signature.signerName, method: r.signature.method, image: r.signature.image, onBehalf: r.signature.onBehalf },
     generatedAt: new Date(),
   });

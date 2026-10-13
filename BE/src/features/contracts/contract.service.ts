@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from 'mongoose';
-import { abandonDaysOf, discountClawback, exitCommitment, PERIOD_UNIT, unusedPrepaidRent, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
+import { abandonDaysOf, appendixTitle, buildRenewalAppendix, discountClawback, exitCommitment, PERIOD_UNIT, TERMS_VERSION, unusedPrepaidRent, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
 import { InspectionModel, PaymentModel, PolicyModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
@@ -11,6 +11,8 @@ import { createPayment } from '../payments/payment.service';
 import { releaseOpenSwapRequests } from '../swaps/unit-swap-request.service';
 import { cancelOpenServiceOrders } from '../services/services.service';
 import { moveAccessToUnit } from './unit-access';
+import { contractParties } from '../reservations/contract-document.service';
+import { buildContractPdf } from './contract-pdf';
 
 const loadContract = async (id: string, session?: ClientSession) => {
   const c = await RentalContractModel.findById(id).session(session ?? null);
@@ -64,33 +66,86 @@ async function quoteExtension(c: ContractDoc, periods: number, session?: ClientS
   };
 }
 
-/** Xem trước giá gia hạn (khách chọn số kỳ → thấy giá mới, ưu đãi, hạn mới) — không ghi gì. */
+/**
+ * PHỤ LỤC GIA HẠN cho lần gia hạn đang báo giá — văn bản khách phải đọc và xác nhận trước khi gia hạn có hiệu lực (Điều 403,
+ * 421 BLDS 2015: sửa đổi thời hạn / giá của hợp đồng phải được hai bên thoả thuận, theo hình thức của hợp đồng gốc — ở đây là
+ * phương thức điện tử). Bản xem trước và bản lưu dùng CÙNG hàm này nên khách xác nhận đúng nguyên văn mình đã đọc.
+ */
+async function renewalAppendixFor(c: ContractDoc, x: Awaited<ReturnType<typeof quoteExtension>>, session?: ClientSession) {
+  const [parties, ut, unit, rsv] = await Promise.all([
+    contractParties(c.facilityId, c.customerId),
+    UnitTypeModel.findById(c.unitTypeId, { name: 1 }).session(session ?? null).lean(),
+    StorageUnitModel.findById(c.unitId, { unitNumber: 1 }).session(session ?? null).lean(),
+    ReservationModel.findById(c.reservationId, { 'signature.signedAt': 1 }).session(session ?? null).lean(),
+  ]);
+  const number = (c.commitments ?? []).filter((s) => s.appendix).length + 1;
+  const clauses = buildRenewalAppendix({
+    number, contractNumber: c.contractNumber, contractSignedAt: (rsv?.signature?.signedAt ?? c.terms.signedAt ?? c.startDate).toISOString(),
+    ...parties, unitTypeName: ut?.name ?? '—', unitNumber: unit?.unitNumber ?? null,
+    rentalPeriod: x.period, periods: x.periods, from: x.from.toISOString(), newEndDate: x.newEnd.toISOString(),
+    gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, payNow: x.payNow, depositAmount: c.deposit.amount,
+    gracePeriodDays: c.terms.gracePeriodDays, policyVersion: x.policy.version,
+    policy: { earlyTermination: x.policy.earlyTermination, discounts: x.policy.discounts }, termsVersion: TERMS_VERSION,
+  });
+  return { number, title: appendixTitle(number), clauses, parties };
+}
+
+/** Xem trước giá gia hạn (khách chọn số kỳ → thấy giá mới, ưu đãi, hạn mới) kèm PHỤ LỤC sẽ xác nhận — không ghi gì. */
 export async function extensionQuote(user: UserHydrated, id: string, periods: number) {
   const c = await loadContract(id);
   await assertCanAccess(user, c, 'contract.extend');
   const x = await quoteExtension(c, periods);
-  return { rentalPeriod: x.period, periods, from: x.from, newEndDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, currentRate: x.currentRate, payNow: x.payNow, policyVersion: x.policy.version };
+  const appendix = await renewalAppendixFor(c, x);
+  return {
+    rentalPeriod: x.period, periods, from: x.from, newEndDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, currentRate: x.currentRate, payNow: x.payNow, policyVersion: x.policy.version,
+    appendix: { number: appendix.number, title: appendix.title, clauses: appendix.clauses },
+  };
 }
 
-export async function extendContract(user: UserHydrated, id: string, periods: number, method?: PaymentMethod) {
+export async function extendContract(user: UserHydrated, id: string, periods: number, method: PaymentMethod | undefined, acceptance: { accepted: boolean; ip: string | null; userAgent: string | null }) {
   return withTxn(async (session) => {
     const c = await loadContract(id, session);
     await assertCanAccess(user, c, 'contract.extend');
     if (c.status !== 'ACTIVE') throw Unprocessable('Chỉ gia hạn được hợp đồng đang hiệu lực');
+    // Gia hạn là sửa đổi hợp đồng → chỉ có hiệu lực khi Bên B xác nhận phụ lục (không có "gia hạn ngầm").
+    if (!acceptance.accepted) throw Unprocessable('Bạn cần đọc và xác nhận Phụ lục gia hạn trước khi gia hạn', 'APPENDIX_NOT_ACCEPTED');
     const x = await quoteExtension(c, periods, session);
     if (x.payNow > 0 && !method) throw Unprocessable('Chọn hình thức thanh toán tiền thuê của kỳ gia hạn', 'PAY_METHOD_REQUIRED');
     await ensureInitialCommitment(c, session);
+    const appendix = await renewalAppendixFor(c, x, session);
+    const now = new Date();
 
     const pay = x.payNow > 0
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENEWAL', amount: x.payNow, status: 'SUCCEEDED', method: method!, period: { start: x.from, end: x.newEnd } }, session)
       : null;
     c.renewals.push({ previousEndDate: x.from, newEndDate: x.newEnd, periods, paymentId: pay?._id ?? null, at: new Date() });
-    c.commitments = [...(c.commitments ?? []), { kind: 'RENEWAL', startDate: x.from, endDate: x.newEnd, periods, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, policyId: x.policy._id, at: new Date() }] as ContractDoc['commitments'];
+    c.commitments = [...(c.commitments ?? []), {
+      kind: 'RENEWAL', startDate: x.from, endDate: x.newEnd, periods, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, policyId: x.policy._id, at: now,
+      // Nguyên văn phụ lục + dấu vết xác nhận điện tử của Bên B (ai, lúc nào, từ đâu) — chứng cứ giao kết.
+      appendix: { number: appendix.number, title: appendix.title, acceptedAt: now, signerName: user.fullName, signedBy: user._id, termsVersion: TERMS_VERSION, ip: acceptance.ip, userAgent: acceptance.userAgent, clauses: appendix.clauses },
+    }] as ContractDoc['commitments'];
     c.endDate = x.newEnd;
     await c.save({ session });
-    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { periods, from: x.from, endDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, paidNow: x.payNow } } }, session);
-    return { contract: c, amount: x.payNow, rate: x.rate, discountAmount: x.discountAmount, newEndDate: x.newEnd };
+    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { periods, from: x.from, endDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, paidNow: x.payNow, appendix: appendix.number } } }, session);
+    return { contract: c, amount: x.payNow, rate: x.rate, discountAmount: x.discountAmount, newEndDate: x.newEnd, appendixNumber: appendix.number };
   });
+}
+
+/** PDF một phụ lục gia hạn đã xác nhận — chủ hợp đồng hoặc nhân viên / quản lý đúng chi nhánh. In đúng nguyên văn đã lưu. */
+export async function appendixPdfFor(user: UserHydrated, id: string, number: number) {
+  const c = await loadContract(id);
+  await assertCanAccess(user, c, 'contract.appendix_pdf');
+  const a = (c.commitments ?? []).map((s) => s.appendix).find((x) => x?.number === number);
+  if (!a) throw NotFound('phụ lục');
+  const parties = await contractParties(c.facilityId, c.customerId);
+  const pdf = await buildContractPdf({
+    code: c.contractNumber, contractNumber: c.contractNumber, facilityName: parties.facilityName, customerName: parties.customerName,
+    lessorRepresentative: parties.lessorRepresentative, title: a.title, subtitle: `Kèm theo Hợp đồng thuê kho số ${c.contractNumber}`,
+    clauses: a.clauses.map((x) => ({ title: x.title, paragraphs: [...x.paragraphs], bullets: [...x.bullets] })),
+    signature: { signedAt: a.acceptedAt, signerName: a.signerName, method: 'TYPED', image: null, onBehalf: false },
+    signedHow: 'Xác nhận điện tử trên tài khoản', generatedAt: new Date(),
+  });
+  return { pdf, filename: `phu-luc-${String(number).padStart(2, '0')}-${c.contractNumber}.pdf` };
 }
 
 // ---------------------------------------------------------------- pay outstanding (CUSTOMER online, STAFF/FM at desk)
