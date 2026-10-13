@@ -83,7 +83,7 @@ export default function AccessScreen() {
         <View style={st.head}>
           <View style={st.iconBox}><Ionicons name={ICON[c.access.method]} size={22} color={C.brand700} /></View>
           <View style={{ flex: 1 }}>
-            <Text style={st.title}>{c.access.method === 'PIN' ? 'Mật khẩu mở kho' : c.access.method === 'RFID_CARD' ? 'Thẻ khoá' : 'Chìa khoá'}</Text>
+            <Text style={st.title}>{c.access.method === 'PIN' ? 'Mật khẩu ban đầu của ổ khoá' : c.access.method === 'RFID_CARD' ? 'Thẻ khoá' : 'Chìa khoá'}</Text>
             <Muted>Hình thức khoá: {ACCESS_METHOD[c.access.method]}</Muted>
           </View>
         </View>
@@ -99,12 +99,12 @@ export default function AccessScreen() {
                   <Text style={st.pin} selectable={reveal}>{reveal ? info.pin.split('').join(' ') : '• • • • • •'}</Text>
                 </View>
                 <Button title={reveal ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} variant="secondary" icon={reveal ? 'eye-off-outline' : 'eye-outline'} style={{ marginTop: S.sm }} onPress={() => setReveal((v) => !v)} />
-                <Muted style={{ marginTop: S.sm } as never}>Mật khẩu tự ẩn sau 20 giây. Đừng chia sẻ cho người khác.</Muted>
+                <Muted style={{ marginTop: S.sm } as never}>Đây là mật khẩu nhân viên đặt lúc bàn giao kho (tự ẩn sau 20 giây). Ổ khoá là khoá số vật lý: bạn tự đổi mật khẩu ngay trên ổ khoá và nên đổi sau lần mở đầu tiên. Sau khi bạn đổi, ứng dụng không biết mật khẩu mới — hãy tự ghi nhớ.</Muted>
               </>
             ) : info.reason === 'SUSPENDED' ? (
               <Muted>Quyền vào kho đang bị tạm khoá do công nợ. Thanh toán công nợ để mở lại và xem mật khẩu.</Muted>
             ) : (
-              <Muted>Mật khẩu hiện chưa được lưu trong ứng dụng (kho nhận từ trước). Hãy xin đặt lại mật khẩu bên dưới để nhận mật khẩu mới.</Muted>
+              <Muted>Ổ khoá là khoá số vật lý, bạn tự đặt và đổi mật khẩu ngay trên ổ khoá; ứng dụng không lưu mật khẩu của ô này.</Muted>
             )}
           </View>
         )}
@@ -128,11 +128,11 @@ export default function AccessScreen() {
         )}
       </Card>
 
-      {c.access.method !== 'PIN' && (
+      {(
         <Card style={{ marginTop: S.md }}>
-          <Text style={st.title}>Cần vào kho gấp?</Text>
+          <Text style={st.title}>{c.access.method === 'PIN' ? 'Quên mật khẩu?' : 'Cần vào kho gấp?'}</Text>
           <Muted style={{ marginTop: 2 } as never}>
-            Đến quầy chi nhánh trong giờ hoạt động, mang giấy tờ tùy thân. Nhân viên xác minh danh tính rồi mở kho giúp bạn bằng {c.access.method === 'RFID_CARD' ? 'thẻ tổng' : 'chìa tổng'} của chi nhánh — bạn có mặt khi mở, nhân viên không vào trong ô kho. Mỗi lần mở hộ đều được ghi lại bên dưới.
+            Đến quầy chi nhánh trong giờ hoạt động, mang giấy tờ tùy thân. Nhân viên xác minh danh tính rồi {c.access.method === 'PIN' ? 'mở và đặt lại ổ khoá để bạn tự đặt mật khẩu mới' : `mở kho giúp bạn bằng ${c.access.method === 'RFID_CARD' ? 'thẻ tổng' : 'chìa tổng'} của chi nhánh`} — bạn có mặt khi mở, nhân viên không vào trong ô kho. Mỗi lần mở hộ đều được ghi lại bên dưới.
           </Muted>
           {(c.access.assistedOpens ?? []).length === 0 ? <Muted style={{ marginTop: S.sm } as never}>Chưa có lần mở hộ nào.</Muted> : [...(c.access.assistedOpens ?? [])].reverse().map((o) => (
             <View key={o.at} style={st.openRow}>
@@ -172,7 +172,8 @@ export default function AccessScreen() {
         )}
       </Card>
 
-      {/* ---- xin cấp lại ---- */}
+      {/* ---- xin cấp lại (thẻ / chìa) — ổ khoá mật khẩu thì khách tự đổi trên ổ khoá, không có yêu cầu ---- */}
+      {c.access.method !== 'PIN' && (
       <Card style={{ marginTop: S.md }}>
         <Text style={st.title}>{labels.title}</Text>
         <Muted style={{ marginTop: 2 } as never}>
@@ -216,10 +217,11 @@ export default function AccessScreen() {
           </>
         )}
       </Card>
+      )}
 
       {/* ---- lịch sử yêu cầu ---- */}
-      <Text style={st.section}>Yêu cầu của tôi</Text>
-      {requests.length === 0 ? <Card><Muted>Chưa có yêu cầu nào.</Muted></Card> : requests.map((r) => (
+      {(c.access.method !== 'PIN' || requests.length > 0) && <Text style={st.section}>Yêu cầu của tôi</Text>}
+      {c.access.method === 'PIN' && requests.length === 0 ? null : requests.length === 0 ? <Card><Muted>Chưa có yêu cầu nào.</Muted></Card> : requests.map((r) => (
         <Card key={r._id} style={{ marginTop: S.sm }}>
           <View style={st.rowBetween}>
             <Text style={st.name}>{ACCESS_REQUEST_TYPE[r.type].title}</Text>

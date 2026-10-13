@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
@@ -52,6 +53,11 @@ export default function ContractScreen() {
     return () => { alive = false; };
   }, [id, periodsNum]);
   const extQuote = ext.key === extKey ? ext.quote : null;
+  // Khách phải tick xác nhận Phụ lục gia hạn; đổi số kỳ (phụ lục khác) thì phải xác nhận lại.
+  const [agree, setAgree] = useState(false);
+  const [showAppendix, setShowAppendix] = useState(false);
+  const [openAppendix, setOpenAppendix] = useState<number | null>(null);
+  useEffect(() => { setAgree(false); }, [periodsNum, id]);
   const openSwap = db.swapRequests.find((s) => s.contractId === c._id && (OPEN_SWAP_STATUSES as readonly string[]).includes(s.status));
 
   return (
@@ -90,6 +96,29 @@ export default function ContractScreen() {
         </Card>
       )}
 
+      {(c.commitments ?? []).some((s) => s.appendix) && (
+        <Card style={{ marginTop: S.md }}>
+          <Text style={st.sectionTitle}>Phụ lục hợp đồng</Text>
+          <Text style={st.hint}>Các phụ lục gia hạn bạn đã xác nhận — là bộ phận không tách rời của hợp đồng.</Text>
+          {(c.commitments ?? []).filter((s) => s.appendix).map((s) => {
+            const a = s.appendix!;
+            const on = openAppendix === a.number;
+            return (
+              <View key={a.number} style={{ marginTop: S.sm, borderTopWidth: 1, borderTopColor: C.line, paddingTop: S.sm }}>
+                <Pressable onPress={() => setOpenAppendix(on ? null : a.number)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink }}>{a.title}</Text>
+                    <Text style={st.hint}>{fmtDate(s.startDate)} → {fmtDate(s.endDate)} · xác nhận {fmtDate(a.acceptedAt)} bởi {a.signerName}</Text>
+                  </View>
+                  <Ionicons name={on ? 'chevron-up' : 'chevron-down'} size={18} color={C.muted} />
+                </Pressable>
+                {on && <AppendixText clauses={a.clauses} />}
+              </View>
+            );
+          })}
+        </Card>
+      )}
+
       {c.status === 'ACTIVE' && (
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Gia hạn hợp đồng</Text>
@@ -109,15 +138,28 @@ export default function ContractScreen() {
                   : 'Không phải trả trước — tiền thuê vẫn xuất hoá đơn từng tháng. Tiền giữ chân giữ nguyên.'}
               </Text>
               {extQuote.payNow > 0 && <Chips options={METHODS} value={extendMethod} onChange={setExtendMethod} columns={2} />}
+              {extQuote.appendix && (
+                <View style={{ marginTop: S.md }}>
+                  <Pressable onPress={() => setShowAppendix((v) => !v)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: C.brand700, flex: 1 }}>{showAppendix ? 'Thu gọn' : 'Đọc'} {extQuote.appendix.title}</Text>
+                    <Ionicons name={showAppendix ? 'chevron-up' : 'chevron-down'} size={18} color={C.brand700} />
+                  </Pressable>
+                  {showAppendix && <AppendixText clauses={extQuote.appendix.clauses} />}
+                  <Pressable onPress={() => setAgree((v) => !v)} style={{ flexDirection: 'row', gap: S.sm, marginTop: S.md, alignItems: 'flex-start' }} hitSlop={6}>
+                    <Ionicons name={agree ? 'checkbox' : 'square-outline'} size={22} color={agree ? C.brand700 : C.faint} />
+                    <Text style={{ flex: 1, fontSize: 13, color: C.ink, lineHeight: 19 }}>Tôi đã đọc và đồng ý toàn bộ nội dung {extQuote.appendix.title}. Việc xác nhận này trên tài khoản của tôi có giá trị như chữ ký của tôi trên phụ lục.</Text>
+                  </Pressable>
+                </View>
+              )}
             </>
           )}
           <Button
             title={extQuote && extQuote.payNow > 0 ? 'Gia hạn & thanh toán' : 'Xác nhận gia hạn'}
             style={{ marginTop: S.md }}
-            disabled={!extQuote}
+            disabled={!extQuote || !agree}
             onPress={() => extQuote && void run(
               'extendContract',
-              { contractId: c._id, periods: periodsNum, method: extQuote.payNow > 0 ? extendMethod : undefined },
+              { contractId: c._id, periods: periodsNum, method: extQuote.payNow > 0 ? extendMethod : undefined, acceptAppendix: agree },
               (v) => (v > 0 ? `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — thanh toán ${vnd(v)}` : `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — tiền thuê trả theo từng tháng`),
             )}
           />
@@ -223,6 +265,21 @@ export default function ContractScreen() {
         </Card>
       )}
     </Screen>
+  );
+}
+
+/** Nội dung một phụ lục (bản xem trước lúc gia hạn hoặc bản đã xác nhận). */
+function AppendixText({ clauses }: { clauses: { title: string; paragraphs: string[]; bullets: string[] }[] }) {
+  return (
+    <View style={{ marginTop: S.sm, backgroundColor: C.bg, borderRadius: 12, padding: S.md, gap: S.sm }}>
+      {clauses.map((cl) => (
+        <View key={cl.title}>
+          <Text style={{ fontSize: 13, fontWeight: '700', color: C.ink }}>{cl.title}</Text>
+          {cl.paragraphs.map((p, i) => <Text key={`p${i}`} style={{ fontSize: 12.5, color: C.ink, lineHeight: 19, marginTop: 2 }}>{p}</Text>)}
+          {cl.bullets.map((b, i) => <Text key={`b${i}`} style={{ fontSize: 12.5, color: C.ink, lineHeight: 19, marginTop: 2 }}>• {b}</Text>)}
+        </View>
+      ))}
+    </View>
   );
 }
 

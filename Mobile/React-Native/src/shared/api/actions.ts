@@ -56,8 +56,8 @@ export const actions = {
     (await api.post<{ amount: number }>(`/contracts/${p.contractId}/pay-balance`, { method: p.method })).amount,
 
   /** Gia hạn = cam kết mới. `method` chỉ cần khi phải trả ngay (thuê ngày / tuần). Trả về số tiền thu ngay. */
-  extendContract: async (p: { contractId: string; periods: number; method?: PaymentMethod }) =>
-    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { periods: p.periods, method: p.method })).amount,
+  extendContract: async (p: { contractId: string; periods: number; method?: PaymentMethod; acceptAppendix: boolean }) =>
+    (await api.post<{ amount: number }>(`/contracts/${p.contractId}/extend`, { periods: p.periods, method: p.method, acceptAppendix: p.acceptAppendix })).amount,
 
   requestMoveOut: async (p: { contractId: string; date: string }) => {
     await api.post(`/contracts/${p.contractId}/move-out`, { date: day(p.date) });

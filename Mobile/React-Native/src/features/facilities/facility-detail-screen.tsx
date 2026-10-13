@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Linking, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { AccessMethod, BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
 import {
-  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, buildPaymentSchedule, CHECK_IN_SHIFT, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, PERIOD_UNIT,
+  ACCESS_METHOD, AccessMethod as ACCESS_METHOD_ENUM, allowsRentalPeriod, isMonthOnly, buildPaymentSchedule, CHECK_IN_SHIFT, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, PERIOD_UNIT,
   PRIVACY_VERSION, STAFF_SHIFTS, surchargeLines, TERMS_EFFECTIVE, TERMS_VERSION, UNIT_CATEGORY, addDays, periodLabel, todayISO, vnd,
 } from '@ssm/shared';
 import { api } from '../../shared/api/client';
@@ -166,7 +166,8 @@ export default function FacilityDetailScreen() {
         <View style={{ marginTop: S.md }}>
           <Muted>Bạn sẽ gửi trong bao lâu?</Muted>
           <View style={{ marginTop: S.sm }}>
-            <DurationPicker period={period} periods={periodsNum} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(String(n)); }} />
+            <DurationPicker period={period} periods={periodsNum} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(String(n)); }}
+              monthOnly={(!!ut && isMonthOnly(ut.category)) || picked.some((p) => { const t = types.find((x) => x._id === p.typeId); return !!t && isMonthOnly(t.category); })} />
           </View>
         </View>
 
@@ -194,9 +195,11 @@ export default function FacilityDetailScreen() {
           const a = t.availability;
           const selected = t._id === typeId;
           const full = a.available === 0;
+          // Kho cỡ lớn chỉ thuê theo tháng: đang chọn thuê ngày / tuần thì làm mờ, không cho chọn.
+          const periodOff = !allowsRentalPeriod(t.category, period);
           return (
-            <Pressable key={t._id} disabled={full} onPress={() => setTypeId(t._id)}>
-              <Card style={[st.typeCard, selected && st.typeCardSelected, full && st.typeCardFull]}>
+            <Pressable key={t._id} disabled={full || periodOff} onPress={() => setTypeId(t._id)}>
+              <Card style={[st.typeCard, selected && st.typeCardSelected, (full || periodOff) && st.typeCardFull]}>
                 <View style={st.rowBetween}>
                   <View style={{ flex: 1 }}>
                     <Text style={st.typeName}>{t.name}</Text>
@@ -204,6 +207,7 @@ export default function FacilityDetailScreen() {
                     {t.description ? <Muted style={{ marginTop: 4 } as never}>{t.description}</Muted> : null}
                     <View style={{ marginTop: S.sm, flexDirection: 'row', flexWrap: 'wrap', gap: S.xs }}>
                       <Badge>{UNIT_CATEGORY[t.category]}</Badge>
+                      {isMonthOnly(t.category) && <Badge tone={periodOff ? 'amber' : 'gray'}>Chỉ thuê theo tháng</Badge>}
                       {t.quote.firstPeriodAtBooking && <Badge tone="amber">Giữ chân {periodLabel(period, t.quote.depositPeriods ?? 1)} + trả {PERIOD_UNIT[period]} đầu khi đặt</Badge>}
                       {picked.some((p) => p.typeId === t._id) && <Badge tone="violet">Đã chọn {picked.filter((p) => p.typeId === t._id).length} ô</Badge>}
                     </View>
@@ -221,6 +225,22 @@ export default function FacilityDetailScreen() {
           );
         })}
       </View>
+
+      {(detail?.services.length ?? 0) > 0 && (
+        <>
+          <Text style={st.section}>Dịch vụ thêm tại chi nhánh</Text>
+          <Muted>Tuỳ chọn — đặt trong mục Dịch vụ của hợp đồng sau khi nhận kho, không bắt buộc khi đặt chỗ.</Muted>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: S.sm, paddingVertical: S.sm }}>
+            {detail!.services.map((sv) => (
+              <Card key={sv._id} style={{ width: 210 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: C.ink }}>{sv.name}</Text>
+                {sv.description ? <Muted style={{ marginTop: 4 } as never}>{sv.description}</Muted> : null}
+                <Text style={{ marginTop: S.sm, fontSize: 14, fontWeight: '700', color: C.brand700 }}>{vnd(sv.price)}<Text style={{ fontSize: 12, fontWeight: '400', color: C.muted }}> / {sv.unitLabel}</Text></Text>
+              </Card>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       {ut && (
         <Card style={{ marginTop: S.md }}>
