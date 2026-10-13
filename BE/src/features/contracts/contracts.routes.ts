@@ -8,7 +8,7 @@ import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../../shared/http/validate';
 import {
-  cancelMoveOut, extendContract, lockout, payBalance, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  cancelMoveOut, extendContract, lockout, payBalance, writeOffDebt, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
@@ -75,6 +75,9 @@ contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: id
 });
 contractsRouter.post('/:id/pay-balance', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ method: pm }) }), async (req, res) => {
   res.json(await payBalance(req.auth!.user, req.valid.params.id, req.valid.body.method));
+});
+contractsRouter.post('/:id/write-off-debt', authorize('FACILITY_MANAGER', 'OPS_MANAGER'), validate({ params: idParams, body: z.object({ reason: z.string().min(5).max(500) }) }), async (req, res) => {
+  res.json(await writeOffDebt(req.auth!.user, req.valid.params.id, req.valid.body.reason));
 });
 contractsRouter.post('/:id/lockout', authorize('FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
   res.json(await lockout(req.auth!.user, req.valid.params.id));

@@ -30,7 +30,7 @@ const schema = new Schema<InspectionDoc>({
   totalDamageFee: money(false),
   depositSettlement: {
     type: new Schema({
-      depositHeld: money(), deductions: money(), refundAmount: money(),
+      depositHeld: money(), deductions: money(), refundAmount: money(), shortfall: money(false),
       refundPaymentId: refOpt('PaymentTransaction'), damagePaymentId: refOpt('PaymentTransaction'),
       approvedBy: refOpt('User'), approvedAt: { type: Date, default: null },
       earlyTermination: {

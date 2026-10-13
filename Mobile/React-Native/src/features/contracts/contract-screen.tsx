@@ -51,8 +51,11 @@ export default function ContractScreen() {
           ['Chi nhánh', facilityName(db, c.facilityId)],
           ['Thời hạn', `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`],
           ['Tiền thuê', `${vnd(c.billing.rate)}/${PERIOD_UNIT[c.billing.rentalPeriod]}`],
-          ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)} · ${vnd(c.billing.rate)}`],
-          ['Hạn trả tiền kỳ tới', `${fmtDate(paymentDueDate(c.billing.nextBillingDate, c.terms.gracePeriodDays))} — quá hạn bị tính phí trễ`],
+          // Hợp đồng đã đóng không còn kỳ thanh toán nào — chỉ còn (nếu có) khoản nợ sau quyết toán ở dòng Công nợ.
+          ...(OPEN_CONTRACT_STATUSES.includes(c.status) ? ([
+            ['Kỳ thanh toán tới', `${fmtDate(c.billing.nextBillingDate)} · ${vnd(c.billing.rate)}`],
+            ['Hạn trả tiền kỳ tới', `${fmtDate(paymentDueDate(c.billing.nextBillingDate, c.terms.gracePeriodDays))} — quá hạn bị tính phí trễ`],
+          ] as [string, string][]) : []),
           ['Phương thức truy cập', ACCESS_METHOD[c.access.method]],
           ['Tiền giữ chân', `${vnd(c.deposit.amount)} · ${DEPOSIT_STATUS[c.deposit.status].label}`],
           ['Công nợ', c.balance.outstanding > 0
@@ -63,8 +66,8 @@ export default function ContractScreen() {
 
       {c.balance.outstanding > 0 && (
         <Card style={{ marginTop: S.md }}>
-          <Text style={st.sectionTitle}>Thanh toán công nợ</Text>
-          <Text style={st.hint}>{vnd(c.balance.outstanding)}</Text>
+          <Text style={st.sectionTitle}>{c.status === 'CLOSED' ? 'Nợ còn lại sau quyết toán' : 'Thanh toán công nợ'}</Text>
+          <Text style={st.hint}>{vnd(c.balance.outstanding)}{c.status === 'CLOSED' ? ' — chi phí hư hại và công nợ vượt tiền giữ chân. Thanh toán xong mới đặt kho mới được.' : ''}</Text>
           <Chips options={METHODS} value={payMethod} onChange={setPayMethod} columns={2} />
           <Button
             title={`Thanh toán ${vnd(c.balance.outstanding)}`}

@@ -11,7 +11,7 @@ import { addDays, daysBetween, fmtDate, todayISO, vnd } from '@/shared/lib/forma
 import { Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, cx, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
 
-type Tab = 'overdue' | 'expiring' | 'moveout' | 'all';
+type Tab = 'overdue' | 'expiring' | 'moveout' | 'debt' | 'all';
 type AbandonItem = { description: string; quantity: number };
 
 export default function Contracts() {
@@ -32,10 +32,19 @@ export default function Contracts() {
   const T = todayISO();
 
   const open = db.contracts.filter((c) => c.facilityId === fid && OPEN_CONTRACT_STATUSES.includes(c.status));
+  /** Hợp đồng đã đóng nhưng hư hại + công nợ vượt tiền giữ chân — khách còn nợ, chờ thu hoặc xoá nợ. */
+  const settlementDebts = db.contracts.filter((c) => c.facilityId === fid && c.status === 'CLOSED' && c.balance.outstanding > 0);
+  /** Khoá tay đúng mốc ghi trong hợp đồng khách đã ký ("quá N ngày bị khoá"), không khoá sớm sau thời gian ân hạn. */
+  const canLock = (x: RentalContract) => x.status === 'DELINQUENT' && (x.delinquency?.daysOverdue ?? 0) > x.terms.lockoutAfterDays;
+  const writeOff = (x: RentalContract) => {
+    const why = window.prompt(`Xoá khoản nợ ${vnd(x.balance.outstanding)} của ${userName(db, x.customerId)} (hợp đồng ${x.contractNumber})?\nNhập lý do (tối thiểu 5 ký tự) — được ghi vào nhật ký:`);
+    if (why && why.trim().length >= 5) void run('writeOffDebt', { contractId: x._id, reason: why.trim() }, (v) => `Đã xoá nợ ${vnd(v)}`);
+  };
   const groups: Record<Tab, RentalContract[]> = {
     overdue: open.filter((c) => c.status === 'DELINQUENT' || c.status === 'LOCKED_OUT').sort((a, b) => (b.delinquency?.daysOverdue ?? 0) - (a.delinquency?.daysOverdue ?? 0)),
     expiring: open.filter((c) => c.status === 'ACTIVE' && c.endDate <= addDays(T, 30) && !c.autoRenew).sort((a, b) => a.endDate.localeCompare(b.endDate)),
     moveout: open.filter((c) => c.status === 'MOVE_OUT_PENDING'),
+    debt: settlementDebts,
     all: open,
   };
   const c = view ? db.contracts.find((x) => x._id === view._id) ?? null : null;
@@ -56,10 +65,10 @@ export default function Contracts() {
 
   return (
     <>
-      <PageHeader title="Hợp đồng & công nợ" description={`Ân hạn ${policy.gracePeriodDays} ngày · khóa truy cập khi quá hạn trên ${policy.gracePeriodDays} ngày (tự động sau ${policy.lockoutAfterDays} ngày).`} actions={<FacilityPicker scope={scope} />} />
+      <PageHeader title="Hợp đồng & công nợ" description={`Ân hạn ${policy.gracePeriodDays} ngày rồi tính phí trễ · khóa truy cập khi quá hạn trên ${policy.lockoutAfterDays} ngày, đúng như hợp đồng khách đã ký.`} actions={<FacilityPicker scope={scope} />} />
       <Tabs tabs={[
         { key: 'overdue', label: 'Quá hạn', count: groups.overdue.length }, { key: 'expiring', label: 'Sắp hết hạn (30 ngày)', count: groups.expiring.length },
-        { key: 'moveout', label: 'Chờ trả kho', count: groups.moveout.length }, { key: 'all', label: 'Tất cả đang mở', count: groups.all.length },
+        { key: 'moveout', label: 'Chờ trả kho', count: groups.moveout.length }, { key: 'debt', label: 'Nợ sau quyết toán', count: groups.debt.length }, { key: 'all', label: 'Tất cả đang mở', count: groups.all.length },
       ]} value={tab} onChange={setTab} />
       <Card className="mt-4">
         <Table rows={groups[tab]} rowKey={(x) => x._id} onRowClick={setView} empty={<EmptyState title="Không có hợp đồng" />} columns={[
@@ -76,9 +85,10 @@ export default function Contracts() {
           ) },
           { key: 's', header: 'Trạng thái', cell: (x) => <StatusBadge map={CONTRACT_STATUS} value={x.status} /> },
           { key: 'a', header: '', className: 'text-right', cell: (x) => (
-            <div className="flex justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-              {x.status === 'DELINQUENT' && <Button size="sm" variant="danger" onClick={() => run('lockout', { contractId: x._id }, `Đã khóa truy cập kho ${unitLabel(db, x.unitId)}`)}><Lock className="size-3.5" />Khóa</Button>}
+            <div className="flex flex-wrap justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {canLock(x) && <Button size="sm" variant="danger" onClick={() => run('lockout', { contractId: x._id }, `Đã khóa truy cập kho ${unitLabel(db, x.unitId)}`)}><Lock className="size-3.5" />Khóa</Button>}
               {x.balance.outstanding > 0 && <Button size="sm" variant="secondary" onClick={() => run('payBalance', { contractId: x._id, method: 'CASH' }, (v) => `Đã thu ${vnd(v)} tại quầy`)}><Banknote className="size-3.5" />Thu tại quầy</Button>}
+              {x.status === 'CLOSED' && x.balance.outstanding > 0 && <Button size="sm" variant="ghost" onClick={() => writeOff(x)}>Xoá nợ</Button>}
               {canSwap(x) && <Button size="sm" variant="secondary" onClick={() => openSwap(x)}><ArrowLeftRight className="size-3.5" />Đổi ô</Button>}
               {(x.delinquency?.lateFeesAccrued ?? 0) > 0 && <Button size="sm" variant="ghost" onClick={() => { setWaive(x); setReason(''); }}><BadgePercent className="size-3.5" />Miễn phí trễ</Button>}
               {canAbandon(x) && <Button size="sm" variant="danger" onClick={() => openAbandon(x)}><PackageX className="size-3.5" />Xử lý hàng bỏ lại</Button>}

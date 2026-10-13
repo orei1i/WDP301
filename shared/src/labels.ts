@@ -59,6 +59,7 @@ export const PAYMENT_TYPE: LabelMap<PaymentType> = {
   RENEWAL: { label: 'Gia hạn', tone: 'teal' },
   LATE_FEE: { label: 'Phí trễ hạn', tone: 'amber' },
   DAMAGE_FEE: { label: 'Phí hư hại', tone: 'red' },
+  SETTLEMENT_DEBT: { label: 'Nợ còn lại sau quyết toán', tone: 'red' },
   PENALTY: { label: 'Phí phạt', tone: 'red' },
   DISCOUNT_CLAWBACK: { label: 'Thu hồi ưu đãi (trả kho sớm)', tone: 'amber' },
   REFUND: { label: 'Hoàn tiền', tone: 'violet' },

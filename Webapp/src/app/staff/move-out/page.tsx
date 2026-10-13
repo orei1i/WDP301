@@ -30,6 +30,8 @@ export default function MoveOutPage() {
   const damageTotal = damages.reduce((s, d) => s + (d.cost || 0), 0);
   const earlyTermination = c ? earlyTerminationCap(db, c) : null;
   const normalRefund = c ? c.deposit.amount - Math.min(c.deposit.amount, damageTotal + c.balance.outstanding) : 0;
+  // Hư hại + công nợ vượt tiền giữ chân: phần chênh thành khoản nợ còn lại sau quyết toán (cùng công thức với server).
+  const shortfall = c ? Math.max(0, damageTotal + c.balance.outstanding - c.deposit.amount) : 0;
   const cappedRefund = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
   // Thu hồi ưu đãi thuê dài hạn khi trả sớm — cùng công thức với server (shared), trừ vào phần tiền giữ chân còn lại.
   const rsv = c ? byId(db.reservations, c.reservationId) : undefined;
@@ -130,6 +132,12 @@ export default function MoveOutPage() {
                       <div className="flex justify-between"><dt className="text-stone-500">Tiền giữ chân đang giữ</dt><dd className="tabular-nums">{vnd(c.deposit.amount)}</dd></div>
                       <div className="flex justify-between"><dt className="text-stone-500">Chi phí hư hại</dt><dd className="tabular-nums">−{vnd(damageTotal)}</dd></div>
                       {c.balance.outstanding > 0 && <div className="flex justify-between"><dt className="text-stone-500">Công nợ còn lại</dt><dd className="tabular-nums">−{vnd(c.balance.outstanding)}</dd></div>}
+                      {shortfall > 0 && (
+                        <div className="flex justify-between font-medium text-red-700">
+                          <dt>Vượt tiền giữ chân — khách còn nợ sau quyết toán</dt>
+                          <dd className="tabular-nums">{vnd(shortfall)}</dd>
+                        </div>
+                      )}
                       {earlyTermination && (
                         <div className="flex justify-between text-amber-800">
                           <dt>Trả kho sớm — bàn giao {fmtDate(settlementDateOf(c))}, đã dùng {earlyTermination.elapsedPct}% kỳ hạn</dt>

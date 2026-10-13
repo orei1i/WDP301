@@ -96,9 +96,16 @@ async function bookOne(user: UserHydrated, input: BookingItem, session: ClientSe
   return r;
 }
 
+/** Khách còn nợ sau quyết toán của một hợp đồng đã đóng (hư hại + công nợ vượt tiền giữ chân) thì chưa được thuê kho mới. */
+async function assertNoSettlementDebt(user: UserHydrated) {
+  const debt = await RentalContractModel.findOne({ customerId: user._id, status: 'CLOSED', 'balance.outstanding': { $gt: 0 } }, { contractNumber: 1, 'balance.outstanding': 1 }).lean();
+  if (debt) throw Unprocessable(`Bạn còn nợ ${debt.balance.outstanding.toLocaleString('vi-VN')} ₫ sau quyết toán hợp đồng ${debt.contractNumber} — thanh toán xong mới đặt kho mới được`, 'SETTLEMENT_DEBT');
+}
+
 // ---------------------------------------------------------------- create (CUSTOMER)
 export async function createReservation(user: UserHydrated, input: BookingItem) {
   if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
+  await assertNoSettlementDebt(user);
   return withTxn((session) => bookOne(user, input, session));
 }
 
@@ -108,6 +115,7 @@ export async function createReservation(user: UserHydrated, input: BookingItem) 
  */
 export async function createReservationsBatch(user: UserHydrated, items: BookingItem[]) {
   if (user.status !== 'ACTIVE') throw Forbidden('Tài khoản chưa được kích hoạt', 'ACCOUNT_INACTIVE');
+  await assertNoSettlementDebt(user);
   if (items.length === 0) throw Unprocessable('Giỏ hàng trống');
   if (items.length > 10) throw Unprocessable('Chỉ đặt tối đa 10 kho một lần');
   const unitIds = new Set(items.map((i) => i.unitId));

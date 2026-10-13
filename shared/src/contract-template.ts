@@ -100,6 +100,7 @@ export const DEFAULT_CONTRACT_CLAUSES: readonly ContractTemplateClause[] = [
       '{{khoan_tien_thue_ky_dau}}',
       'Các kỳ sau thanh toán theo từng {{don_vi}} vào đầu mỗi kỳ — không phải trả trước toàn bộ thời hạn. Bên thuê cũng có thể gia hạn và trả trước thêm.',
       'Quá hạn thanh toán quá {{an_han_ngay}} ngày bị tính phí trễ; quá {{khoa_sau_ngay}} ngày bị khoá truy cập.',
+      'Khi trả kho, nếu chi phí hư hại và công nợ lớn hơn tiền giữ chân thì Bên thuê phải thanh toán phần còn thiếu; chưa thanh toán xong thì chưa được đặt kho mới.',
     ],
   },
   {

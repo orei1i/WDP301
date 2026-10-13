@@ -41,7 +41,8 @@ export default function HomeScreen() {
     .filter((r) => r.status === 'CONFIRMED' || r.status === 'ALLOCATED')
     .sort((a, b) => a.startDate.localeCompare(b.startDate));
   const pending = db.reservations.filter((r) => r.status === 'PENDING');
-  const contracts = db.contracts.filter((c) => OPEN_CONTRACT_STATUSES.includes(c.status));
+  // Hợp đồng đã đóng mà còn nợ sau quyết toán (hư hại + công nợ vượt tiền giữ chân) vẫn phải hiện để khách thấy và trả.
+  const contracts = db.contracts.filter((c) => OPEN_CONTRACT_STATUSES.includes(c.status) || (c.status === 'CLOSED' && c.balance.outstanding > 0));
 
   const overdueTotal = contracts.reduce((s, c) => s + c.balance.outstanding, 0);
 
@@ -62,7 +63,7 @@ export default function HomeScreen() {
               <Ionicons name="alert-circle" size={20} color={C.red} />
               <Text style={{ flex: 1, color: C.red, fontWeight: '600' }}>Đang có công nợ {vnd(overdueTotal)}</Text>
             </View>
-            <Muted style={{ marginTop: 6 } as never}>Thanh toán sớm để tránh bị khoá truy cập kho.</Muted>
+            <Muted style={{ marginTop: 6 } as never}>{contracts.some((c) => c.status === 'CLOSED') ? 'Gồm khoản nợ còn lại sau quyết toán hợp đồng đã đóng — trả xong mới đặt kho mới được.' : 'Thanh toán sớm để tránh bị khoá truy cập kho.'}</Muted>
           </Card>
         )}
 

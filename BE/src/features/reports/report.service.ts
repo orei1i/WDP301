@@ -47,11 +47,12 @@ export async function revenueByMonth(facilityIds: (string | Types.ObjectId)[], m
 /** Open-contract MRR, overdue balance and aging buckets. */
 export async function receivables(facilityIds: (string | Types.ObjectId)[]) {
   const [row] = await RentalContractModel.aggregate([
-    { $match: { facilityId: { $in: oid(facilityIds) }, status: { $ne: 'CLOSED' } } },
+    // Hợp đồng đang mở + hợp đồng đã đóng còn nợ sau quyết toán (nợ vẫn là khoản phải thu, nhưng không tính vào số hợp đồng / MRR).
+    { $match: { facilityId: { $in: oid(facilityIds) }, $or: [{ status: { $nin: ['CLOSED', 'ABANDONED'] } }, { status: 'CLOSED', 'balance.outstanding': { $gt: 0 } }] } },
     { $group: {
       _id: null,
-      activeContracts: { $sum: 1 },
-      mrr: { $sum: '$billing.rate' },
+      activeContracts: { $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 0, 1] } },
+      mrr: { $sum: { $cond: [{ $eq: ['$status', 'CLOSED'] }, 0, '$billing.rate'] } },
       overdue: { $sum: '$balance.outstanding' },
       delinquent: { $sum: { $cond: [{ $in: ['$status', ['DELINQUENT', 'LOCKED_OUT']] }, 1, 0] } },
       d1_7: { $sum: { $cond: [{ $and: [{ $gte: ['$delinquency.daysOverdue', 1] }, { $lte: ['$delinquency.daysOverdue', 7] }] }, '$balance.outstanding', 0] } },

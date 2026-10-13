@@ -122,7 +122,7 @@ export async function runBilling() {
       } else if (c.delinquency) {
         c.delinquency.daysOverdue = days;
       }
-      if (c.status === 'DELINQUENT' && days >= c.terms.lockoutAfterDays) {
+      if (c.status === 'DELINQUENT' && days > c.terms.lockoutAfterDays) { // "quá N ngày" đúng như lời văn hợp đồng
         const fixed = policy.lateFees.find((f) => f.kind === 'FIXED');
         if (fixed?.value) {
           await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'LATE_FEE', amount: fixed.value, status: 'PENDING', method: 'BANK_TRANSFER', idempotencyKey: `lock-${c._id}-${c.billing.paidThrough.toISOString().slice(0, 10)}` }, session);

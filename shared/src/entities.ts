@@ -414,6 +414,8 @@ export interface InspectionLog<I = ID, D = string> extends BaseEntity<I, D> {
   totalDamageFee: number;
   depositSettlement?: {
     depositHeld: number; deductions: number; refundAmount: number;
+    /** Phần chi phí hư hại + công nợ VƯỢT tiền giữ chân — khách còn nợ sau khi đóng hợp đồng (nằm ở contract.balance.outstanding). */
+    shortfall?: number;
     refundPaymentId?: I | null; damagePaymentId?: I | null; approvedBy?: I | null; approvedAt?: D | null;
     /** Chỉ có khi trả kho SỚM (trước endDate của kỳ hạn) — % thời gian kỳ hạn đã dùng và trần hoàn cọc theo đó. */
     /** `discountClawback`: phần ưu đãi thuê dài hạn bị thu hồi (đã trừ vào tiền giữ chân) vì mới dùng `usedPeriods` kỳ. */

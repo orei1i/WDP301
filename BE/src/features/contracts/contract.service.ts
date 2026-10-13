@@ -71,11 +71,15 @@ export async function payBalance(user: UserHydrated, id: string, method: Payment
 
     c.balance = { outstanding: 0, lastPaymentAt: now };
     c.delinquency = null;
-    c.billing.paidThrough = addDays(c.billing.nextBillingDate, -1);
-    c.access.suspendedAt = null;
-    if (c.status === 'DELINQUENT' || c.status === 'LOCKED_OUT') c.transitionTo('ACTIVE', { actor: 'SYSTEM', by: user._id, reason: 'Đã thanh toán đủ công nợ' });
+    // Hợp đồng ĐÃ ĐÓNG chỉ còn khoản nợ sau quyết toán: thu tiền, không đụng tới kỳ thuê / quyền truy cập / ô kho
+    // (ô đó có thể đã cho người khác thuê).
+    if (c.status !== 'CLOSED') {
+      c.billing.paidThrough = addDays(c.billing.nextBillingDate, -1);
+      c.access.suspendedAt = null;
+      if (c.status === 'DELINQUENT' || c.status === 'LOCKED_OUT') c.transitionTo('ACTIVE', { actor: 'SYSTEM', by: user._id, reason: 'Đã thanh toán đủ công nợ' });
+    }
     await c.save({ session });
-    await StorageUnitModel.updateOne({ _id: c.unitId }, { $set: { overlockActive: false } }, { session });
+    await StorageUnitModel.updateOne({ _id: c.unitId, currentContractId: c._id }, { $set: { overlockActive: false } }, { session });
     await audit({ action: 'payment.balance', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { amount, method } } }, session);
     return { contract: c, amount };
   });
@@ -86,7 +90,9 @@ export async function lockout(user: UserHydrated, id: string) {
   return withTxn(async (session) => {
     const c = await loadContract(id, session);
     await assertFacility(user, c.facilityId, 'contract.lockout');
-    if ((c.delinquency?.daysOverdue ?? 0) <= c.terms.gracePeriodDays) throw Unprocessable(`Chỉ khóa truy cập khi quá hạn hơn ${c.terms.gracePeriodDays} ngày (thời gian ân hạn)`);
+    // Hợp đồng khách đã ký ghi "quá {lockoutAfterDays} ngày bị khoá truy cập" — khoá tay cũng phải theo đúng mốc đó,
+    // không được khoá sớm ngay sau thời gian ân hạn.
+    if ((c.delinquency?.daysOverdue ?? 0) <= c.terms.lockoutAfterDays) throw Unprocessable(`Theo hợp đồng, chỉ khóa truy cập khi quá hạn hơn ${c.terms.lockoutAfterDays} ngày (hiện ${c.delinquency?.daysOverdue ?? 0} ngày)`, 'LOCKOUT_TOO_EARLY');
     c.transitionTo('LOCKED_OUT', { actor: user.role, by: user._id, reason: 'Khóa do quá hạn' });
     c.delinquency!.lockedOutAt = new Date();
     c.access.suspendedAt = new Date();
@@ -116,6 +122,32 @@ export async function waiveLateFees(user: UserHydrated, id: string, reason: stri
     await c.save({ session });
     await audit({ action: 'payment.waiver', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason, changes: { after: { amount: total } } }, session);
     return { contract: c, amount: total };
+  });
+}
+
+// ---------------------------------------------------------------- xoá nợ còn lại sau quyết toán (FM / OPS trong hạn mức)
+/**
+ * Hợp đồng đã đóng mà chi phí hư hại + công nợ vượt tiền giữ chân thì khách còn nợ phần chênh. Không thu được (khách
+ * mất liên lạc, số tiền nhỏ…) thì quản lý xoá nợ — bắt buộc ghi lý do, trong hạn mức miễn giảm của vai trò, có nhật ký.
+ */
+export async function writeOffDebt(user: UserHydrated, id: string, reason: string) {
+  return withTxn(async (session) => {
+    const c = await loadContract(id, session);
+    await assertFacility(user, c.facilityId, 'payment.write_off');
+    if (c.status !== 'CLOSED') throw Unprocessable('Chỉ xoá nợ còn lại của hợp đồng đã đóng — hợp đồng đang mở thì thu nợ hoặc miễn phí trễ hạn');
+    const amount = c.balance.outstanding;
+    if (amount <= 0) throw Unprocessable('Hợp đồng không còn nợ');
+    const policy = await effectivePolicy(c.facilityId, session);
+    const limit = policy.waiverLimits.find((w) => w.role === user.role)?.maxAmount ?? 0;
+    if (amount > limit) throw Forbidden(`Vượt hạn mức miễn giảm của bạn (${limit.toLocaleString('vi-VN')} ₫) — cần cấp cao hơn duyệt`, 'WAIVER_LIMIT');
+
+    const now = new Date();
+    await PaymentModel.updateMany({ contractId: c._id, direction: 'CHARGE', status: 'PENDING' }, { $set: { status: 'CANCELLED' }, $push: { statusHistory: { from: 'PENDING', to: 'CANCELLED', at: now, by: user._id, reason: 'Xoá nợ sau quyết toán' } } }, { session });
+    await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'WAIVER', amount, status: 'SUCCEEDED', method: 'INTERNAL', waiver: { approvedBy: user._id, reason } }, session);
+    c.balance.outstanding = 0;
+    await c.save({ session });
+    await audit({ action: 'payment.write_off', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason, changes: { after: { amount } } }, session);
+    return { contract: c, amount };
   });
 }
 
@@ -279,8 +311,11 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     if (!unit || unit.status !== 'PENDING_INSPECTION') throw Unprocessable('Kho chưa ở trạng thái chờ kiểm tra — hãy xác nhận nhận lại kho trước');
 
     const damageFee = input.damages.reduce((s, d) => s + d.cost, 0);
-    const normalDeductions = Math.min(c.deposit.amount, damageFee + c.balance.outstanding);
+    const owed = damageFee + c.balance.outstanding;
+    const normalDeductions = Math.min(c.deposit.amount, owed);
     let refundAmount = c.deposit.amount - normalDeductions;
+    // Chi phí hư hại + công nợ VƯỢT tiền giữ chân: không xoá, ghi thành khoản nợ còn lại sau quyết toán.
+    const shortfall = owed - normalDeductions;
 
     // Trả kho SỚM (trước endDate của kỳ hạn hiện tại) bị áp trần hoàn cọc theo % thời gian đã dùng —
     // trả đúng/quá hạn là move-out bình thường, không bị phạt thêm. Mốc xét là ngày khách THỰC TẾ bàn giao kho
@@ -328,18 +363,23 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const [inspection] = await InspectionModel.create([{
       _id: inspectionId, facilityId: c.facilityId, unitId: unit._id, contractId: c._id, type: 'MOVE_OUT', status: 'APPROVED',
       inspectorId: user._id, performedAt: now, checklist: input.checklist, damages: input.damages, outcome, notes: input.notes,
-      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now, earlyTermination },
+      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, shortfall, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now, earlyTermination },
     }], { session });
 
     // Outstanding charges are settled from the deposit
     await PaymentModel.updateMany({ contractId: c._id, direction: 'CHARGE', status: 'PENDING' }, { $set: { status: 'CANCELLED' }, $push: { statusHistory: { from: 'PENDING', to: 'CANCELLED', at: now, reason: 'Cấn trừ vào tiền cọc' } } }, { session });
+
+    // Phần còn thiếu: một khoản phải thu riêng, chờ khách trả (online hoặc tại quầy) hay quản lý xoá nợ có lý do.
+    if (shortfall > 0) {
+      await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'SETTLEMENT_DEBT', amount: shortfall, status: 'PENDING', method: 'BANK_TRANSFER', idempotencyKey: `settlement-debt-${c._id}` }, session);
+    }
 
     c.transitionTo('CLOSED', { actor: user.role, by: user._id });
     c.closedAt = now;
     c.moveOut = { requestedAt: c.moveOut?.requestedAt ?? now, scheduledFor: c.moveOut?.scheduledFor ?? null, returnedOn, completedAt: now, inspectionId };
     c.deposit.refundedAmount = refundAmount;
     c.deposit.status = refundAmount === c.deposit.amount ? 'REFUNDED' : refundAmount === 0 ? 'FORFEITED' : 'PARTIALLY_REFUNDED';
-    c.balance.outstanding = 0;
+    c.balance.outstanding = shortfall;
     c.delinquency = null;
     await c.save({ session });
 
@@ -352,7 +392,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const r = await ReservationModel.findById(c.reservationId).session(session);
     if (r && r.status === 'CHECKED_IN') { r.transitionTo('COMPLETED', { actor: 'SYSTEM' }); await r.save({ session }); }
 
-    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome, discountClawback: clawback } } }, session);
+    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome, discountClawback: clawback, shortfall } } }, session);
     return { inspection, contract: c };
   });
 }
