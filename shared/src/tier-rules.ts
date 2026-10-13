@@ -1,4 +1,4 @@
-import type { UnitCategory } from './enums';
+import type { RentalPeriod, UnitCategory } from './enums';
 
 /**
  * Quy tắc "tiền giữ chân" theo CỠ KHO — MỘT nguồn cho BE (tính báo giá), web và app (hiện lịch thanh toán)
@@ -23,3 +23,11 @@ export const LARGE_TIER_TERMS: TierTerms = { depositPeriods: 2, firstPeriodAtBoo
 const BY_CATEGORY: Partial<Record<UnitCategory, TierTerms>> = { LARGE: LARGE_TIER_TERMS, XL: LARGE_TIER_TERMS };
 
 export const tierTermsOf = (category: UnitCategory): TierTerms => BY_CATEGORY[category] ?? STANDARD_TIER_TERMS;
+
+/**
+ * Chu kỳ thuê theo CỠ KHO: kho nhỏ (Locker, S, M) thuê được theo ngày / tuần / tháng; kho cỡ lớn (L, XL) CHỈ thuê theo tháng —
+ * dọn một kho lớn tốn công, không hợp với thuê vài ngày. BE chặn khi đặt chỗ; web và app làm mờ lựa chọn ngày / tuần.
+ */
+export const isMonthOnly = (category: UnitCategory): boolean => category === 'LARGE' || category === 'XL';
+export const allowsRentalPeriod = (category: UnitCategory, period: RentalPeriod): boolean => period === 'MONTH' || !isMonthOnly(category);
+export const MONTH_ONLY_MESSAGE = 'Kho cỡ lớn (L, XL) chỉ cho thuê theo tháng';

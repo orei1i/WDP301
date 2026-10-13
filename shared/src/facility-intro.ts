@@ -36,7 +36,7 @@ export type IntroIcon = 'camera' | 'key' | 'snow' | 'contract' | 'calendar' | 's
 /** Chỉ nêu những gì hệ thống thật sự có — không hứa bảo hiểm hay ra vào 24/7 (giờ ra vào lấy theo chi nhánh). */
 export const INTRO_HIGHLIGHTS: readonly { icon: IntroIcon; title: string; text: string }[] = [
   { icon: 'camera', title: 'Camera lối đi 24/7', text: 'Lối đi và khu vực chung được giám sát liên tục; bên trong ô kho không lắp camera.' },
-  { icon: 'key', title: 'Khoá riêng từng ô', text: 'Chọn ô mở bằng mật khẩu, thẻ từ hoặc chìa khoá. Mất thẻ, quên mã thì xin cấp lại ngay trong tài khoản.' },
+  { icon: 'key', title: 'Khoá riêng từng ô', text: 'Chọn ô mở bằng ổ khoá mật khẩu (tự đặt, tự đổi mật khẩu trên ổ khoá), thẻ từ hoặc chìa khoá. Mất thẻ, mất chìa thì xin cấp lại ngay trong tài khoản.' },
   { icon: 'snow', title: 'Điều hòa tuỳ chọn', text: 'Ô kho có sẵn máy lạnh; bật thì tính phụ phí điều hòa, tắt thì không mất phí.' },
   { icon: 'contract', title: 'Đặt và ký hợp đồng online', text: 'Xem giá, chọn đúng ô trên sơ đồ, thanh toán và ký hợp đồng điện tử — không cần đến quầy trước.' },
   { icon: 'calendar', title: 'Trả tiền theo từng kỳ', text: 'Thuê theo ngày, tuần hoặc tháng; thuê dài hạn được giảm giá. Không phải trả trước cả thời hạn.' },

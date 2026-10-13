@@ -16,9 +16,30 @@
 // 1.4 (12/10/2026): Điều 5 — đăng ký người được uỷ quyền; Điều 10 — thu hồi ưu đãi thuê dài hạn khi trả kho sớm;
 //                   Điều 11 — không đến nhận kho thì đặt chỗ tự hủy.
 // 1.5 (13/10/2026): Điều 10 — giới hạn mức hoàn tiền giữ chân khi trả kho sớm chỉ áp cho hợp đồng có ưu đãi thuê dài hạn; mốc tính là ngày thực tế bàn giao kho; thuê theo ngày / tuần trả trọn tiền thuê cả thời hạn khi nhận kho, không hoàn kỳ chưa dùng; gia hạn là cam kết mới (giá niêm yết hiện hành, ưu đãi theo số tháng gia hạn, trả theo tháng); hết hạn không gia hạn thì tính giá chưa ưu đãi.
-export const TERMS_VERSION = '1.5';
+// 1.6 (14/10/2026): Điều 5 — ô khoá mật khẩu là khoá vật lý, khách tự đổi mật khẩu trên ổ khoá, hệ thống không đặt lại mật khẩu;
+//                   gia hạn được lập thành Phụ lục hợp đồng, xác nhận điện tử.
+export const TERMS_VERSION = '1.6';
 export const PRIVACY_VERSION = '1.0';
 /** Ngày áp dụng Điều khoản (bản TERMS_VERSION). */
-export const TERMS_EFFECTIVE = '13/10/2026';
+export const TERMS_EFFECTIVE = '14/10/2026';
 /** Ngày áp dụng Chính sách bảo mật (bản PRIVACY_VERSION). */
 export const LEGAL_EFFECTIVE = '16/09/2026';
+
+/**
+ * BÊN A (Bên cho thuê) trên mọi hợp đồng và phụ lục — pháp nhân vận hành hệ thống KhoAn.
+ *
+ * ⚠ ĐIỀN THÔNG TIN THẬT CỦA DOANH NGHIỆP VÀO ĐÂY trước khi dùng hợp đồng với khách thật: tên theo Giấy chứng nhận đăng ký
+ * doanh nghiệp, mã số doanh nghiệp, địa chỉ trụ sở chính và người đại diện theo pháp luật. Trường nào để trống thì hợp đồng in
+ * "(đang cập nhật)" — một hợp đồng thiếu các thông tin này vẫn giao kết được nhưng khó chứng minh tư cách chủ thể khi tranh chấp.
+ * Người ký thay Bên A trên từng hợp đồng là Quản lý chi nhánh (theo uỷ quyền) — hệ thống tự điền theo chi nhánh.
+ */
+export const LESSOR = {
+  legalName: 'CÔNG TY TNHH KHOAN',
+  brand: 'KhoAn',
+  taxCode: '',
+  headOffice: '',
+  legalRepresentative: '',
+  legalRepresentativeTitle: 'Giám đốc',
+  phone: '',
+  email: '',
+} as const;

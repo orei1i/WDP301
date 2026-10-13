@@ -94,6 +94,8 @@ export interface ExtensionQuote {
   currentRate: number;
   /** Phải trả ngay khi gia hạn: 0 với thuê tháng (trả theo từng tháng), trọn kỳ gia hạn với thuê ngày / tuần. */
   payNow: number;
+  /** Phụ lục gia hạn khách sẽ xác nhận (bản xem trước, đúng nguyên văn sẽ được lưu). */
+  appendix?: { number: number; title: string; clauses: { title: string; paragraphs: string[]; bullets: string[] }[] };
 }
 
 /** Một kỳ cam kết của hợp đồng (kỳ gốc hoặc một lần gia hạn) — xem RentalContract.commitments. */

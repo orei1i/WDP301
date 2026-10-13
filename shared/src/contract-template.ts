@@ -47,6 +47,7 @@ export const CONTRACT_VARIABLES: readonly ContractVariableInfo[] = [
   { key: 'thoi_han', label: 'Thời hạn thuê', kind: 'VALUE', required: true, example: '3 tháng' },
   { key: 'ngay_ket_thuc', label: 'Ngày kết thúc dự kiến', kind: 'VALUE', required: false, example: '12/01/2027' },
   { key: 'don_vi', label: 'Đơn vị kỳ thuê (ngày / tuần / tháng)', kind: 'VALUE', required: false, example: 'tháng' },
+  { key: 'dai_dien_ben_a', label: 'Người đại diện Bên A ký hợp đồng (quản lý chi nhánh)', kind: 'VALUE', required: false, example: 'Bùi Thanh Tùng — Quản lý chi nhánh' },
   { key: 'gia_thue', label: 'Giá thuê mỗi kỳ', kind: 'VALUE', required: true, example: '990.000 ₫' },
   { key: 'tien_thue_moi_ky', label: 'Tiền thuê thực trả mỗi kỳ (sau phụ phí, ưu đãi)', kind: 'VALUE', required: false, example: '891.000 ₫' },
   { key: 'tien_giu_chan', label: 'Số tiền giữ chân', kind: 'VALUE', required: false, example: '990.000 ₫' },
@@ -76,7 +77,15 @@ export const DEFAULT_CONTRACT_CLAUSES: readonly ContractTemplateClause[] = [
     paragraphs: ['Hợp đồng này được giao kết trên cơ sở tự nguyện, bình đẳng của hai bên, căn cứ Bộ luật Dân sự năm 2015 (các quy định về hợp đồng thuê tài sản và về đặt cọc), Luật Giao dịch điện tử năm 2023 và Luật Bảo vệ quyền lợi người tiêu dùng năm 2023.'],
     bullets: [],
   },
-  { key: 'cac-ben', title: 'Các bên', numbered: true, paragraphs: ['Bên cho thuê: {{ben_cho_thue}}.', 'Bên thuê: {{ben_thue}}.'], bullets: [] },
+  {
+    key: 'cac-ben', title: 'Các bên', numbered: true,
+    paragraphs: [
+      'BÊN A — BÊN CHO THUÊ: {{ben_cho_thue}}.',
+      'BÊN B — BÊN THUÊ: {{ben_thue}}.',
+      'Trong hợp đồng này và các phụ lục kèm theo, Bên A còn được gọi là "Bên cho thuê", Bên B còn được gọi là "Bên thuê". Bên B cam đoan thông tin về mình nêu trên là đúng và mình có đầy đủ năng lực hành vi dân sự để giao kết hợp đồng này.',
+    ],
+    bullets: [],
+  },
   {
     key: 'doi-tuong', title: 'Đối tượng và mục đích thuê', numbered: true,
     paragraphs: [
@@ -118,7 +127,8 @@ export const DEFAULT_CONTRACT_CLAUSES: readonly ContractTemplateClause[] = [
   {
     key: 'dien-tu', title: 'Giao kết bằng phương thức điện tử', numbered: true, paragraphs: [],
     bullets: [
-      'Hợp đồng này được lập và ký trực tuyến trên hệ thống KhoAn. Bên thuê ký bằng cách vẽ chữ ký hoặc gõ họ tên trên tài khoản đã đăng nhập của chính mình; nhân viên của Bên cho thuê không ký thay Bên thuê.',
+      'Hợp đồng này được lập và ký trực tuyến trên hệ thống KhoAn. Bên B (Bên thuê) tự ký bằng cách vẽ chữ ký hoặc gõ họ tên trên tài khoản đã đăng nhập của chính mình; nhân viên của Bên A không ký thay Bên B.',
+      'Bên A (Bên cho thuê) giao kết hợp đồng thông qua hệ thống KhoAn do chính Bên A vận hành: việc hệ thống chấp nhận đặt chỗ, nhận tiền giữ chân và phát hành hợp đồng này là sự chấp nhận giao kết của Bên A, do người đại diện nêu tại Điều 1 chịu trách nhiệm thực hiện. Bên A không ký tay trên văn bản; xác nhận điện tử của hệ thống kèm thời điểm ký được in tại phần chữ ký.',
       'Hệ thống ghi nhận họ tên người ký, hình thức ký, thời điểm ký, phiên bản Điều khoản thuê kho và phiên bản chính sách áp dụng. Hai bên thừa nhận các dữ liệu này là chứng cứ về việc giao kết, và hợp đồng điện tử này có giá trị pháp lý như hợp đồng bằng văn bản giấy.',
       'Mọi thao tác thực hiện từ tài khoản của Bên thuê (đặt chỗ, thanh toán, ký, hủy) được coi là do Bên thuê thực hiện. Bên thuê có trách nhiệm bảo mật tài khoản và thông báo ngay cho Bên cho thuê khi nghi ngờ tài khoản bị người khác sử dụng.',
       'Sau khi ký, bản hợp đồng (PDF) được gửi tới email của Bên thuê và luôn tải lại được trong tài khoản. Hợp đồng có hiệu lực từ thời điểm Bên thuê ký.',

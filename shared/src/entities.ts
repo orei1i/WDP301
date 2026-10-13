@@ -253,7 +253,11 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
    * hạn tính theo số tháng của CHÍNH kỳ đó (`discountAmount`), `rate` = `gross` − `discountAmount` là tiền thuê mỗi kỳ. Ngoài mọi
    * kỳ cam kết (hết hạn mà không gia hạn) thì tính theo `gross` của kỳ gần nhất, không còn ưu đãi. Hợp đồng cũ không có mảng này.
    */
-  commitments?: { kind: 'INITIAL' | 'RENEWAL'; startDate: D; endDate: D; periods: number; gross: number; discountAmount: number; rate: number; policyId?: I | null; at?: D }[];
+  commitments?: {
+    kind: 'INITIAL' | 'RENEWAL'; startDate: D; endDate: D; periods: number; gross: number; discountAmount: number; rate: number; policyId?: I | null; at?: D;
+    /** Phụ lục gia hạn khách đã xác nhận điện tử cho kỳ này — lưu NGUYÊN VĂN lúc xác nhận (chỉ có ở kỳ RENEWAL). */
+    appendix?: { number: number; title: string; acceptedAt: D; signerName: string; termsVersion: string; clauses: { title: string; paragraphs: string[]; bullets: string[] }[] } | null;
+  }[];
   /**
    * Lịch sử đổi ô kho (A1). Chỉ đổi được sang ô CÙNG loại (unitTypeId không đổi), nên
    * billing.monthlyRate và deposit giữ nguyên theo hợp đồng đã ký — đổi ô không phải là định giá lại.

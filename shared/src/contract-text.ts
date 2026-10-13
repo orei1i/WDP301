@@ -2,7 +2,7 @@ import type { AccessMethod, RentalPeriod } from './enums';
 import type { BusinessPolicy, PriceQuote } from './entities';
 import { fmtDate, vnd } from './format';
 import { ACCESS_METHOD, PERIOD_UNIT, periodLabel } from './labels';
-import { TERMS_VERSION } from './legal';
+import { LESSOR, TERMS_VERSION } from './legal';
 import { abandonDaysOf, earlyTerminationOf } from './policy-defaults';
 import { hasTermCommitment } from './duration';
 import { pickDiscount, type DiscountTier } from './duration';
@@ -20,6 +20,12 @@ export interface ContractTextInput {
   facilityName: string;
   facilityAddress?: string | null;
   customerName: string;
+  /** Thông tin nhận diện Bên B in trên hợp đồng (đều tuỳ chọn — thiếu thì bỏ qua dòng đó). */
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  customerIdLast4?: string | null;
+  /** Người đại diện Bên A trên hợp đồng này: quản lý chi nhánh (theo uỷ quyền). Thiếu thì ghi người đại diện theo pháp luật. */
+  lessorRepresentative?: string | null;
   unitTypeName: string;
   unitNumber?: string | null;
   floor?: number | null;
@@ -43,6 +49,36 @@ export interface ContractTextInput {
 }
 
 export type ContractClause = RenderedClause;
+
+const orPending = (v: string | null | undefined) => (v && v.trim() ? v.trim() : '(đang cập nhật)');
+
+/** Người đại diện Bên A trên một hợp đồng: quản lý chi nhánh theo uỷ quyền; không có thì người đại diện theo pháp luật. */
+export function lessorRepresentativeLine(branchManager?: string | null): string {
+  if (branchManager && branchManager.trim()) return `${branchManager.trim()} — Quản lý chi nhánh (theo uỷ quyền của người đại diện theo pháp luật)`;
+  return `${orPending(LESSOR.legalRepresentative)} — ${LESSOR.legalRepresentativeTitle} (người đại diện theo pháp luật)`;
+}
+
+/** Dòng mô tả đầy đủ BÊN A: pháp nhân, mã số doanh nghiệp, trụ sở, chi nhánh thực hiện hợp đồng, người đại diện. */
+export function partyALine(i: { facilityName: string; facilityAddress?: string | null; lessorRepresentative?: string | null }): string {
+  return [
+    `${LESSOR.legalName} (thương hiệu ${LESSOR.brand})`,
+    `mã số doanh nghiệp: ${orPending(LESSOR.taxCode)}`,
+    `trụ sở chính: ${orPending(LESSOR.headOffice)}`,
+    `chi nhánh thực hiện hợp đồng: ${i.facilityName}${i.facilityAddress ? `, ${i.facilityAddress}` : ''}`,
+    ...(LESSOR.phone ? [`điện thoại: ${LESSOR.phone}`] : []),
+    `người đại diện: ${lessorRepresentativeLine(i.lessorRepresentative)}`,
+  ].join('; ');
+}
+
+/** Dòng mô tả BÊN B: họ tên và các thông tin nhận diện khách đã khai trong tài khoản. */
+export function partyBLine(i: { customerName: string; customerIdLast4?: string | null; customerPhone?: string | null; customerEmail?: string | null }): string {
+  return [
+    i.customerName,
+    ...(i.customerIdLast4 ? [`giấy tờ tùy thân có 4 số cuối ${i.customerIdLast4}`] : []),
+    ...(i.customerPhone ? [`điện thoại: ${i.customerPhone}`] : []),
+    ...(i.customerEmail ? [`email (cũng là tài khoản dùng để ký): ${i.customerEmail}`] : []),
+  ].join('; ');
+}
 
 /** Các điều có từ Điều khoản v1.2 — hợp đồng đã ký bản cũ (và không có bản lưu nguyên văn) không hiện điều khoản khách chưa từng thấy. */
 const ACK_CLAUSE_SINCE = '1.2';
@@ -137,8 +173,9 @@ export function contractVariables(i: ContractTextInput): ContractVariableValues 
 
   return {
     values: {
-      ben_cho_thue: `KhoAn — ${i.facilityName}${i.facilityAddress ? `, ${i.facilityAddress}` : ''}`,
-      ben_thue: i.customerName,
+      ben_cho_thue: partyALine(i),
+      ben_thue: partyBLine(i),
+      dai_dien_ben_a: lessorRepresentativeLine(i.lessorRepresentative),
       doi_tuong: unitBits,
       dieu_hoa: i.useAirConditioning ? 'có sử dụng (tính phụ phí điều hòa nhiệt độ nêu tại Điều 4)' : 'không sử dụng (không tính phụ phí)',
       ngay_bat_dau: fmtDate(i.startDate),
@@ -201,14 +238,14 @@ const SAMPLE_POLICY: ContractTextInput['policy'] = {
 /** Hai hợp đồng mẫu để XEM TRƯỚC khi soạn mẫu: kho thường (có điều hòa + ưu đãi) và kho cỡ lớn (trả tiền thuê kỳ đầu lúc đặt). */
 export const SAMPLE_CONTRACT_INPUTS: Record<'STANDARD' | 'LARGE', ContractTextInput> = {
   STANDARD: {
-    code: 'RSV-MẪU', facilityName: 'KhoAn Quận 7', facilityAddress: '88 Nguyễn Thị Thập, Quận 7', customerName: 'Nguyễn Văn A',
+    code: 'RSV-MẪU', facilityName: 'KhoAn Quận 7', facilityAddress: '88 Nguyễn Thị Thập, Quận 7', customerName: 'Nguyễn Văn A', customerPhone: '0901 234 567', customerEmail: 'khach@example.com', customerIdLast4: '4821', lessorRepresentative: 'Bùi Thanh Tùng',
     unitTypeName: 'Phòng S', unitNumber: 'S1-08', floor: 1, zone: 'Khu Thẻ khoá', areaM2: 3, accessMethod: 'RFID_CARD', useAirConditioning: true,
     rentalPeriod: 'MONTH', periods: 3, startDate: '2026-11-01T00:00:00.000Z', endDate: '2027-02-01T00:00:00.000Z',
     quote: { rate: 990_000, surchargeAmount: 99_000, discountAmount: 108_900, firstPeriodRent: 980_100, depositAmount: 1_089_000, policyVersion: 3, appliedRuleCodes: ['CLIMATE', 'DAI_HAN_3'], depositPeriods: 1, firstPeriodAtBooking: false },
     depositPaid: false, policy: SAMPLE_POLICY,
   },
   LARGE: {
-    code: 'RSV-MẪU', facilityName: 'KhoAn Quận 7', facilityAddress: '88 Nguyễn Thị Thập, Quận 7', customerName: 'Nguyễn Văn A',
+    code: 'RSV-MẪU', facilityName: 'KhoAn Quận 7', facilityAddress: '88 Nguyễn Thị Thập, Quận 7', customerName: 'Nguyễn Văn A', customerPhone: '0901 234 567', customerEmail: 'khach@example.com', customerIdLast4: '4821', lessorRepresentative: 'Bùi Thanh Tùng',
     unitTypeName: 'Phòng L', unitNumber: 'L2-13', floor: 2, zone: 'Khu Mật khẩu', areaM2: 12, accessMethod: 'PIN', useAirConditioning: false,
     rentalPeriod: 'MONTH', periods: 1, startDate: '2026-11-01T00:00:00.000Z', endDate: '2026-12-01T00:00:00.000Z',
     quote: { rate: 3_200_000, surchargeAmount: 0, discountAmount: 0, firstPeriodRent: 3_200_000, depositAmount: 6_400_000, policyVersion: 3, appliedRuleCodes: [], depositPeriods: 2, firstPeriodAtBooking: true },
