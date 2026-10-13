@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Camera, Clock, Info, MapPin, Phone, ShoppingCart, Snowflake, Trash2 } from 'lucide-react';
 import type { BusinessPolicy, CheckInShift, Facility, PriceQuote, RentalPeriod, UnitType } from '@ssm/shared';
-import { AccessMethod, buildPaymentSchedule, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, periodLabel, STAFF_SHIFTS, surchargeLines, withPolicyDefaults } from '@ssm/shared';
+import { AccessMethod, allowsRentalPeriod, isMonthOnly, buildPaymentSchedule, dueAtBooking, dueAtCheckIn, enumValues, paymentAckText, periodLabel, STAFF_SHIFTS, surchargeLines, withPolicyDefaults } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, UNIT_CATEGORY } from '@/shared/lib/labels';
@@ -166,15 +166,18 @@ export default function FacilityDetail() {
               {types.map((t) => {
                 const a = t.availability;
                 const selected = t._id === typeId;
+                // Kho cỡ lớn chỉ thuê theo tháng: đang chọn thuê ngày / tuần thì làm mờ, không cho chọn.
+                const periodOff = !allowsRentalPeriod(t.category, period);
                 return (
                   <li key={t._id}>
-                    <button type="button" disabled={a.available === 0} onClick={() => setTypeId(t._id)} className={cx('flex w-full flex-wrap items-center gap-4 px-5 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60', selected ? 'bg-brand-50' : 'hover:bg-stone-50')}>
+                    <button type="button" disabled={a.available === 0 || periodOff} onClick={() => setTypeId(t._id)} title={periodOff ? 'Kho cỡ lớn chỉ cho thuê theo tháng' : undefined} className={cx('flex w-full flex-wrap items-center gap-4 px-5 py-4 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60', selected ? 'bg-brand-50' : 'hover:bg-stone-50')}>
                       <span className={cx('grid size-5 place-items-center rounded-full border-2', selected ? 'border-brand-600' : 'border-stone-300')}>{selected && <span className="size-2.5 rounded-full bg-brand-600" />}</span>
                       <div className="min-w-0 flex-1">
                         <p className="font-medium">{t.name} <span className="font-normal text-stone-500">· {t.dimensions.widthM}×{t.dimensions.depthM}×{t.dimensions.heightM} m ({t.areaM2} m²)</span></p>
                         <p className="mt-0.5 text-sm text-stone-500">{t.description}</p>
                         <div className="mt-2 flex flex-wrap gap-1.5">
                           <Badge>{UNIT_CATEGORY[t.category]}</Badge>
+                          {isMonthOnly(t.category) && <Badge tone={periodOff ? 'amber' : 'gray'}>Chỉ thuê theo tháng</Badge>}
                           {t.minPeriods > 1 && <Badge tone="gray">Tối thiểu {periodLabel(period, t.minPeriods)}</Badge>}
                           {t.quote.firstPeriodAtBooking && <Badge tone="amber">Giữ chân {periodLabel(period, t.quote.depositPeriods ?? 1)} + trả {PERIOD_UNIT[period]} đầu khi đặt</Badge>}
                           {picked.some((p) => p.typeId === t._id) && <Badge tone="violet">Đã chọn {picked.filter((p) => p.typeId === t._id).length} ô</Badge>}
@@ -192,6 +195,24 @@ export default function FacilityDetail() {
               })}
             </ul>
           </Card>
+
+          {services.length > 0 && (
+            <Card className="p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-base font-semibold">Dịch vụ thêm tại chi nhánh</h3>
+                <p className="text-xs text-stone-500">Tuỳ chọn — đặt trong tài khoản sau khi nhận kho, không bắt buộc khi đặt chỗ.</p>
+              </div>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {services.map((s) => (
+                  <li key={s._id} className="flex flex-col rounded-xl bg-stone-50 p-3.5 ring-1 ring-inset ring-stone-200">
+                    <p className="text-sm font-semibold">{s.name}</p>
+                    {s.description && <p className="mt-1 flex-1 text-xs leading-relaxed text-stone-500">{s.description}</p>}
+                    <p className="mt-2 text-sm font-semibold tabular-nums text-brand-700">{vnd(s.price)}<span className="text-xs font-normal text-stone-500"> / {s.unitLabel}</span></p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
 
           {ut && (
             <Card className="p-5">
@@ -222,7 +243,8 @@ export default function FacilityDetail() {
                 <input type="date" className={inputCls} min={todayISO().slice(0, 10)} max={addDays(todayISO(), 60).slice(0, 10)} value={start} onChange={(e) => setStart(e.target.value)} />
               </Field>
               <Field label="Bạn sẽ gửi trong bao lâu?">
-                <DurationPicker period={period} periods={periods} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(n); }} />
+                <DurationPicker period={period} periods={periods} discounts={detail?.policy.discounts ?? []} onChange={(p, n) => { setPeriod(p); setPeriods(n); }}
+                  monthOnly={(!!ut && isMonthOnly(ut.category)) || picked.some((p) => { const t = types.find((x) => x._id === p.typeId); return !!t && isMonthOnly(t.category); })} />
               </Field>
               {ut?.acEligible && (
                 <Field label="Điều hòa" hint="Ô kho loại này có sẵn máy lạnh. Bật: cộng phụ phí điều hòa (tiền điện và vận hành máy lạnh) vào tiền thuê mỗi kỳ của mọi ô đã chọn có máy lạnh. Tắt: không mất phí này.">
@@ -305,20 +327,6 @@ export default function FacilityDetail() {
                 <div className="flex justify-between font-medium"><dt>Tiền thuê mỗi {PERIOD_UNIT[period]}</dt><dd className="tabular-nums">{vnd(q.firstPeriodRent)}</dd></div>
                 <div className="flex justify-between"><dt className="text-stone-500">Tổng giá trị {periodLabel(period, periods)} <span className="text-xs">(trả từng {PERIOD_UNIT[period]})</span></dt><dd className="tabular-nums">{vnd(q.firstPeriodRent * periods)}</dd></div>
               </dl>
-            </Card>
-          )}
-          {services.length > 0 && (
-            <Card className="p-5">
-              <h3 className="text-sm font-semibold">Dịch vụ thêm sau khi thuê</h3>
-              <p className="mt-1 text-xs text-stone-500">Tuỳ chọn, đặt trong tài khoản khi đã nhận kho — giá riêng của chi nhánh này.</p>
-              <ul className="mt-3 divide-y divide-stone-100 text-sm">
-                {services.map((s) => (
-                  <li key={s._id} className="flex items-start justify-between gap-3 py-2">
-                    <div><p className="font-medium">{s.name}</p>{s.description && <p className="text-xs text-stone-500">{s.description}</p>}</div>
-                    <p className="shrink-0 tabular-nums">{vnd(s.price)}<span className="text-xs text-stone-500"> / {s.unitLabel}</span></p>
-                  </li>
-                ))}
-              </ul>
             </Card>
           )}
           <p className="flex items-center gap-1.5 px-1 text-xs text-stone-500"><Camera className="size-3.5" />Chính sách áp dụng: phiên bản v{policy.version} ({policy.scope === 'FACILITY' ? 'riêng chi nhánh' : 'toàn chuỗi'})</p>

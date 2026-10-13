@@ -101,7 +101,6 @@ export default function Policies() {
               <h4 className="mb-3 text-sm font-semibold">Phí cấp lại phương tiện vào kho</h4>
               <p className="-mt-1 mb-3 text-xs text-stone-500">Khách trả khi gửi yêu cầu; bị từ chối hoặc huỷ thì hoàn đủ. 0 = miễn phí.</p>
               <div className="grid gap-4 sm:grid-cols-3">
-                {num('feePin', 'Đặt lại mật khẩu', undefined, '₫')}
                 {num('feeCard', 'Làm lại thẻ khoá', undefined, '₫')}
                 {num('feeKey', 'Cấp lại chìa khoá', undefined, '₫')}
               </div>

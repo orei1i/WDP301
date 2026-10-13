@@ -120,7 +120,7 @@ function CheckInInner() {
                       <Field label="Hình thức truy cập (theo loại kho)">
                         <div className="flex items-center gap-2 rounded-lg bg-stone-50 px-3 py-2.5 text-sm ring-1 ring-inset ring-stone-200">
                           <KeyRound className="size-4 text-stone-500" />{ACCESS_METHOD[method]}
-                          {method === 'PIN' && <span className="text-xs text-stone-500">· hệ thống tự sinh mã PIN</span>}
+                          {method === 'PIN' && <span className="text-xs text-stone-500">· hệ thống sinh mật khẩu ban đầu để đặt lên ổ khoá; khách tự đổi trên ổ khoá sau đó</span>}
                         </div>
                       </Field>
                       {method !== 'PIN' && <Field label={method === 'PHYSICAL_KEY' ? 'Mã chìa khoá' : 'Số thẻ khoá'}><input className={inputCls} value={keyTag} onChange={(e) => setKeyTag(e.target.value)} placeholder={method === 'PHYSICAL_KEY' ? `K-${unitLabel(db, r.unitId)}` : 'RF-000123'} /></Field>}

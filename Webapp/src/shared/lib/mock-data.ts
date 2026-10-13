@@ -3,7 +3,7 @@ import type {
   PaymentTransaction, RentalContract, RentalPeriod, Reservation, ReservationStatus, ServiceOffering, ServiceOrder, StorageUnit, SupportTicket,
   UnitCategory, UnitStatus, UnitSwapRequest, UnitType, User,
 } from '@ssm/shared';
-import { ACCESS_METHOD, TERMS_VERSION, pickDiscount, tierTermsOf } from '@ssm/shared';
+import { ACCESS_METHOD, TERMS_VERSION, isMonthOnly, pickDiscount, prepaidPeriodsOf, tierTermsOf } from '@ssm/shared';
 import { addDays, addMonths, addPeriods, todayISO } from './format'; // đường dẫn tương đối: BE/src/scripts/seed.ts dùng lại file này, ngoài tầm alias @/ của Webapp
 
 export interface DB {
@@ -254,6 +254,7 @@ export function createSeed(): DB {
       appliedRuleCodes: [...(surchargeAmount ? ['CLIMATE'] : []), ...(picked ? [picked.tier.code] : [])],
       firstPeriodRent, totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
       depositPeriods: tier.depositPeriods, firstPeriodAtBooking: tier.firstPeriodAtBooking,
+      prepaidPeriods: prepaidPeriodsOf(period, periods), // thuê ngày / tuần trả trọn cả thời hạn khi nhận kho
       policyId: ut.facilityId === 'f-td' ? 'pol-td-1' : 'pol-g-3', policyVersion: ut.facilityId === 'f-td' ? 1 : 3,
     };
   };
@@ -290,13 +291,15 @@ export function createSeed(): DB {
     const customer = isDemoM || isDemoLocker ? DEMO_IDS.customer : pool[poolIdx++ % pool.length]._id;
 
     // Khách tự chọn chu kỳ lúc đặt — demo M / demo locker cố định THÁNG cho dễ theo dõi khi test.
-    const period: RentalPeriod = isDemoM || isDemoLocker ? 'MONTH' : pick(['DAY', 'WEEK', 'MONTH'] as const);
+    // Kho cỡ lớn (L, XL) chỉ thuê theo tháng — xem tier-rules.ts.
+    const period: RentalPeriod = isDemoM || isDemoLocker || isMonthOnly(ut.category) ? 'MONTH' : pick(['DAY', 'WEEK', 'MONTH'] as const);
     const addP = (iso: string, n: number) => addPeriods(iso, period, n);
     // Số chu kỳ + độ lùi ngày tạo hợp đồng tùy chu kỳ, để kho thuê theo ngày không sinh hàng trăm kỳ tiền thuê.
     const term = period === 'MONTH' ? pick([3, 6, 12]) : period === 'WEEK' ? pick([2, 4, 8]) : pick([5, 10, 20]);
     const backMax = period === 'MONTH' ? 420 : period === 'WEEK' ? 60 : 25;
     const start = addDays(T, -int(12, backMax));
-    let end = addP(start, term);
+    const initialEnd = addP(start, term);
+    let end = initialEnd;
     const renewals: RentalContract['renewals'] = [];
     while (end <= addDays(T, 4)) {
       const next = addP(end, term);
@@ -354,7 +357,9 @@ export function createSeed(): DB {
 
     contracts.push({
       ...base(cid, start), contractNumber: makeCode('CTR'), facilityId: u.facilityId, customerId: customer, unitId: u._id, unitTypeId: ut._id,
-      reservationId: rid, status, startDate: start, endDate: end, autoRenew: period === 'MONTH' && term >= 6, useAirConditioning: useAc,
+      reservationId: rid, status, startDate: start, endDate: end, autoRenew: false, useAirConditioning: useAc,
+      // Các kỳ cam kết nối tiếp: kỳ gốc + từng lần gia hạn (mỗi lần gia hạn cùng số kỳ nên cùng bậc ưu đãi).
+      commitments: [{ previousEndDate: start, newEndDate: initialEnd }, ...renewals].map((x, i) => ({ kind: i === 0 ? 'INITIAL' as const : 'RENEWAL' as const, startDate: x.previousEndDate, endDate: x.newEndDate, periods: term, gross: q.rate + q.surchargeAmount, discountAmount: q.discountAmount, rate: q.firstPeriodRent, policyId: q.policyId, at: x.previousEndDate })),
       billing: { currency: 'VND', rentalPeriod: period, rate: q.firstPeriodRent, nextBillingDate: nextBilling, paidThrough },
       deposit: { amount: q.depositAmount, status: 'HELD', paymentId: deposit._id, refundedAmount: 0 },
       balance: { outstanding: overdueDays ? q.firstPeriodRent + lateFee : 0, lastPaymentAt: addDays(paidThrough, -28) },
@@ -377,7 +382,7 @@ export function createSeed(): DB {
     const ut = typeOf(`ut-${fid.slice(2)}-${key}`);
     const id = nid('rsv');
     const start = addDays(T, startOffset);
-    const period = pick(['DAY', 'WEEK', 'MONTH'] as const);
+    const period: RentalPeriod = isMonthOnly(ut.category) ? 'MONTH' : pick(['DAY', 'WEEK', 'MONTH'] as const);
     // Ô cụ thể được giữ ngay từ PENDING (khách chọn trên sơ đồ lúc đặt) — chỉ CANCELLED là không giữ
     // (đã nhả lại trong thực tế). Hết ô trống cho ALLOCATED thì hạ xuống CONFIRMED — model bắt buộc
     // ALLOCATED phải có unitId, còn CONFIRMED thì không.
@@ -660,7 +665,7 @@ export function createSeed(): DB {
   const [pinA] = byMethod('PIN');
   const [cardA, cardB] = byMethod('RFID_CARD');
   const [keyA] = byMethod('PHYSICAL_KEY');
-  if (pinA) makeAccessRequest(pinA, 'DONE', 12, 'Quên mật khẩu');
+  void pinA; // ổ khoá mật khẩu là khoá vật lý, khách tự đổi trên ổ khoá — không còn yêu cầu đặt lại mật khẩu
   if (cardA) makeAccessRequest(cardA, 'REQUESTED', 1, 'Làm mất thẻ khoá');
   if (cardB) makeAccessRequest(cardB, 'REJECTED', 5, 'Thẻ bị cong', 'Thẻ vẫn quẹt được, vui lòng ra quầy kiểm tra trực tiếp');
   if (keyA) makeAccessRequest(keyA, 'APPROVED', 2, 'Làm mất chìa khoá');

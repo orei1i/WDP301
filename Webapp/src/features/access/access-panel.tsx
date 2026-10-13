@@ -19,6 +19,9 @@ const REASONS: Record<AccessRequestType, string[]> = {
 interface AccessInfo { method: AccessMethod; keyTag: string | null; suspended: boolean; pin: string | null; reason: 'NOT_STORED' | 'SUSPENDED' | 'NOT_PIN' | null }
 
 /**
+ * Ô khoá mật khẩu là khoá số VẬT LÝ: khách tự đổi mật khẩu ngay trên ổ khoá, hệ thống chỉ giữ mật khẩu BAN ĐẦU lúc bàn giao
+ * và không có luồng "đặt lại mật khẩu".
+ *
  * Phương tiện vào kho của khách trên web — cùng nội dung với màn "Mã vào kho" của app: xem mật khẩu (ô khoá mật khẩu),
  * số thẻ / mã chìa, nhật ký mở kho hộ, và xin cấp lại khi quên / mất. Yêu cầu cấp lại cần Quản lý chi nhánh xác nhận;
  * có phí thì trả khi gửi, bị từ chối hoặc huỷ trước khi hoàn tất thì được hoàn đủ.
@@ -61,7 +64,7 @@ export function AccessPanel({ c }: { c: RentalContract }) {
   return (
     <div className="space-y-5 text-sm">
       <section>
-        <p className="font-semibold">{lock === 'PIN' ? 'Mật khẩu mở kho' : lock === 'RFID_CARD' ? 'Thẻ khoá' : 'Chìa khoá'}</p>
+        <p className="font-semibold">{lock === 'PIN' ? 'Mật khẩu ban đầu của ổ khoá' : lock === 'RFID_CARD' ? 'Thẻ khoá' : 'Chìa khoá'}</p>
         <p className="text-xs text-stone-500">Hình thức khoá: {ACCESS_METHOD[lock]}</p>
         {error && <p className="mt-2 text-red-700">{error}</p>}
         {!info && !error && <p className="mt-2 text-stone-500">Đang tải…</p>}
@@ -72,12 +75,12 @@ export function AccessPanel({ c }: { c: RentalContract }) {
               <p className={cx('rounded-lg bg-stone-100 px-4 py-2 font-mono text-xl tracking-[0.35em]', reveal && 'select-all')}>{reveal ? info.pin : '••••••'}</p>
               <Button size="sm" variant="secondary" onClick={() => setReveal((v) => !v)}>{reveal ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}{reveal ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}</Button>
             </div>
-            <p className="mt-1.5 text-xs text-stone-500">Mật khẩu tự ẩn sau 20 giây. Đừng chia sẻ cho người khác.</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-stone-500">Đây là mật khẩu nhân viên đặt lúc bàn giao kho (tự ẩn sau 20 giây). Ổ khoá là khoá số vật lý: <b>bạn tự đổi mật khẩu ngay trên ổ khoá</b> và nên đổi sau lần mở đầu tiên. Sau khi bạn đổi, hệ thống không biết mật khẩu mới — hãy tự ghi nhớ.</p>
           </div>
         ) : (
           <p className="mt-2 text-stone-600">{info.reason === 'SUSPENDED'
             ? 'Quyền vào kho đang bị tạm khoá do công nợ. Thanh toán công nợ để mở lại và xem mật khẩu.'
-            : 'Mật khẩu hiện chưa được lưu trong tài khoản (kho nhận từ trước). Hãy xin đặt lại mật khẩu bên dưới để nhận mật khẩu mới.'}</p>
+            : 'Ổ khoá là khoá số vật lý, bạn tự đặt và đổi mật khẩu ngay trên ổ khoá; hệ thống không lưu mật khẩu của ô này.'}</p>
         ))}
 
         {info && lock !== 'PIN' && (
@@ -92,11 +95,11 @@ export function AccessPanel({ c }: { c: RentalContract }) {
         )}
       </section>
 
-      {lock !== 'PIN' && (
+      {(
         <section className="border-t border-stone-100 pt-4">
-          <p className="font-semibold">Cần vào kho gấp?</p>
+          <p className="font-semibold">{lock === 'PIN' ? 'Quên mật khẩu?' : 'Cần vào kho gấp?'}</p>
           <p className="mt-1 text-xs leading-relaxed text-stone-600">
-            Đến quầy chi nhánh trong giờ hoạt động, mang giấy tờ tùy thân. Nhân viên xác minh danh tính rồi mở kho giúp bạn bằng {lock === 'RFID_CARD' ? 'thẻ tổng' : 'chìa tổng'} của chi nhánh —
+            Đến quầy chi nhánh trong giờ hoạt động, mang giấy tờ tùy thân. Nhân viên xác minh danh tính rồi {lock === 'PIN' ? 'mở và đặt lại ổ khoá để bạn tự đặt mật khẩu mới' : `mở kho giúp bạn bằng ${lock === 'RFID_CARD' ? 'thẻ tổng' : 'chìa tổng'} của chi nhánh`} —
             bạn có mặt khi mở, nhân viên không vào trong ô kho. Mỗi lần mở hộ đều được ghi lại bên dưới.
           </p>
           {opens.length === 0 ? <p className="mt-2 text-xs text-stone-500">Chưa có lần mở hộ nào.</p> : (
@@ -109,7 +112,7 @@ export function AccessPanel({ c }: { c: RentalContract }) {
         </section>
       )}
 
-      <section className="border-t border-stone-100 pt-4">
+      {lock !== 'PIN' && <section className="border-t border-stone-100 pt-4">
         <p className="font-semibold">{labels.title}</p>
         <p className="mt-1 text-xs leading-relaxed text-stone-600">
           Yêu cầu cần <b>Quản lý chi nhánh xác nhận</b>{type === 'PIN_RESET' ? '. Duyệt xong, mật khẩu mới hiện ngay ở trên.' : `. Duyệt xong, nhân viên chi nhánh sẽ làm và bàn giao ${labels.what} cho bạn tại quầy.`}
@@ -132,9 +135,9 @@ export function AccessPanel({ c }: { c: RentalContract }) {
             </Button>
           </div>
         )}
-      </section>
+      </section>}
 
-      <section className="border-t border-stone-100 pt-4">
+      {(lock !== 'PIN' || requests.length > 0) && <section className="border-t border-stone-100 pt-4">
         <p className="font-semibold">Yêu cầu của tôi</p>
         {requests.length === 0 ? <p className="mt-1 text-xs text-stone-500">Chưa có yêu cầu nào.</p> : (
           <ul className="mt-2 space-y-2">
@@ -151,7 +154,7 @@ export function AccessPanel({ c }: { c: RentalContract }) {
             ))}
           </ul>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

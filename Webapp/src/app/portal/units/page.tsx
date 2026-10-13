@@ -11,12 +11,12 @@ import { contractClawback, isValidPhone, MAX_AUTHORIZED_PERSONS, OPEN_CONTRACT_S
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { AccessPanel } from '@/features/access/access-panel';
-import { ExtensionQuoteSummary, useExtensionQuote } from '@/features/contracts/extension-quote';
+import { AppendixText, ExtensionQuoteSummary, useExtensionQuote } from '@/features/contracts/extension-quote';
 import { api } from '@/shared/api/client';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
 import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
-type Dialog = { kind: 'pay' | 'extend' | 'moveout' | 'swap' | 'authorized' | 'access'; c: RentalContract } | null;
+type Dialog = { kind: 'pay' | 'extend' | 'moveout' | 'swap' | 'authorized' | 'access' | 'appendix'; c: RentalContract } | null;
 const EMPTY_PERSON = { fullName: '', phone: '', idNumberLast4: '', relationship: '' };
 
 export default function MyUnits() {
@@ -25,6 +25,16 @@ export default function MyUnits() {
   const [method, setMethod] = useState<PaymentMethod>('VNPAY');
   const [periods, setPeriods] = useState(3);
   const ext = useExtensionQuote(dlg?.kind === 'extend' ? dlg.c._id : undefined, periods);
+  // Khách phải tick xác nhận Phụ lục gia hạn; đổi số kỳ (phụ lục khác) thì phải xác nhận lại.
+  const [agree, setAgree] = useState(false);
+  useEffect(() => { setAgree(false); }, [periods, dlg?.kind, dlg?.c._id]);
+  const downloadAppendix = async (c: RentalContract, n: number) => {
+    const blob = await api.blob(`/contracts/${c._id}/appendices/${n}.pdf`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `phu-luc-${String(n).padStart(2, '0')}-${c.contractNumber}.pdf`; a.click();
+    URL.revokeObjectURL(url);
+  };
   const [date, setDate] = useState(addDays(todayISO(), 3).slice(0, 10));
   const [swapCandidates, setSwapCandidates] = useState<FloorPlanUnit[] | null>(null);
   const [swapUnitId, setSwapUnitId] = useState<string | null>(null);
@@ -93,6 +103,7 @@ export default function MyUnits() {
                       <div className="mt-5 flex flex-wrap gap-2 border-t border-stone-100 pt-4">
                         {c.balance.outstanding > 0 && <Button size="sm" onClick={() => setDlg({ kind: 'pay', c })}>Thanh toán {vnd(c.balance.outstanding)}</Button>}
                         <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'access', c })}><KeyRound className="size-3.5" />Mã vào kho</Button>
+                        {(c.commitments ?? []).some((s) => s.appendix) && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'appendix', c })}>Phụ lục ({(c.commitments ?? []).filter((s) => s.appendix).length})</Button>}
                         {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'extend', c })}><RefreshCw className="size-3.5" />Gia hạn</Button>}
                         {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'moveout', c })}><PackageOpen className="size-3.5" />Đăng ký trả kho</Button>}
                         {c.status === 'ACTIVE' && !openSwap && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'swap', c })}><Repeat className="size-3.5" />Đổi ô kho</Button>}
@@ -129,13 +140,29 @@ export default function MyUnits() {
         {dlg?.c.status === 'LOCKED_OUT' && <p className="mt-3 text-sm text-stone-600">Sau khi thanh toán đủ, khóa chặn sẽ được gỡ và mã truy cập hoạt động lại.</p>}
       </Modal>
 
-      <Modal open={dlg?.kind === 'extend'} onClose={close} title="Gia hạn hợp đồng" description={dlg ? `Hết hạn hiện tại: ${fmtDate(dlg.c.endDate)}` : ''}
-        footer={<Button disabled={!ext.quote} onClick={() => dlg && ext.quote && void run('extendContract', { contractId: dlg.c._id, periods, method: ext.quote.payNow > 0 ? method : undefined },
+      <Modal open={dlg?.kind === 'appendix'} onClose={close} size="lg" title="Phụ lục hợp đồng" description={dlg ? `Hợp đồng ${dlg.c.contractNumber} — các phụ lục gia hạn bạn đã xác nhận` : ''}>
+        {dlg?.kind === 'appendix' && (
+          <div className="space-y-5">
+            {(dlg.c.commitments ?? []).filter((s) => s.appendix).map((s) => (
+              <div key={s.appendix!.number} className="rounded-xl p-4 ring-1 ring-inset ring-stone-200">
+                <AppendixText title={s.appendix!.title} clauses={s.appendix!.clauses} />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-stone-100 pt-3 text-xs text-stone-500">
+                  <span>Bên B xác nhận điện tử: <b className="text-ink">{s.appendix!.signerName}</b> · {fmtDate(s.appendix!.acceptedAt)} · Bên A xác nhận qua hệ thống KhoAn</span>
+                  <Button size="sm" variant="secondary" onClick={() => void downloadAppendix(dlg.c, s.appendix!.number)}>Tải PDF</Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
+
+      <Modal open={dlg?.kind === 'extend'} onClose={close} size="lg" title="Gia hạn hợp đồng" description={dlg ? `Hết hạn hiện tại: ${fmtDate(dlg.c.endDate)}` : ''}
+        footer={<Button disabled={!ext.quote || !agree} onClick={() => dlg && ext.quote && void run('extendContract', { contractId: dlg.c._id, periods, method: ext.quote.payNow > 0 ? method : undefined, acceptAppendix: agree },
           (v) => (v > 0 ? `Đã gia hạn ${periodLabel(dlg.c.billing.rentalPeriod, periods)} — thanh toán ${vnd(v)}` : `Đã gia hạn ${periodLabel(dlg.c.billing.rentalPeriod, periods)} — tiền thuê trả theo từng tháng`), () => close())}>{ext.quote && ext.quote.payNow > 0 ? 'Gia hạn & thanh toán' : 'Xác nhận gia hạn'}</Button>}>
         <Field label={dlg ? `Số ${PERIOD_UNIT[dlg.c.billing.rentalPeriod]} gia hạn` : 'Số chu kỳ gia hạn'}>
           <select className={inputCls} value={periods} onChange={(e) => setPeriods(Number(e.target.value))}>{[1, 3, 6, 12].map((m) => <option key={m} value={m}>{dlg ? periodLabel(dlg.c.billing.rentalPeriod, m) : m}</option>)}</select>
         </Field>
-        {dlg && <ExtensionQuoteSummary quote={ext.quote} error={ext.error} />}
+        {dlg && <ExtensionQuoteSummary quote={ext.quote} error={ext.error} accepted={agree} onAccept={setAgree} />}
         {ext.quote && ext.quote.payNow > 0 && <div className="mt-4"><PayMethodPicker value={method} onChange={setMethod} /></div>}
       </Modal>
 

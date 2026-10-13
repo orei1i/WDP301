@@ -33,8 +33,8 @@ export default function StaffAccessRequests() {
   const rows = tab === 'open' ? [...open].reverse() : all;
   const openDialog = (kind: NonNullable<Dialog>['kind'], req: AccessRequest) => { setText(''); setShowErr(false); setDlg({ kind, req }); };
 
-  // Chỉ ô khoá chìa / thẻ mới có chìa tổng, thẻ tổng; hợp đồng đang bị khoá do công nợ thì không mở hộ.
-  const openable = db.contracts.filter((c) => scope.facilityIds.includes(c.facilityId) && c.access.method !== 'PIN'
+  // Mọi hình thức khoá đều mở hộ được: chìa tổng, thẻ tổng, hoặc mở + đặt lại ổ khoá mật khẩu vật lý. Hợp đồng bị khoá do công nợ thì không.
+  const openable = db.contracts.filter((c) => scope.facilityIds.includes(c.facilityId)
     && ['ACTIVE', 'DELINQUENT', 'MOVE_OUT_PENDING'].includes(c.status) && !c.access.suspendedAt)
     .sort((a, b) => unitLabel(db, a.unitId).localeCompare(unitLabel(db, b.unitId)));
   const openLog = db.contracts.filter((c) => scope.facilityIds.includes(c.facilityId))
@@ -55,11 +55,11 @@ export default function StaffAccessRequests() {
 
   return (
     <>
-      <PageHeader title="Cấp lại mã / thẻ / chìa" description="Khách xin đặt lại mật khẩu, làm lại thẻ hoặc cấp lại chìa khoá. Quản lý chi nhánh duyệt; thẻ và chìa do nhân viên bàn giao rồi ghi số thẻ / mã chìa mới. Từ chối hoặc huỷ thì hoàn đủ phí." actions={<FacilityPicker scope={scope} />} />
+      <PageHeader title="Cấp lại mã / thẻ / chìa" description="Khách xin làm lại thẻ hoặc cấp lại chìa khoá (ô khoá mật khẩu là khoá vật lý — khách tự đổi mật khẩu trên ổ khoá, không cần yêu cầu). Quản lý chi nhánh duyệt; thẻ và chìa do nhân viên bàn giao rồi ghi số thẻ / mã chìa mới. Từ chối hoặc huỷ thì hoàn đủ phí." actions={<FacilityPicker scope={scope} />} />
       <Card className="mb-6 flex flex-wrap items-center justify-between gap-4 border-amber-200 bg-amber-50 p-5">
         <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 font-semibold text-amber-950"><DoorOpen className="size-4" />Khách cần mở kho gấp (mất chìa, mất thẻ)</p>
-          <p className="mt-1 text-sm leading-relaxed text-amber-900">Xác minh danh tính khách tại quầy, ghi nhận ở đây rồi mới dùng <b>chìa tổng / thẻ tổng</b> để mở — có mặt khách, không vào trong ô kho. Mỗi lần mở được ghi nhật ký và khách xem được. Ô khoá mật khẩu không có mã tổng: khách xem lại mã trong tài khoản hoặc xin đặt lại.</p>
+          <p className="flex items-center gap-2 font-semibold text-amber-950"><DoorOpen className="size-4" />Khách cần mở kho gấp (mất chìa, mất thẻ, quên mật khẩu ổ khoá)</p>
+          <p className="mt-1 text-sm leading-relaxed text-amber-900">Xác minh danh tính khách tại quầy, ghi nhận ở đây rồi mới dùng <b>chìa tổng / thẻ tổng</b> để mở — có mặt khách, không vào trong ô kho. Mỗi lần mở được ghi nhật ký và khách xem được. Ô khoá mật khẩu: mở và đặt lại ổ khoá vật lý để khách tự đặt mật khẩu mới ngay tại chỗ.</p>
         </div>
         <Button onClick={() => setOpenFor({ contractId: '', reason: '', verified: false, personId: '' })}><DoorOpen className="size-4" />Mở kho hộ khách</Button>
       </Card>
