@@ -7,10 +7,11 @@ import { useStore } from '@/shared/store/store';
 import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
 import { byId, earlyTerminationPreview, facilityName, typeName, unitLabel } from '@/shared/lib/domain';
 import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
-import { addPeriods, contractClawback, isValidPhone, MAX_AUTHORIZED_PERSONS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PERIOD_UNIT, paymentDueDate, periodLabel } from '@ssm/shared';
+import { contractClawback, isValidPhone, MAX_AUTHORIZED_PERSONS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PERIOD_UNIT, paymentDueDate, periodLabel } from '@ssm/shared';
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
 import { AccessPanel } from '@/features/access/access-panel';
+import { ExtensionQuoteSummary, useExtensionQuote } from '@/features/contracts/extension-quote';
 import { api } from '@/shared/api/client';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
 import { ContractFileActions } from '@/features/contracts/contract-file-actions';
@@ -23,6 +24,7 @@ export default function MyUnits() {
   const [dlg, setDlg] = useState<Dialog>(null);
   const [method, setMethod] = useState<PaymentMethod>('VNPAY');
   const [periods, setPeriods] = useState(3);
+  const ext = useExtensionQuote(dlg?.kind === 'extend' ? dlg.c._id : undefined, periods);
   const [date, setDate] = useState(addDays(todayISO(), 3).slice(0, 10));
   const [swapCandidates, setSwapCandidates] = useState<FloorPlanUnit[] | null>(null);
   const [swapUnitId, setSwapUnitId] = useState<string | null>(null);
@@ -128,12 +130,13 @@ export default function MyUnits() {
       </Modal>
 
       <Modal open={dlg?.kind === 'extend'} onClose={close} title="Gia hạn hợp đồng" description={dlg ? `Hết hạn hiện tại: ${fmtDate(dlg.c.endDate)}` : ''}
-        footer={<Button onClick={() => dlg && void run('extendContract', { contractId: dlg.c._id, periods, method }, (v) => `Đã gia hạn ${periodLabel(dlg.c.billing.rentalPeriod, periods)} — thanh toán ${vnd(v)}`, () => close())}>Gia hạn & thanh toán</Button>}>
+        footer={<Button disabled={!ext.quote} onClick={() => dlg && ext.quote && void run('extendContract', { contractId: dlg.c._id, periods, method: ext.quote.payNow > 0 ? method : undefined },
+          (v) => (v > 0 ? `Đã gia hạn ${periodLabel(dlg.c.billing.rentalPeriod, periods)} — thanh toán ${vnd(v)}` : `Đã gia hạn ${periodLabel(dlg.c.billing.rentalPeriod, periods)} — tiền thuê trả theo từng tháng`), () => close())}>{ext.quote && ext.quote.payNow > 0 ? 'Gia hạn & thanh toán' : 'Xác nhận gia hạn'}</Button>}>
         <Field label={dlg ? `Số ${PERIOD_UNIT[dlg.c.billing.rentalPeriod]} gia hạn` : 'Số chu kỳ gia hạn'}>
           <select className={inputCls} value={periods} onChange={(e) => setPeriods(Number(e.target.value))}>{[1, 3, 6, 12].map((m) => <option key={m} value={m}>{dlg ? periodLabel(dlg.c.billing.rentalPeriod, m) : m}</option>)}</select>
         </Field>
-        {dlg && <p className="mt-3 text-sm">Hạn mới: <b>{fmtDate(addPeriods(dlg.c.endDate, dlg.c.billing.rentalPeriod, periods))}</b> · Số tiền: <b>{vnd(dlg.c.billing.rate * periods)}</b></p>}
-        <div className="mt-4"><PayMethodPicker value={method} onChange={setMethod} /></div>
+        {dlg && <ExtensionQuoteSummary quote={ext.quote} error={ext.error} />}
+        {ext.quote && ext.quote.payNow > 0 && <div className="mt-4"><PayMethodPicker value={method} onChange={setMethod} /></div>}
       </Modal>
 
       <Modal open={dlg?.kind === 'access'} onClose={close} size="lg" title="Mã vào kho" description={dlg ? `Kho ${unitLabel(db, dlg.c.unitId)} · ${facilityName(db, dlg.c.facilityId)}` : ''}>
@@ -148,7 +151,7 @@ export default function MyUnits() {
         {dlg && (() => {
           const preview = earlyTerminationPreview(db, dlg.c, `${date}T00:00:00.000Z`);
           const rsv = byId(db.reservations, dlg.c.reservationId);
-          const claw = contractClawback(dlg.c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, `${date}T00:00:00.000Z`);
+          const claw = contractClawback(dlg.c, rsv?.quote, db.policies, `${date}T00:00:00.000Z`);
           return preview && (
             <div className={cx('mt-3 space-y-1.5 rounded-lg p-3 text-xs leading-relaxed', preview.refundCapPct === 0 ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-900')}>
               <p>
@@ -157,7 +160,7 @@ export default function MyUnits() {
               </p>
               {claw && (
                 <p>
-                  Thu hồi ưu đãi thuê dài hạn: bạn mới dùng {claw.usedPeriods} tháng nên chỉ được giảm {vnd(claw.entitledPerPeriod)}/tháng thay vì {vnd(rsv!.quote.discountAmount)}/tháng —
+                  Thu hồi ưu đãi thuê dài hạn: bạn mới dùng {claw.usedPeriods} tháng nên chỉ được giảm {vnd(claw.entitledPerPeriod)}/tháng thay vì {vnd(claw.discountPerPeriod)}/tháng —
                   phần đã hưởng vượt <strong>{vnd(claw.amount)}</strong> sẽ trừ vào tiền giữ chân được hoàn.
                 </p>
               )}

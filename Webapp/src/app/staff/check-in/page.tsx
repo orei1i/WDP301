@@ -4,7 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { CircleCheck, KeyRound, RefreshCw, ScanLine, Search, TriangleAlert, Undo2 } from 'lucide-react';
 import type { CheckInShift, PaymentMethod, Reservation } from '@ssm/shared';
-import { addPeriods, paymentDueDate, periodLabel } from '@ssm/shared';
+import { addPeriods, dueAtCheckIn, paymentDueDate, paysWholeTerm, periodLabel } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { api } from '@/shared/api/client';
 import { ACCESS_METHOD, CHECK_IN_SHIFT, PERIOD_UNIT, RESERVATION_STATUS } from '@/shared/lib/labels';
@@ -53,7 +53,7 @@ function CheckInInner() {
 
   const confirm = async () => {
     if (!r) return;
-    const res = await run('checkIn', { reservationId: r._id, keyTag: keyTag || undefined, payMethod: r.quote.firstPeriodAtBooking ? undefined : pay }, 'Nhận kho thành công — hợp đồng đã kích hoạt');
+    const res = await run('checkIn', { reservationId: r._id, keyTag: keyTag || undefined, payMethod: dueAtCheckIn(r.quote) > 0 ? pay : undefined }, 'Nhận kho thành công — hợp đồng đã kích hoạt');
     if (res.ok) setDone({ pin: res.value.pin, contract: res.value.contract.contractNumber, unit: res.value.unit.unitNumber });
   };
 
@@ -137,26 +137,27 @@ function CheckInInner() {
                             <dt>Tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">— kho cỡ lớn: khách đã trả cùng lúc đặt chỗ, KHÔNG thu lại</span></dt>
                             <dd className="shrink-0 tabular-nums text-emerald-700">{vnd(r.quote.firstPeriodRent)} · đã thu</dd>
                           </div>
-                        ) : (
+                        ) : null}
+                        {dueAtCheckIn(r.quote) > 0 && (
                           <div className="flex justify-between gap-4 border-t border-stone-200 pt-1.5 font-semibold">
-                            <dt>Thu hôm nay: tiền thuê {PERIOD_UNIT[r.quote.rentalPeriod]} đầu <span className="text-xs font-normal text-stone-500">(khoản riêng với tiền giữ chân)</span></dt>
-                            <dd className="shrink-0 tabular-nums">{vnd(r.quote.firstPeriodRent)}</dd>
+                            <dt>Thu hôm nay: {paysWholeTerm(r.quote) ? `tiền thuê cả thời hạn (${periodLabel(r.quote.rentalPeriod, r.periods)})` : `tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`} <span className="text-xs font-normal text-stone-500">(khoản riêng với tiền giữ chân{paysWholeTerm(r.quote) ? ' — thuê theo ngày / tuần trả trọn một lần' : ''})</span></dt>
+                            <dd className="shrink-0 tabular-nums">{vnd(dueAtCheckIn(r.quote))}</dd>
                           </div>
                         )}
                       </dl>
                       {(() => {
                         const grace = db.policies.find((p) => p._id === r.quote.policyId)?.gracePeriodDays;
-                        const next = addPeriods(todayISO(), r.quote.rentalPeriod, 1);
+                        const next = addPeriods(todayISO(), r.quote.rentalPeriod, Math.max(1, r.quote.prepaidPeriods ?? 1));
                         return (
                           <p className="mt-2 text-xs text-stone-500">
-                            {r.quote.firstPeriodAtBooking ? 'Hôm nay KHÔNG thu thêm khoản nào — khách đã trả đủ khi đặt chỗ.' : `Hôm nay chỉ thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu, không thu thêm khoản nào khác.`} Kỳ kế tiếp bắt đầu {fmtDate(next)}
+                            {dueAtCheckIn(r.quote) === 0 ? 'Hôm nay KHÔNG thu thêm khoản nào — khách đã trả đủ khi đặt chỗ.' : paysWholeTerm(r.quote) ? 'Hôm nay thu trọn tiền thuê của cả thời hạn; khách trả kho sớm không được hoàn các kỳ chưa dùng.' : `Hôm nay chỉ thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu, không thu thêm khoản nào khác.`} {paysWholeTerm(r.quote) ? 'Nếu hết thời hạn mà khách chưa trả kho, kỳ tính tiếp bắt đầu' : 'Kỳ kế tiếp bắt đầu'} {fmtDate(next)}
                             {grace !== undefined && <>, khách trả trước <b>{fmtDate(paymentDueDate(next, grace))}</b> (quá hạn bị tính phí trễ)</>}.
                           </p>
                         );
                       })()}
                     </div>
-                    {!r.quote.firstPeriodAtBooking && (
-                      <Field label={`Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
+                    {dueAtCheckIn(r.quote) > 0 && (
+                      <Field label={paysWholeTerm(r.quote) ? 'Hình thức thu tiền thuê cả thời hạn' : `Hình thức thu tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`}>
                         <PayMethodPicker value={pay} onChange={setPay} methods={['CASH', 'CARD', 'VNPAY', 'BANK_TRANSFER']} />
                       </Field>
                     )}

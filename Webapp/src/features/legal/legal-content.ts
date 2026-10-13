@@ -115,7 +115,9 @@ export const TERMS: LegalSection[] = [
   {
     heading: 'Điều 10. Chấm dứt hợp đồng',
     body: [
-      'Khách hàng chấm dứt trước hạn: hoàn tiền giữ chân theo bậc thời gian trong chính sách. Tiền thuê đã thanh toán cho kỳ đang sử dụng không được hoàn.',
+      'Khách hàng chấm dứt trước hạn: hợp đồng được giảm giá vì cam kết thuê dài hạn thì hoàn tiền giữ chân theo bậc thời gian trong chính sách (càng gần hết hạn càng được hoàn nhiều); hợp đồng không có ưu đãi đó thì hoàn đủ tiền giữ chân sau khi trừ hư hại và công nợ. Mốc tính là ngày thực tế bàn giao kho. Tiền thuê đã thanh toán cho kỳ đang sử dụng không được hoàn; tiền thuê trả trước khi gia hạn (thuê theo tháng) cho các tháng chưa bắt đầu tại ngày bàn giao kho được hoàn lại sau khi cấn trừ hư hại và công nợ.',
+      'Gia hạn hợp đồng là một cam kết thời hạn mới: giá thuê là giá niêm yết tại thời điểm gia hạn, ưu đãi thuê dài hạn tính theo số tháng gia hạn (không cộng dồn thời gian đã thuê), tiền thuê vẫn trả theo từng tháng và tiền giữ chân giữ nguyên. Hết hạn mà không gia hạn, khách hàng vẫn được tiếp tục thuê nhưng tiền thuê tính theo giá chưa trừ ưu đãi thuê dài hạn; KhoAn không tự động gia hạn cam kết thay khách hàng.',
+      'Thuê theo ngày hoặc theo tuần: tiền thuê của cả thời hạn được thanh toán trọn một lần khi nhận kho; trả kho trước hạn không hoàn tiền các ngày / tuần chưa dùng. Quá thời hạn đã đặt mà chưa trả kho thì tiền thuê tiếp tục được tính theo từng kỳ.',
       'Ưu đãi thuê dài hạn được áp dụng vì khách hàng cam kết thuê đủ thời hạn. Trả kho trước khi dùng đủ thời hạn đó, khách hàng chỉ được hưởng mức ưu đãi tương ứng với số tháng thực dùng; phần ưu đãi đã hưởng vượt mức bị thu hồi và trừ vào tiền giữ chân khi quyết toán. Cách tính ghi rõ trong hợp đồng.',
       'KhoAn chấm dứt ngay lập tức nếu khách hàng vi phạm Điều 4 hoặc cung cấp thông tin gian dối.',
     ],

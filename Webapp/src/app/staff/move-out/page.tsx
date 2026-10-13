@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ClipboardCheck, KeyRound, Plus, Trash2 } from 'lucide-react';
 import type { InspectionLog, ItemCondition, RentalContract } from '@ssm/shared';
-import { contractClawback } from '@ssm/shared';
+import { contractClawback, unusedPrepaidRent } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { INSPECTION_OUTCOME } from '@/shared/lib/labels';
 import { byId, earlyTerminationCap, settlementDateOf, typeName, unitLabel, userName } from '@/shared/lib/domain';
@@ -31,11 +31,18 @@ export default function MoveOutPage() {
   const earlyTermination = c ? earlyTerminationCap(db, c) : null;
   const normalRefund = c ? c.deposit.amount - Math.min(c.deposit.amount, damageTotal + c.balance.outstanding) : 0;
   // Hư hại + công nợ vượt tiền giữ chân: phần chênh thành khoản nợ còn lại sau quyết toán (cùng công thức với server).
-  const shortfall = c ? Math.max(0, damageTotal + c.balance.outstanding - c.deposit.amount) : 0;
+  const rawShortfall = c ? Math.max(0, damageTotal + c.balance.outstanding - c.deposit.amount) : 0;
+  // Tiền thuê khách trả trước khi gia hạn cho các kỳ chưa bắt đầu: cấn vào phần thiếu trước, còn lại hoàn cho khách (như server).
+  const unusedRent = c ? unusedPrepaidRent(c.billing.rentalPeriod, c.renewals.flatMap((x) => {
+    const p = x.paymentId ? db.payments.find((y) => y._id === x.paymentId) : undefined;
+    return p ? [{ key: p._id, previousEndDate: x.previousEndDate, periods: x.periods, amount: p.amount }] : [];
+  }), settlementDateOf(c)).total : 0;
+  const rentOffset = Math.min(unusedRent, rawShortfall);
+  const shortfall = rawShortfall - rentOffset;
   const cappedRefund = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
   // Thu hồi ưu đãi thuê dài hạn khi trả sớm — cùng công thức với server (shared), trừ vào phần tiền giữ chân còn lại.
   const rsv = c ? byId(db.reservations, c.reservationId) : undefined;
-  const claw = c && c.moveOut ? contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, settlementDateOf(c)) : null;
+  const claw = c && c.moveOut ? contractClawback(c, rsv?.quote, db.policies, settlementDateOf(c)) : null;
   const clawback = claw ? Math.min(cappedRefund, claw.amount) : 0;
   const refundAmount = cappedRefund - clawback;
 
@@ -150,9 +157,15 @@ export default function MoveOutPage() {
                           <dd className="tabular-nums">−{vnd(clawback)}</dd>
                         </div>
                       )}
-                      <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(refundAmount)}</dd></div>
+                      {unusedRent > 0 && (
+                        <div className="flex justify-between text-emerald-800">
+                          <dt>Tiền thuê trả trước của các kỳ gia hạn chưa dùng{rentOffset > 0 ? ` (cấn ${vnd(rentOffset)} vào phần vượt tiền giữ chân)` : ''}</dt>
+                          <dd className="tabular-nums">+{vnd(unusedRent - rentOffset)}</dd>
+                        </div>
+                      )}
+                      <div className="flex justify-between border-t border-stone-200 pt-1.5 font-semibold"><dt>Hoàn lại khách</dt><dd className="tabular-nums">{vnd(refundAmount + unusedRent - rentOffset)}</dd></div>
                     </dl>
-                    {damageTotal + c.balance.outstanding > c.deposit.amount && <p className="mt-2 text-xs text-amber-800">Chi phí vượt tiền giữ chân — phần chênh lệch cần thu thêm từ khách.</p>}
+                    {shortfall > 0 && <p className="mt-2 text-xs text-amber-800">Chi phí vượt tiền giữ chân — phần chênh lệch cần thu thêm từ khách.</p>}
                   </section>
                   <div className="flex justify-end gap-2">
                     <Button variant="secondary" onClick={() => setActive(null)}>Để sau</Button>

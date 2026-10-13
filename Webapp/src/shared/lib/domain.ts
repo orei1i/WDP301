@@ -1,6 +1,6 @@
 import type { BusinessPolicy, Facility, PriceQuote, RentalContract, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
-import { OPEN_CONTRACT_STATUSES, dueAtBooking, localMidnightMs, pickDiscount, tierTermsOf } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, dueAtBooking, exitCommitment, localMidnightMs, pickDiscount, prepaidPeriodsOf, tierTermsOf } from '@ssm/shared';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
 export class DomainError extends Error {
@@ -58,6 +58,7 @@ export function quote(db: DB, ut: UnitType, period: RentalPeriod, periods: numbe
     firstPeriodRent, totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
     depositPeriods: ut.depositOverride == null && policy.deposit.mode === 'PERIODS_OF_RENT' ? rentPeriods : 1,
     firstPeriodAtBooking: tier.firstPeriodAtBooking,
+    prepaidPeriods: prepaidPeriodsOf(period, periods),
     policyId: policy._id, policyVersion: policy.version,
     discountPct: picked?.tier.kind === 'PERCENT' ? picked.tier.value : 0, periods,
   };
@@ -96,10 +97,14 @@ export function elapsedTermPct(startDate: string, endDate: string, scheduledFor:
  * đúng/quá hạn (scheduledFor >= endDate) không bị phạt — trả về null. Cùng công thức với BE
  * (`earlyTerminationRefundPct` ở BE/src/features/policies/pricing.ts) để hai bên khớp nhau.
  */
-export function earlyTerminationPreview(db: DB, c: Pick<RentalContract, 'facilityId' | 'startDate' | 'endDate'>, scheduledForIso: string): { elapsedPct: number; refundCapPct: number } | null {
-  if (scheduledForIso >= c.endDate) return null;
-  const policy = effectivePolicy(db, c.facilityId);
-  const elapsedPct = elapsedTermPct(c.startDate, c.endDate, scheduledForIso);
+export function earlyTerminationPreview(db: DB, c: Pick<RentalContract, 'facilityId' | 'startDate' | 'endDate' | 'reservationId' | 'commitments'>, scheduledForIso: string): { elapsedPct: number; refundCapPct: number } | null {
+  // Chỉ hợp đồng có cam kết thời hạn (được giảm giá thuê dài hạn) mới bị giới hạn mức hoàn — như server.
+  // Kỳ cam kết đang dở tại ngày đó (kỳ gốc hoặc một lần gia hạn). Không trong kỳ nào, hoặc kỳ đó không có ưu đãi → không giới hạn.
+  const seg = exitCommitment(c, db.reservations.find((r) => r._id === c.reservationId)?.quote, scheduledForIso);
+  if (!seg || !(seg.discountAmount > 0)) return null;
+  // Bảng mức hoàn của chính sách ĐÃ CHỐT lúc cam kết — như server.
+  const policy = db.policies.find((p) => p._id === seg.policyId) ?? effectivePolicy(db, c.facilityId);
+  const elapsedPct = elapsedTermPct(seg.startDate, seg.endDate, scheduledForIso);
   const tier = [...policy.earlyTermination].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct).find((t) => elapsedPct <= t.maxElapsedPct);
   return { elapsedPct: Math.round(elapsedPct), refundCapPct: tier?.depositRefundPct ?? 0 };
 }
