@@ -254,7 +254,7 @@ export const API_GROUPS: Group[] = [
       },
       { method: 'POST', path: '/reservations/:id/unallocate', auth: R.FM, summary: 'Nhả ô đã gán, trả ô về AVAILABLE.' },
       {
-        method: 'POST', path: '/reservations/:id/check-in', auth: R.STAFF, summary: 'Nhận khách: tạo hợp đồng thuê, thu tiền thuê kỳ đầu, cấp quyền vào kho.',
+        method: 'POST', path: '/reservations/:id/check-in', auth: R.STAFF, summary: 'Nhận khách: tạo hợp đồng thuê, thu tiền thuê (thuê tháng: kỳ đầu; thuê NGÀY / TUẦN: trọn cả thời hạn — quote.prepaidPeriods), cấp quyền vào kho.',
         body: [
           { name: 'accessMethod', type: 'AccessMethod', required: true },
           { name: 'keyTag', type: 'string ≤40' },
@@ -280,7 +280,7 @@ export const API_GROUPS: Group[] = [
       },
       { method: 'GET', path: '/contracts/:id', auth: 'ANY', summary: 'Chi tiết hợp đồng + 50 giao dịch gần nhất.' },
       {
-        method: 'POST', path: '/contracts/:id/extend', auth: R.CUS, summary: 'Gia hạn thêm số tháng và thanh toán ngay.',
+        method: 'POST', path: '/contracts/:id/extend', auth: R.CUS, summary: 'Gia hạn = một kỳ cam kết mới (giá niêm yết hiện hành, ưu đãi theo số tháng gia hạn). Thuê tháng: không thu tiền, hoá đơn vẫn xuất từng tháng theo giá mới; thuê ngày / tuần: trả trọn kỳ gia hạn ngay (cần method). Xem trước bằng GET /contracts/:id/extension-quote.',
         body: [{ name: 'months', type: 'int 1..24', required: true }, { name: 'method', type: 'PaymentMethod (≠ INTERNAL)', required: true }],
       },
       {
@@ -298,11 +298,12 @@ export const API_GROUPS: Group[] = [
         method: 'POST', path: '/contracts/:id/move-out', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Đăng ký ngày trả kho (ngày HẸN). Tiền thuê vẫn được tính cho đến khi nhân viên nhận lại kho.',
         body: [{ name: 'date', type: 'date', required: true }],
       },
+      { method: 'GET', path: '/contracts/:id/extension-quote', auth: R.CUS, summary: 'Báo giá một lần gia hạn (query periods). Gia hạn là cam kết mới: giá niêm yết hiện hành của loại kho, ưu đãi theo số tháng GIA HẠN, thuê tháng không trả trước (payNow = 0), tiền giữ chân giữ nguyên.' },
       { method: 'POST', path: '/contracts/:id/write-off-debt', auth: ['FACILITY_MANAGER', 'OPS_MANAGER'], summary: 'Xoá nợ còn lại sau quyết toán của hợp đồng ĐÃ ĐÓNG (hư hại + công nợ vượt tiền giữ chân). Trong hạn mức miễn giảm của vai trò (403 WAIVER_LIMIT). Khách trả khoản này qua /pay-balance như công nợ thường.', body: [{ name: 'reason', type: 'string 5..500', required: true }] },
       { method: 'POST', path: '/contracts/:id/move-out/cancel', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Rút đăng ký trả kho, hợp đồng về lại ACTIVE. Chỉ khi kho CHƯA được bàn giao (422 ALREADY_RETURNED nếu nhân viên đã nhận lại).' },
       { method: 'POST', path: '/contracts/:id/receive', auth: R.STAFF, summary: 'Xác nhận đã nhận lại ô kho từ khách. Ghi moveOut.returnedOn = hôm nay — mốc quyết toán (trả sớm hay không, đã dùng bao lâu), không dùng ngày khách hẹn; từ đây ngừng tính tiền thuê.' },
       {
-        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng. Trả sớm: áp trần hoàn theo % kỳ hạn đã dùng, rồi THU HỒI ƯU ĐÃI thuê dài hạn vượt mức của số tháng thực dùng (khoản DISCOUNT_CLAWBACK, trừ vào tiền giữ chân; depositSettlement.earlyTermination.discountClawback).',
+        method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng. Hoàn tiền thuê trả trước của các kỳ gia hạn CHƯA bắt đầu (thuê tháng; cấn vào hư hại / công nợ trước — depositSettlement.prepaidRentRefund / prepaidRentOffset). Bảng mức hoàn lấy theo chính sách đã chốt lúc đặt (quote.policyId). Trả sớm (chỉ với hợp đồng có ưu đãi thuê dài hạn — hợp đồng ngắn / theo ngày / theo tuần không bị giới hạn): áp trần hoàn theo % kỳ hạn đã dùng, rồi THU HỒI ƯU ĐÃI thuê dài hạn vượt mức của số tháng thực dùng (khoản DISCOUNT_CLAWBACK, trừ vào tiền giữ chân; depositSettlement.earlyTermination.discountClawback).',
         body: [
           { name: 'checklist[]', type: '{ item, condition: ItemCondition, note? } ≤100', required: true },
           { name: 'damages[]', type: '{ description, severity: MINOR|MODERATE|SEVERE, cost, photoUrls[] } ≤50', required: true },

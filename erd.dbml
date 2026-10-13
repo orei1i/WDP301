@@ -301,6 +301,7 @@ Table rental_contracts {
   "access.method" access_method
   "access.key_tag" varchar
   "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash (select:false)']
+  commitments json [note: '[{kind INITIAL|RENEWAL, startDate, endDate, periods, gross, discountAmount, rate, policyId}] các kỳ cam kết nối tiếp: kỳ gốc + từng lần gia hạn, mỗi kỳ một giá; ngoài mọi kỳ thì tính gross (không ưu đãi)']
   authorized_persons json [note: '[{_id, fullName, phone, idNumberLast4, relationship, addedAt}] người được chủ hợp đồng uỷ quyền, tối đa 3']
   "move_out.returned_on" date [note: 'ngày khách THỰC TẾ bàn giao kho (nhân viên nhận lại) — mốc quyết toán, khác move_out.scheduled_for là ngày hẹn']
   "access.lost_reported_at" datetime [note: 'khách báo mất thẻ/chìa (yêu cầu cấp lại đang mở) — thẻ cũ bị vô hiệu tới khi bàn giao thẻ mới']
