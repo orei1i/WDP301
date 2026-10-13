@@ -62,7 +62,7 @@ export const CONTRACT_VARIABLES: readonly ContractVariableInfo[] = [
   { key: 'khoan_giu_chan', label: 'Khoản 1 — tiền giữ chân (số tiền, khi trả, khi hoàn)', kind: 'BLOCK', required: true, example: 'Khoản 1 — Tiền giữ chân (còn gọi là tiền cọc): 990.000 ₫, trả khi đặt chỗ…' },
   { key: 'khoan_tien_thue_ky_dau', label: 'Khoản 2 — tiền thuê kỳ đầu (trả khi đặt hay khi nhận kho)', kind: 'BLOCK', required: true, example: 'Khoản 2 — Tiền thuê tháng đầu: 891.000 ₫, thanh toán THÊM khi nhận kho…' },
   { key: 'muc_hoan_khi_huy', label: 'Các mức hoàn tiền khi hủy đặt chỗ', kind: 'BLOCK', required: true, example: 'Hủy trước ngày nhận kho từ 72 giờ (3 ngày) trở lên: hoàn 100%…' },
-  { key: 'muc_hoan_tra_som', label: 'Các mức hoàn tiền giữ chân khi trả kho sớm', kind: 'BLOCK', required: true, example: 'Trả kho sớm khi đã dùng đến 25% kỳ hạn: hoàn 100% tiền giữ chân…' },
+  { key: 'muc_hoan_tra_som', label: 'Các mức hoàn tiền giữ chân khi trả kho sớm', kind: 'BLOCK', required: true, example: 'Trả kho sớm khi đã dùng đến 25% kỳ hạn: hoàn 0% tiền giữ chân…' },
 ];
 
 /** Giá trị biến của một hợp đồng cụ thể (contract-text.ts tính từ đặt chỗ + chính sách). */

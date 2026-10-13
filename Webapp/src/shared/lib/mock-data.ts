@@ -133,9 +133,9 @@ export function createSeed(): DB {
       { minHoursBeforeStart: 0, depositRefundPct: 0 },
     ],
     earlyTermination: [
-      { maxElapsedPct: 25, depositRefundPct: 100 },
+      { maxElapsedPct: 25, depositRefundPct: 0 },
       { maxElapsedPct: 50, depositRefundPct: 50 },
-      { maxElapsedPct: 100, depositRefundPct: 0 },
+      { maxElapsedPct: 100, depositRefundPct: 100 },
     ],
     minPeriods: 1, maxPeriods: 36,
     surcharges: [{ code: 'CLIMATE', label: 'Kho điều hòa nhiệt độ', kind: 'PERCENT' as const, value: 10, categories: ['SMALL', 'MEDIUM', 'LARGE', 'XL'] as UnitCategory[] }],

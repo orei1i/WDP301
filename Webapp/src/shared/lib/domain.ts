@@ -83,7 +83,7 @@ export function cancellationRefund(db: DB, r: Reservation, nowIso = new Date().t
   return { pct, amount: Math.round((dueAtBooking(r.quote) * pct) / 100) };
 }
 
-/** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. Cùng công thức với BE. */
+/** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho, kẹp về [0, 100]. Cùng công thức với BE. */
 export function elapsedTermPct(startDate: string, endDate: string, scheduledFor: string) {
   const span = new Date(endDate).getTime() - new Date(startDate).getTime();
   if (span <= 0) return 100;
@@ -104,8 +104,14 @@ export function earlyTerminationPreview(db: DB, c: Pick<RentalContract, 'facilit
   return { elapsedPct: Math.round(elapsedPct), refundCapPct: tier?.depositRefundPct ?? 0 };
 }
 
+/**
+ * Ngày dùng để quyết toán: ngày khách THỰC TẾ bàn giao kho (server ghi `returnedOn` khi nhân viên nhận lại);
+ * chưa bàn giao thì tạm tính theo hôm nay. KHÔNG dùng ngày khách tự hẹn — cùng quy tắc với BE.
+ */
+export const settlementDateOf = (c: Pick<RentalContract, 'moveOut'>) => c.moveOut?.returnedOn ?? todayISO();
+
 export function earlyTerminationCap(db: DB, c: RentalContract): { elapsedPct: number; refundCapPct: number } | null {
-  return c.moveOut?.scheduledFor ? earlyTerminationPreview(db, c, c.moveOut.scheduledFor) : null;
+  return c.moveOut ? earlyTerminationPreview(db, c, settlementDateOf(c)) : null;
 }
 
 export function facilityStats(db: DB, facilityId: string) {

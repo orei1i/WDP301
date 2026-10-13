@@ -6,7 +6,7 @@ import type { InspectionLog, ItemCondition, RentalContract } from '@ssm/shared';
 import { contractClawback } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
 import { INSPECTION_OUTCOME } from '@/shared/lib/labels';
-import { byId, earlyTerminationCap, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { byId, earlyTerminationCap, settlementDateOf, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, StatusBadge, Table, cx, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
@@ -33,7 +33,7 @@ export default function MoveOutPage() {
   const cappedRefund = c ? (earlyTermination ? Math.min(normalRefund, Math.round((c.deposit.amount * earlyTermination.refundCapPct) / 100)) : normalRefund) : 0;
   // Thu hồi ưu đãi thuê dài hạn khi trả sớm — cùng công thức với server (shared), trừ vào phần tiền giữ chân còn lại.
   const rsv = c ? byId(db.reservations, c.reservationId) : undefined;
-  const claw = c && c.moveOut?.scheduledFor ? contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, c.moveOut.scheduledFor) : null;
+  const claw = c && c.moveOut ? contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, settlementDateOf(c)) : null;
   const clawback = claw ? Math.min(cappedRefund, claw.amount) : 0;
   const refundAmount = cappedRefund - clawback;
 
@@ -132,7 +132,7 @@ export default function MoveOutPage() {
                       {c.balance.outstanding > 0 && <div className="flex justify-between"><dt className="text-stone-500">Công nợ còn lại</dt><dd className="tabular-nums">−{vnd(c.balance.outstanding)}</dd></div>}
                       {earlyTermination && (
                         <div className="flex justify-between text-amber-800">
-                          <dt>Trả kho sớm (đã dùng {earlyTermination.elapsedPct}% kỳ hạn)</dt>
+                          <dt>Trả kho sớm — bàn giao {fmtDate(settlementDateOf(c))}, đã dùng {earlyTermination.elapsedPct}% kỳ hạn</dt>
                           <dd className="tabular-nums">trần {earlyTermination.refundCapPct}% tiền giữ chân</dd>
                         </div>
                       )}

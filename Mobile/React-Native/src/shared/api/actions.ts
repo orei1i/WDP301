@@ -61,6 +61,7 @@ export const actions = {
   requestMoveOut: async (p: { contractId: string; date: string }) => {
     await api.post(`/contracts/${p.contractId}/move-out`, { date: day(p.date) });
   },
+  cancelMoveOut: async (p: { contractId: string }) => { await api.post(`/contracts/${p.contractId}/move-out/cancel`); },
 
   // ---- hỗ trợ
   createTicket: async (p: { facilityId: string; category: TicketCategory; priority: TicketPriority; subject: string; description: string; contractId?: string | null; unitId?: string | null }) =>

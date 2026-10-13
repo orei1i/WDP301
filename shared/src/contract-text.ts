@@ -83,7 +83,9 @@ function earlyTerminationLines(policy: ContractTextInput['policy']) {
     const prev = tiers[i - 1]?.maxElapsedPct;
     const range = prev === undefined ? `đã dùng đến ${t.maxElapsedPct}% kỳ hạn` : i === tiers.length - 1 ? `đã dùng trên ${prev}% kỳ hạn` : `đã dùng trên ${prev}% đến ${t.maxElapsedPct}% kỳ hạn`;
     return `Trả kho sớm khi ${range}: hoàn ${t.depositRefundPct}% tiền giữ chân.`;
-  });
+  }).concat([
+    'Thời gian đã dùng tính đến ngày Bên thuê THỰC TẾ bàn giao lại ô kho cho nhân viên, không tính theo ngày hẹn trả. Tiền thuê tiếp tục được tính cho đến ngày bàn giao.',
+  ]);
 }
 
 /** Điều khoản thu hồi ưu đãi thuê dài hạn khi trả kho sớm — chỉ có khi hợp đồng này thật sự được giảm giá. */

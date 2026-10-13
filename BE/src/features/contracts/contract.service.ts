@@ -4,7 +4,7 @@ import { InspectionModel, PaymentModel, PolicyModel, RentalContractModel, Reserv
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
 import { earlyTerminationRefundPct, effectivePolicy, elapsedTermPct } from '../policies/pricing';
-import { addDays, addPeriodsUTC, daysBetween, todayUTC, toDateOnly } from '../../shared/utils/dates';
+import { addDays, addPeriodsUTC, daysBetween, localDay, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment } from '../payments/payment.service';
@@ -218,9 +218,30 @@ export async function requestMoveOut(user: UserHydrated, id: string, date: strin
     const scheduledFor = toDateOnly(date);
     if (scheduledFor < todayUTC()) throw Unprocessable('Ngày trả kho không được ở quá khứ');
     c.transitionTo('MOVE_OUT_PENDING', { actor: user.role, by: user._id });
-    c.moveOut = { requestedAt: new Date(), scheduledFor, completedAt: null, inspectionId: null };
+    c.moveOut = { requestedAt: new Date(), scheduledFor, returnedOn: null, completedAt: null, inspectionId: null };
     await c.save({ session });
     await audit({ action: 'contract.move_out_request', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { scheduledFor } } }, session);
+    return c;
+  });
+}
+
+// ---------------------------------------------------------------- rút đăng ký trả kho (CUSTOMER chủ hợp đồng, STAFF/FM)
+/**
+ * Khách đổi ý, tiếp tục thuê. Chỉ rút được khi CHƯA bàn giao kho (nhân viên chưa bấm nhận lại) — đã bàn giao thì
+ * quyền truy cập đã thu hồi và ô đang chờ kiểm tra, phải quyết toán cho xong. Hợp đồng về lại ACTIVE; tiền thuê
+ * vốn vẫn được tính suốt thời gian chờ trả nên không có kỳ nào bị bỏ sót.
+ */
+export async function cancelMoveOut(user: UserHydrated, id: string) {
+  return withTxn(async (session) => {
+    const c = await loadContract(id, session);
+    await assertCanAccess(user, c, 'contract.move_out_cancel');
+    if (c.status !== 'MOVE_OUT_PENDING') throw Unprocessable('Hợp đồng không có đăng ký trả kho nào đang chờ');
+    if (c.access.revokedAt || c.moveOut?.returnedOn) throw Unprocessable('Kho đã được bàn giao lại cho chi nhánh — không rút đăng ký trả kho được nữa', 'ALREADY_RETURNED');
+    const before = { scheduledFor: c.moveOut?.scheduledFor ?? null };
+    c.transitionTo('ACTIVE', { actor: user.role, by: user._id, reason: 'Rút đăng ký trả kho' });
+    c.moveOut = null;
+    await c.save({ session });
+    await audit({ action: 'contract.move_out_cancel', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { before } }, session);
     return c;
   });
 }
@@ -238,6 +259,8 @@ export async function receiveUnit(user: UserHydrated, id: string) {
     );
     if (!unit) throw Conflict('Kho không ở trạng thái đang thuê', 'UNIT_STATE_MISMATCH');
     c.access.revokedAt = new Date();
+    // Ngày khách THỰC TẾ bàn giao — mốc để quyết toán (trả sớm hay không, đã dùng bao lâu), không dùng ngày khách tự hẹn.
+    c.moveOut = { requestedAt: c.moveOut?.requestedAt ?? new Date(), scheduledFor: c.moveOut?.scheduledFor ?? null, returnedOn: todayUTC(), completedAt: null, inspectionId: null };
     await c.save({ session });
     await audit({ action: 'unit.receive', entityType: 'StorageUnit', entityId: unit._id, facilityId: c.facilityId }, session);
     return { contract: c, unit };
@@ -257,12 +280,15 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     let refundAmount = c.deposit.amount - normalDeductions;
 
     // Trả kho SỚM (trước endDate của kỳ hạn hiện tại) bị áp trần hoàn cọc theo % thời gian đã dùng —
-    // trả đúng/quá hạn (scheduledFor >= endDate) là move-out bình thường, không bị phạt thêm.
+    // trả đúng/quá hạn là move-out bình thường, không bị phạt thêm. Mốc xét là ngày khách THỰC TẾ bàn giao kho
+    // (returnedOn, ghi lúc nhân viên nhận lại), KHÔNG phải ngày khách tự hẹn — hẹn ngày hết hạn rồi trả ngay hôm sau
+    // vẫn là trả sớm. Hợp đồng cũ chưa có returnedOn thì lấy ngày thu hồi quyền truy cập.
     let earlyTermination: NonNullable<InspectionLog['depositSettlement']>['earlyTermination'] = null;
     let clawback = 0;
-    if (c.moveOut?.scheduledFor && c.moveOut.scheduledFor.getTime() < c.endDate.getTime()) {
+    const returnedOn = c.moveOut?.returnedOn ?? (c.access.revokedAt ? localDay(c.access.revokedAt) : todayUTC());
+    if (returnedOn.getTime() < c.endDate.getTime()) {
       const policy = await effectivePolicy(c.facilityId, session);
-      const elapsedPct = elapsedTermPct(c.startDate, c.endDate, c.moveOut.scheduledFor);
+      const elapsedPct = elapsedTermPct(c.startDate, c.endDate, returnedOn);
       const refundCapPct = earlyTerminationRefundPct(policy, elapsedPct);
       refundAmount = Math.min(refundAmount, Math.round((c.deposit.amount * refundCapPct) / 100));
       earlyTermination = { elapsedPct: Math.round(elapsedPct), refundCapPct };
@@ -273,7 +299,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
       const quoted = rsv ? await PolicyModel.findById(rsv.quote.policyId, { discounts: 1 }).session(session).lean() : null;
       const claw = rsv && quoted ? discountClawback({
         rentalPeriod: rsv.quote.rentalPeriod, rate: rsv.quote.rate, surchargeAmount: rsv.quote.surchargeAmount, discountAmount: rsv.quote.discountAmount,
-        discounts: quoted.discounts, startDate: c.startDate.toISOString(), moveOutDate: c.moveOut.scheduledFor.toISOString(),
+        discounts: quoted.discounts, startDate: c.startDate.toISOString(), moveOutDate: returnedOn.toISOString(),
       }) : null;
       if (claw) {
         clawback = Math.min(refundAmount, claw.amount);
@@ -307,7 +333,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
 
     c.transitionTo('CLOSED', { actor: user.role, by: user._id });
     c.closedAt = now;
-    c.moveOut = { requestedAt: c.moveOut?.requestedAt ?? now, scheduledFor: c.moveOut?.scheduledFor ?? null, completedAt: now, inspectionId };
+    c.moveOut = { requestedAt: c.moveOut?.requestedAt ?? now, scheduledFor: c.moveOut?.scheduledFor ?? null, returnedOn, completedAt: now, inspectionId };
     c.deposit.refundedAmount = refundAmount;
     c.deposit.status = refundAmount === c.deposit.amount ? 'REFUNDED' : refundAmount === 0 ? 'FORFEITED' : 'PARTIALLY_REFUNDED';
     c.balance.outstanding = 0;

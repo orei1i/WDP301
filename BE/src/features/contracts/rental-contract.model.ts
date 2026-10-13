@@ -106,7 +106,7 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
   },
   moveOut: {
     type: new Schema({
-      requestedAt: { type: Date, required: true }, scheduledFor: { type: Date, default: null },
+      requestedAt: { type: Date, required: true }, scheduledFor: { type: Date, default: null }, returnedOn: { type: Date, default: null },
       completedAt: { type: Date, default: null }, inspectionId: refOpt('InspectionLog'),
     }, subOptions),
     default: null,

@@ -286,8 +286,8 @@ export default function FacilityDetail() {
             <p className="mt-3 text-xs leading-relaxed text-stone-500">
               Giữ chỗ {policy.reservationHoldMinutes} phút để thanh toán. Hủy trước ngày nhận từ {policy.cancellation[0]?.minHoursBeforeStart} giờ trở lên được hoàn {policy.cancellation[0]?.depositRefundPct}% số tiền đã trả khi đặt chỗ,
               từ {policy.cancellation[1]?.minHoursBeforeStart} giờ hoàn {policy.cancellation[1]?.depositRefundPct}%, sát hơn thì không hoàn.
-              Nếu trả kho sớm khi đang thuê: dùng ≤{policy.earlyTermination[0]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[0]?.depositRefundPct}% tiền giữ chân,
-              dùng ≤{policy.earlyTermination[1]?.maxElapsedPct}% hoàn {policy.earlyTermination[1]?.depositRefundPct}%, dùng quá {policy.earlyTermination[1]?.maxElapsedPct}% thời hạn không hoàn tiền giữ chân.
+              Nếu trả kho sớm khi đang thuê (tính theo ngày thực tế bàn giao kho): dùng ≤{policy.earlyTermination[0]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[0]?.depositRefundPct}% tiền giữ chân,
+              dùng ≤{policy.earlyTermination[1]?.maxElapsedPct}% hoàn {policy.earlyTermination[1]?.depositRefundPct}%, dùng quá {policy.earlyTermination[1]?.maxElapsedPct}% thời hạn hoàn {policy.earlyTermination[2]?.depositRefundPct ?? 100}% — càng gần hết hạn càng được hoàn nhiều.
             </p>
           </Card>
           {q && ut && (

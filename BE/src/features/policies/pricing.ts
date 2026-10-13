@@ -70,7 +70,7 @@ export async function cancellationRefund(r: Pick<ReservationDoc, 'status' | 'dep
   return { pct, amount: Math.round((dueAtBooking(r.quote) * pct) / 100) };
 }
 
-/** % thời gian kỳ hạn hiện tại đã dùng tại ngày trả kho dự kiến, kẹp về [0, 100]. */
+/** % thời gian kỳ hạn hiện tại đã dùng tại ngày khách bàn giao kho, kẹp về [0, 100]. */
 export function elapsedTermPct(startDate: Date, endDate: Date, scheduledFor: Date) {
   const span = endDate.getTime() - startDate.getTime();
   if (span <= 0) return 100;

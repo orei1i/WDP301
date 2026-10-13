@@ -249,7 +249,8 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
    * Optional: hợp đồng tạo trước tính năng này không có trường này khi đọc bằng lean().
    */
   unitSwaps?: { fromUnitId: I; toUnitId: I; reason: string; fee: number; paymentId?: I | null; at: D; by?: I | null }[];
-  moveOut?: { requestedAt: D; scheduledFor?: D | null; completedAt?: D | null; inspectionId?: I | null } | null;
+  /** `scheduledFor` = ngày khách HẸN trả; `returnedOn` = ngày khách THỰC TẾ bàn giao kho (nhân viên bấm nhận lại) — quyết toán tính theo ngày này. */
+  moveOut?: { requestedAt: D; scheduledFor?: D | null; returnedOn?: D | null; completedAt?: D | null; inspectionId?: I | null } | null;
   closedAt?: D | null;
   statusHistory: StatusChange<ContractStatus, I, D>[];
 }

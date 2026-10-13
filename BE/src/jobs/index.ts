@@ -67,11 +67,17 @@ export async function cancelNoShows() {
 export async function runBilling() {
   const today = todayUTC();
 
-  const due = await RentalContractModel.find({ status: { $in: ['ACTIVE', 'DELINQUENT', 'LOCKED_OUT'] }, 'billing.nextBillingDate': { $lte: today } }, { _id: 1 }).limit(500).lean();
+  // Hợp đồng đã đăng ký trả kho nhưng CHƯA bàn giao (quyền truy cập chưa thu hồi) vẫn đang giữ ô và ra vào được →
+  // vẫn tính tiền thuê; nếu không, khách chỉ cần đăng ký trả kho với ngày hẹn thật xa là dùng kho miễn phí.
+  const due = await RentalContractModel.find({
+    'billing.nextBillingDate': { $lte: today },
+    $or: [{ status: { $in: ['ACTIVE', 'DELINQUENT', 'LOCKED_OUT'] } }, { status: 'MOVE_OUT_PENDING', 'access.revokedAt': null }],
+  }, { _id: 1 }).limit(500).lean();
   for (const { _id } of due) {
     await withTxn(async (session) => {
       const c = await RentalContractModel.findById(_id).session(session);
       if (!c || c.billing.nextBillingDate > today) return;
+      if (c.status === 'MOVE_OUT_PENDING' && c.access.revokedAt) return; // vừa bàn giao xong — không tính thêm kỳ nào
       const start = c.billing.nextBillingDate;
       const period = c.billing.rentalPeriod;
       const end = addDays(addPeriodsUTC(start, period, 1), -1);
@@ -82,15 +88,14 @@ export async function runBilling() {
         await c.save({ session });
         return;
       }
-      // Hết hạn (start >= endDate) mà chưa autoRenew VÀ khách chưa đăng ký trả kho (contract này vẫn nằm
-      // trong { ACTIVE, DELINQUENT, LOCKED_OUT } — MOVE_OUT_PENDING đã bị loại khỏi `due` ở trên) — vẫn
+      // Hết hạn (start >= endDate) mà chưa autoRenew, hoặc khách đã đăng ký trả kho nhưng chưa bàn giao — vẫn
       // giữ đồ trong kho nên tiếp tục tính tiền thuê theo đúng giá cũ (holdover), KHÔNG tự gia hạn cam kết
       // (endDate giữ nguyên, không push vào `renewals`) để phân biệt với autoRenew thật. Nếu sau đó khách
       // không đóng tiền, luồng DELINQUENT → LOCKED_OUT bên dưới tự xử lý như nợ thông thường.
       await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount: c.billing.rate, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
       c.balance.outstanding += c.billing.rate;
       c.billing.nextBillingDate = addPeriodsUTC(start, period, 1);
-      if (start >= c.endDate && c.autoRenew) {
+      if (start >= c.endDate && c.autoRenew && c.status !== 'MOVE_OUT_PENDING') { // đang chờ trả kho thì không tự gia hạn cam kết
         const newEnd = addPeriodsUTC(c.endDate, period, 1);
         c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, periods: 1, paymentId: null, at: new Date() });
         c.endDate = newEnd;

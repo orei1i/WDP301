@@ -8,7 +8,7 @@ import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../../shared/http/validate';
 import {
-  extendContract, lockout, payBalance, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  cancelMoveOut, extendContract, lockout, payBalance, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
@@ -112,6 +112,9 @@ contractsRouter.get('/:id/swap-requests', validate({ params: idParams }), async 
 
 contractsRouter.post('/:id/move-out', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ date: zDate }) }), async (req, res) => {
   res.json(await requestMoveOut(req.auth!.user, req.valid.params.id, req.valid.body.date));
+});
+contractsRouter.post('/:id/move-out/cancel', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
+  res.json(await cancelMoveOut(req.auth!.user, req.valid.params.id));
 });
 contractsRouter.post('/:id/receive', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
   res.json(await receiveUnit(req.auth!.user, req.valid.params.id));

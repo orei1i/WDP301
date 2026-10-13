@@ -301,6 +301,7 @@ Table rental_contracts {
   "access.key_tag" varchar
   "access.credential_hash" varchar [note: 'PIN/thẻ: chỉ hash (select:false)']
   authorized_persons json [note: '[{_id, fullName, phone, idNumberLast4, relationship, addedAt}] người được chủ hợp đồng uỷ quyền, tối đa 3']
+  "move_out.returned_on" date [note: 'ngày khách THỰC TẾ bàn giao kho (nhân viên nhận lại) — mốc quyết toán, khác move_out.scheduled_for là ngày hẹn']
   "access.lost_reported_at" datetime [note: 'khách báo mất thẻ/chìa (yêu cầu cấp lại đang mở) — thẻ cũ bị vô hiệu tới khi bàn giao thẻ mới']
   "access.assisted_opens" json [note: '[{at, by, byName, reason}] nhật ký nhân viên mở kho hộ bằng chìa tổng / thẻ tổng; khách xem được']
   "access.credential_enc" varchar [note: 'PIN mã hoá AES-GCM để chủ hợp đồng xem lại (select:false, không ra bootstrap)']

@@ -295,10 +295,11 @@ export const API_GROUPS: Group[] = [
         notes: ['Vượt hạn mức miễn giảm trong chính sách → 422 WAIVER_LIMIT.'],
       },
       {
-        method: 'POST', path: '/contracts/:id/move-out', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Đăng ký ngày trả kho.',
+        method: 'POST', path: '/contracts/:id/move-out', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Đăng ký ngày trả kho (ngày HẸN). Tiền thuê vẫn được tính cho đến khi nhân viên nhận lại kho.',
         body: [{ name: 'date', type: 'date', required: true }],
       },
-      { method: 'POST', path: '/contracts/:id/receive', auth: R.STAFF, summary: 'Xác nhận đã nhận lại ô kho từ khách.' },
+      { method: 'POST', path: '/contracts/:id/move-out/cancel', auth: ['CUSTOMER', 'STAFF', 'FACILITY_MANAGER'], summary: 'Rút đăng ký trả kho, hợp đồng về lại ACTIVE. Chỉ khi kho CHƯA được bàn giao (422 ALREADY_RETURNED nếu nhân viên đã nhận lại).' },
+      { method: 'POST', path: '/contracts/:id/receive', auth: R.STAFF, summary: 'Xác nhận đã nhận lại ô kho từ khách. Ghi moveOut.returnedOn = hôm nay — mốc quyết toán (trả sớm hay không, đã dùng bao lâu), không dùng ngày khách hẹn; từ đây ngừng tính tiền thuê.' },
       {
         method: 'POST', path: '/contracts/:id/inspection', auth: R.STAFF, summary: 'Biên bản kiểm tra khi trả kho → quyết toán tiền giữ chân và đóng hợp đồng. Trả sớm: áp trần hoàn theo % kỳ hạn đã dùng, rồi THU HỒI ƯU ĐÃI thuê dài hạn vượt mức của số tháng thực dùng (khoản DISCOUNT_CLAWBACK, trừ vào tiền giữ chân; depositSettlement.earlyTermination.discountClawback).',
         body: [

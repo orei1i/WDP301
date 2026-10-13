@@ -8,9 +8,10 @@ import type { BusinessPolicy } from './entities';
  * (ở BE) vô tình hoàn 0% cọc / cho xử lý hàng bỏ lại ngay lập tức.
  */
 export const DEFAULT_EARLY_TERMINATION: BusinessPolicy['earlyTermination'] = [
-  { maxElapsedPct: 25, depositRefundPct: 100 },
+  // Càng gần hết hạn càng được hoàn nhiều: bỏ ngang ngay từ đầu kỳ hạn thì mất tiền giữ chân, đi gần hết kỳ hạn thì hoàn đủ.
+  { maxElapsedPct: 25, depositRefundPct: 0 },
   { maxElapsedPct: 50, depositRefundPct: 50 },
-  { maxElapsedPct: 100, depositRefundPct: 0 },
+  { maxElapsedPct: 100, depositRefundPct: 100 },
 ];
 export const DEFAULT_ABANDON_AFTER_LOCKED_OUT_DAYS = 30;
 
@@ -22,7 +23,7 @@ type WithNewFields = Partial<Pick<BusinessPolicy, 'earlyTermination' | 'abandonA
 /** Phí cấp lại theo loại yêu cầu; thiếu (chính sách cũ) → mặc định. */
 export const accessFeeOf = (p: WithNewFields, type: AccessRequestType): number => p.accessFees?.[type] ?? DEFAULT_ACCESS_FEES[type];
 
-/** Bậc hoàn cọc trả sớm của chính sách; thiếu hoặc rỗng → bậc mặc định 100/50/0 theo % kỳ hạn đã dùng. */
+/** Bậc hoàn cọc trả sớm của chính sách; thiếu hoặc rỗng → bậc mặc định 0/50/100 theo % kỳ hạn đã dùng (càng gần hết hạn càng hoàn nhiều). */
 export const earlyTerminationOf = (p: WithNewFields) => (p.earlyTermination?.length ? p.earlyTermination : DEFAULT_EARLY_TERMINATION);
 
 /** Số ngày LOCKED_OUT trước khi được xử lý hàng bỏ lại; thiếu → 30 ngày. */

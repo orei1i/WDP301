@@ -98,7 +98,7 @@ export default function ContractScreen() {
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Đăng ký trả kho</Text>
           <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền giữ chân hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
-          <Text style={st.hint}>Trả kho trước hạn hợp đồng còn bị giới hạn % hoàn tiền giữ chân theo thời gian đã sử dụng — dùng trên 50% kỳ hạn sẽ không được hoàn tiền giữ chân.</Text>
+          <Text style={st.hint}>Tiền thuê vẫn được tính đến ngày bạn THỰC TẾ bàn giao kho. Trả kho trước hạn thì mức hoàn tiền giữ chân tính theo phần kỳ hạn đã dùng đến ngày đó — càng gần hết hạn càng được hoàn nhiều; bỏ ngang trong 25% đầu kỳ hạn có thể không được hoàn.</Text>
           <DateStepper label="Ngày trả kho dự kiến" value={moveOutDate} onChange={setMoveOutDate} min={todayISO()} />
           {(() => {
             // Thu hồi ưu đãi thuê dài hạn nếu trả vào ngày đang chọn — cùng công thức với server (shared).
@@ -120,7 +120,15 @@ export default function ContractScreen() {
       )}
 
       {c.status === 'MOVE_OUT_PENDING' && (
-        <Badge tone="violet">Hẹn trả kho {fmtDate(c.moveOut?.scheduledFor)}</Badge>
+        <Card style={{ marginTop: S.md }}>
+          <Badge tone="violet">{c.access.revokedAt ? 'Đã bàn giao — chờ kiểm tra' : `Hẹn trả kho ${fmtDate(c.moveOut?.scheduledFor)}`}</Badge>
+          {!c.access.revokedAt && (
+            <>
+              <Text style={st.hint}>Tiền thuê vẫn được tính cho đến khi bạn bàn giao kho tại chi nhánh. Đổi ý thì rút đăng ký để tiếp tục thuê.</Text>
+              <Button title="Rút đăng ký trả kho" variant="ghost" style={{ marginTop: S.sm }} onPress={() => void run('cancelMoveOut', { contractId: c._id }, 'Đã rút đăng ký trả kho — hợp đồng tiếp tục hiệu lực')} />
+            </>
+          )}
+        </Card>
       )}
 
       {openSwap ? (

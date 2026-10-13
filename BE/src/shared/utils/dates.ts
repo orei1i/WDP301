@@ -6,6 +6,11 @@ export function todayUTC(): Date {
   const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   return new Date(`${ymd}T00:00:00.000Z`);
 }
+/** Ngày theo giờ chi nhánh của một thời điểm bất kỳ, theo quy ước date-only (00:00Z). */
+export function localDay(at: Date): Date {
+  const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+  return new Date(`${ymd}T00:00:00.000Z`);
+}
 export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * DAY);
 export function addMonthsUTC(d: Date, months: number): Date {
   const r = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
