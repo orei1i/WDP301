@@ -15,9 +15,10 @@
 //                   báo mất thẻ thì thẻ cũ bị khoá ngay.
 // 1.4 (12/10/2026): Điều 5 — đăng ký người được uỷ quyền; Điều 10 — thu hồi ưu đãi thuê dài hạn khi trả kho sớm;
 //                   Điều 11 — không đến nhận kho thì đặt chỗ tự hủy.
-export const TERMS_VERSION = '1.4';
+// 1.5 (13/10/2026): Điều 10 — giới hạn mức hoàn tiền giữ chân khi trả kho sớm chỉ áp cho hợp đồng có ưu đãi thuê dài hạn; mốc tính là ngày thực tế bàn giao kho; thuê theo ngày / tuần trả trọn tiền thuê cả thời hạn khi nhận kho, không hoàn kỳ chưa dùng; gia hạn là cam kết mới (giá niêm yết hiện hành, ưu đãi theo số tháng gia hạn, trả theo tháng); hết hạn không gia hạn thì tính giá chưa ưu đãi.
+export const TERMS_VERSION = '1.5';
 export const PRIVACY_VERSION = '1.0';
 /** Ngày áp dụng Điều khoản (bản TERMS_VERSION). */
-export const TERMS_EFFECTIVE = '12/10/2026';
+export const TERMS_EFFECTIVE = '13/10/2026';
 /** Ngày áp dụng Chính sách bảo mật (bản PRIVACY_VERSION). */
 export const LEGAL_EFFECTIVE = '16/09/2026';

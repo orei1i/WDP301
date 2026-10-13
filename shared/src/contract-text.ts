@@ -4,6 +4,7 @@ import { fmtDate, vnd } from './format';
 import { ACCESS_METHOD, PERIOD_UNIT, periodLabel } from './labels';
 import { TERMS_VERSION } from './legal';
 import { abandonDaysOf, earlyTerminationOf } from './policy-defaults';
+import { hasTermCommitment } from './duration';
 import { pickDiscount, type DiscountTier } from './duration';
 import { surchargeLines } from './surcharge';
 import { DEFAULT_CONTRACT_CLAUSES, renderContractTemplate, type ContractTemplateClause, type ContractVariableValues, type RenderedClause } from './contract-template';
@@ -31,7 +32,7 @@ export interface ContractTextInput {
   startDate: string;
   endDate: string;
   quote: Pick<PriceQuote, 'rate' | 'surchargeAmount' | 'discountAmount' | 'firstPeriodRent' | 'depositAmount' | 'policyVersion'>
-    & Partial<Pick<PriceQuote, 'appliedRuleCodes' | 'depositPeriods' | 'firstPeriodAtBooking'>>;
+    & Partial<Pick<PriceQuote, 'appliedRuleCodes' | 'depositPeriods' | 'firstPeriodAtBooking' | 'prepaidPeriods'>>;
   depositPaid: boolean;
   /** Phiên bản Điều khoản khách đã ký (signature.termsVersion). Bỏ trống = phiên bản hiện hành (hợp đồng chưa ký). */
   termsVersion?: string | null;
@@ -77,7 +78,14 @@ function cancellationLines(policy: ContractTextInput['policy'], base: string) {
 }
 
 /** Khoảng % kỳ hạn đã dùng của từng bậc hoàn tiền giữ chân khi trả kho sớm, theo thứ tự tăng dần. */
-function earlyTerminationLines(policy: ContractTextInput['policy']) {
+function earlyTerminationLines(policy: ContractTextInput['policy'], committed: boolean) {
+  // Hợp đồng không có cam kết thời hạn (không được ưu đãi thuê dài hạn): trả sớm không bị giới hạn mức hoàn.
+  if (!committed) {
+    return [
+      'Hợp đồng này không hưởng ưu đãi thuê dài hạn nên Bên thuê trả kho trước hạn KHÔNG bị giới hạn mức hoàn: tiền giữ chân được hoàn đủ sau khi trừ chi phí hư hại và công nợ (nếu có).',
+      'Tiền thuê tiếp tục được tính cho đến ngày Bên thuê THỰC TẾ bàn giao lại ô kho cho nhân viên; tiền thuê của kỳ đang sử dụng không được hoàn.',
+    ];
+  }
   const tiers = [...earlyTerminationOf(policy)].sort((a, b) => a.maxElapsedPct - b.maxElapsedPct);
   return tiers.map((t, i) => {
     const prev = tiers[i - 1]?.maxElapsedPct;
@@ -109,7 +117,10 @@ export function contractVariables(i: ContractTextInput): ContractVariableValues 
   const q = i.quote;
   const prepaid = !!q.firstPeriodAtBooking;
   const holdPeriods = q.depositPeriods ?? 1;
-  const total = q.depositAmount + q.firstPeriodRent;
+  // Thuê theo ngày / tuần: tiền thuê của CẢ thời hạn trả trọn trước khi dùng kho (báo giá cũ chưa có prepaidPeriods = 1 kỳ).
+  const wholeTerm = i.rentalPeriod !== 'MONTH' && q.prepaidPeriods != null;
+  const rentUpfront = q.firstPeriodRent * Math.max(1, q.prepaidPeriods ?? 1);
+  const total = q.depositAmount + rentUpfront;
   // Khoản hoàn khi hủy đặt chỗ tính trên TẤT CẢ số tiền đã thanh toán lúc đặt chỗ.
   const refundBase = prepaid ? 'số tiền đã thanh toán khi đặt chỗ (tiền giữ chân và tiền thuê kỳ đầu)' : 'tiền giữ chân';
 
@@ -137,7 +148,7 @@ export function contractVariables(i: ContractTextInput): ContractVariableValues 
       gia_thue: vnd(q.rate),
       tien_thue_moi_ky: vnd(q.firstPeriodRent),
       tien_giu_chan: vnd(q.depositAmount),
-      tien_thue_ky_dau: vnd(q.firstPeriodRent),
+      tien_thue_ky_dau: vnd(rentUpfront),
       tong_truoc_khi_dung: vnd(total),
       an_han_ngay: String(i.policy.gracePeriodDays),
       khoa_sau_ngay: String(i.policy.lockoutAfterDays),
@@ -154,13 +165,23 @@ export function contractVariables(i: ContractTextInput): ContractVariableValues 
       khoan_giu_chan: [
         `Khoản 1 — Tiền giữ chân (còn gọi là tiền cọc): ${vnd(q.depositAmount)}${i.depositPaid ? ' (đã thanh toán)' : ''}, trả khi đặt chỗ${holdPeriods > 1 ? `, bằng ${holdPeriods} ${unit} tiền thuê (kho cỡ lớn)` : ''}. Khoản này giữ ô kho đã chọn cho Bên thuê và bảo đảm việc thực hiện hợp đồng; được giữ đến khi trả kho — không trừ vào tiền thuê — và hoàn lại sau khi trừ chi phí hư hại, công nợ (nếu có), theo mức hoàn nêu tại Điều 5.`,
       ],
-      khoan_tien_thue_ky_dau: [
+      khoan_tien_thue_ky_dau: wholeTerm ? [
+        `Khoản 2 — Tiền thuê cả thời hạn (${periodLabel(i.rentalPeriod, i.periods)} × ${vnd(q.firstPeriodRent)}): ${vnd(rentUpfront)}, thanh toán TRỌN MỘT LẦN${prepaid ? `, trong đó ${vnd(q.firstPeriodRent)} trả cùng lúc đặt chỗ (kho cỡ lớn) và ${vnd(rentUpfront - q.firstPeriodRent)} trả` : ''} tại quầy khi nhân viên bàn giao kho, ngoài tiền giữ chân. Thuê theo ${unit} không trả theo từng kỳ.`,
+      ] : [
         prepaid
           ? `Khoản 2 — Tiền thuê ${unit} đầu: ${vnd(q.firstPeriodRent)}, thanh toán CÙNG LÚC đặt chỗ (kho cỡ lớn), nên tổng trả khi đặt chỗ là ${vnd(total)}. Bên thuê không phải trả thêm tiền thuê kỳ đầu khi nhận kho.`
           : `Khoản 2 — Tiền thuê ${unit} đầu: ${vnd(q.firstPeriodRent)}, thanh toán THÊM ngoài tiền giữ chân, tại quầy khi nhân viên bàn giao kho.`,
       ],
+      khoan_cac_ky_sau: wholeTerm ? [
+        `Bên thuê trả kho trước khi hết thời hạn thì KHÔNG được hoàn tiền thuê của các ${unit} chưa dùng.`,
+        `Hết thời hạn đã đặt mà chưa trả kho: tiền thuê tiếp tục được tính theo từng ${unit} với giá cũ, hoá đơn xuất vào đầu mỗi kỳ.`,
+      ] : [
+        `Các kỳ sau thanh toán theo từng ${unit} vào đầu mỗi kỳ — không phải trả trước toàn bộ thời hạn.`,
+        ...(i.rentalPeriod === 'MONTH' ? ['Gia hạn là một cam kết thời hạn mới: giá thuê là giá niêm yết tại thời điểm gia hạn, ưu đãi thuê dài hạn tính theo số tháng GIA HẠN (không cộng dồn thời gian đã thuê); tiền thuê vẫn trả theo từng tháng, không phải trả trước. Mức hoàn tiền giữ chân và việc thu hồi ưu đãi khi trả kho sớm được tính trên kỳ cam kết đang dở. Hết hạn mà không gia hạn thì không còn ưu đãi.'] : []),
+        ...(i.rentalPeriod === 'MONTH' ? ['Tiền thuê Bên thuê đã trả trước khi gia hạn cho các tháng CHƯA bắt đầu tại ngày bàn giao kho được hoàn lại khi trả kho, sau khi cấn trừ chi phí hư hại và công nợ (nếu có). Tiền thuê của tháng đang sử dụng không được hoàn.'] : []),
+      ],
       muc_hoan_khi_huy: cancellationLines(i.policy, refundBase),
-      muc_hoan_tra_som: [...earlyTerminationLines(i.policy), ...clawbackLines(i)],
+      muc_hoan_tra_som: [...earlyTerminationLines(i.policy, hasTermCommitment({ rentalPeriod: i.rentalPeriod, discountAmount: i.quote.discountAmount })), ...clawbackLines(i)],
     },
   };
 }

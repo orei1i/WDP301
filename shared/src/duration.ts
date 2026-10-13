@@ -38,6 +38,13 @@ export function pickDiscount<T extends DiscountTier>(
  *
  * `usedPeriods` = số kỳ đã bắt đầu tính đến ngày trả kho (kỳ đang dùng dở tính trọn, tối thiểu 1).
  */
+/**
+ * Hợp đồng có CAM KẾT THỜI HẠN hay không: chỉ khi khách được giảm giá vì thuê dài hạn (thuê theo tháng, đủ bậc ưu đãi).
+ * Giới hạn mức hoàn tiền giữ chân khi trả kho sớm là cái giá của việc phá cam kết đó — hợp đồng ngắn / theo ngày / theo tuần
+ * không được giảm gì và đã trả đủ tiền từng kỳ, nên trả sớm KHÔNG bị giới hạn mức hoàn.
+ */
+export const hasTermCommitment = (q?: { rentalPeriod: RentalPeriod; discountAmount: number } | null) => !!q && q.rentalPeriod === 'MONTH' && q.discountAmount > 0;
+
 export function discountClawback(i: {
   rentalPeriod: RentalPeriod; rate: number; surchargeAmount: number; discountAmount: number;
   discounts: readonly DiscountTier[]; startDate: string; moveOutDate: string;
@@ -53,14 +60,74 @@ export function discountClawback(i: {
 }
 
 /** Bản xem trước thu hồi ưu đãi cho một hợp đồng nếu trả kho vào `moveOutDate` (null: không trả sớm / không có ưu đãi / thiếu dữ liệu). */
+/**
+ * Mốc bắt đầu của một lần GIA HẠN: bình thường là ngày hết hạn hiện tại; nếu hợp đồng đã quá hạn và hệ thống đã xuất hoá đơn
+ * cho các kỳ sau ngày hết hạn (khách vẫn giữ kho) thì bắt đầu từ kỳ CHƯA xuất hoá đơn — nếu không khách trả hai lần cho kỳ đó.
+ */
+export const renewalStart = (c: { endDate: string; billing: { nextBillingDate: string } }) => (c.billing.nextBillingDate > c.endDate ? c.billing.nextBillingDate : c.endDate);
+
+/**
+ * Tiền thuê khách đã TRẢ TRƯỚC khi gia hạn cho các kỳ CHƯA bắt đầu tại ngày bàn giao kho — hoàn lại khi trả kho (Điều khoản chỉ
+ * không hoàn tiền của kỳ đang sử dụng). Chỉ áp cho thuê theo THÁNG; thuê ngày / tuần đã thoả thuận không hoàn kỳ chưa dùng.
+ * Kỳ bắt đầu đúng ngày bàn giao coi như chưa dùng.
+ */
+export function unusedPrepaidRent(
+  period: RentalPeriod,
+  renewals: readonly { key: string; previousEndDate: string; periods: number; amount: number }[],
+  returnedOn: string,
+): { total: number; items: { key: string; unusedPeriods: number; amount: number }[] } {
+  if (period !== 'MONTH') return { total: 0, items: [] };
+  const items = renewals.map((r) => {
+    let unusedPeriods = 0;
+    for (let i = 0; i < r.periods; i++) if (addPeriods(r.previousEndDate, period, i) >= returnedOn) unusedPeriods++;
+    return { key: r.key, unusedPeriods, amount: r.periods > 0 ? Math.round((r.amount * unusedPeriods) / r.periods) : 0 };
+  }).filter((x) => x.amount > 0);
+  return { total: items.reduce((s, x) => s + x.amount, 0), items };
+}
+
+/** Báo giá một lần gia hạn (GET /contracts/:id/extension-quote) — gia hạn là cam kết mới, xem contract.service.quoteExtension. */
+export interface ExtensionQuote {
+  rentalPeriod: RentalPeriod; periods: number; from: string; newEndDate: string;
+  /** Giá niêm yết hiện hành mỗi kỳ (gồm phụ phí điều hòa nếu có), ưu đãi theo số tháng gia hạn, và tiền thuê mỗi kỳ sau ưu đãi. */
+  gross: number; discountAmount: number; rate: number;
+  /** Tiền thuê mỗi kỳ khách đang trả hiện nay. */
+  currentRate: number;
+  /** Phải trả ngay khi gia hạn: 0 với thuê tháng (trả theo từng tháng), trọn kỳ gia hạn với thuê ngày / tuần. */
+  payNow: number;
+}
+
+/** Một kỳ cam kết của hợp đồng (kỳ gốc hoặc một lần gia hạn) — xem RentalContract.commitments. */
+export interface CommitmentLike { startDate: string; endDate: string; gross: number; discountAmount: number; rate?: number; policyId?: string | null }
+type QuoteForExit = { rentalPeriod: RentalPeriod; rate: number; surchargeAmount: number; discountAmount: number; policyId?: string | null };
+
+/**
+ * Kỳ cam kết mà ngày `date` rơi vào — tức kỳ khách đang "phá" nếu trả kho hôm đó. null = không trong kỳ cam kết nào
+ * (đã hết hạn mà không gia hạn) → trả kho không bị giới hạn mức hoàn, không thu hồi ưu đãi.
+ * Hợp đồng cũ chưa có `commitments`: coi cả hợp đồng là một kỳ theo báo giá lúc đặt.
+ */
+export function exitCommitment(
+  c: { startDate: string; endDate: string; commitments?: readonly CommitmentLike[] | null },
+  quote: QuoteForExit | null | undefined,
+  date: string,
+): CommitmentLike | null {
+  if (c.commitments?.length) return c.commitments.find((s) => s.startDate <= date && date < s.endDate) ?? null;
+  if (!quote || date >= c.endDate) return null;
+  return { startDate: c.startDate, endDate: c.endDate, gross: quote.rate + quote.surchargeAmount, discountAmount: quote.rentalPeriod === 'MONTH' ? quote.discountAmount : 0, policyId: quote.policyId ?? null };
+}
+
+/** Thu hồi ưu đãi nếu trả kho vào `moveOutDate` — tính trên KỲ CAM KẾT đang dở, theo bảng ưu đãi của chính sách lúc cam kết. */
 export function contractClawback(
-  c: { startDate: string; endDate: string },
-  quote: { rentalPeriod: RentalPeriod; rate: number; surchargeAmount: number; discountAmount: number } | null | undefined,
-  discounts: readonly DiscountTier[] | null | undefined,
+  c: { startDate: string; endDate: string; commitments?: readonly CommitmentLike[] | null },
+  quote: QuoteForExit | null | undefined,
+  policies: readonly { _id: string; discounts: readonly DiscountTier[] }[] | null | undefined,
   moveOutDate: string,
 ) {
-  if (!quote || !discounts || moveOutDate >= c.endDate) return null;
-  return discountClawback({ ...quote, discounts, startDate: c.startDate, moveOutDate });
+  const seg = exitCommitment(c, quote, moveOutDate);
+  if (!seg || !(seg.discountAmount > 0)) return null;
+  const discounts = policies?.find((p) => p._id === seg.policyId)?.discounts;
+  if (!discounts) return null;
+  const claw = discountClawback({ rentalPeriod: 'MONTH', rate: seg.gross, surchargeAmount: 0, discountAmount: seg.discountAmount, discounts, startDate: seg.startDate, moveOutDate });
+  return claw ? { ...claw, discountPerPeriod: seg.discountAmount } : null;
 }
 
 /** % giảm cao nhất khách được hưởng khi thuê `months` tháng (chỉ tính bậc theo %) — dùng cho nhãn "Tiết kiệm x%". */

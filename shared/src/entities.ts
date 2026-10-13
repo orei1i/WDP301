@@ -151,6 +151,11 @@ export interface PriceQuote<I = ID> {
   depositPeriods?: number;
   /** Tiền thuê kỳ đầu thu CÙNG LÚC đặt chỗ (kho cỡ lớn) thay vì khi nhận kho. Thiếu ở báo giá cũ = false. */
   firstPeriodAtBooking?: boolean;
+  /**
+   * Số kỳ tiền thuê thu TRƯỚC khi dùng kho. Thuê theo tháng = 1 (kỳ đầu, các kỳ sau xuất hoá đơn từng tháng). Thuê theo NGÀY /
+   * TUẦN = toàn bộ số kỳ đã đặt: trả trọn một lần khi nhận kho, không xuất hoá đơn lẻ từng ngày. Thiếu ở báo giá cũ = 1.
+   */
+  prepaidPeriods?: number;
   policyId: I;
   policyVersion: number;
 }
@@ -243,6 +248,12 @@ export interface RentalContract<I = ID, D = string> extends BaseEntity<I, D> {
   authorizedPersons?: AuthorizedPerson<D>[];
   terms: { policyId: I; policyVersion: number; gracePeriodDays: number; lockoutAfterDays: number; signedAt: D; signatureRef?: string; signerName?: string | null };
   renewals: { previousEndDate: D; newEndDate: D; periods: number; paymentId?: I | null; at: D }[];
+  /**
+   * Các KỲ CAM KẾT của hợp đồng, nối tiếp nhau: kỳ gốc (lúc nhận kho) rồi từng lần gia hạn. Mỗi kỳ có giá riêng — ưu đãi thuê dài
+   * hạn tính theo số tháng của CHÍNH kỳ đó (`discountAmount`), `rate` = `gross` − `discountAmount` là tiền thuê mỗi kỳ. Ngoài mọi
+   * kỳ cam kết (hết hạn mà không gia hạn) thì tính theo `gross` của kỳ gần nhất, không còn ưu đãi. Hợp đồng cũ không có mảng này.
+   */
+  commitments?: { kind: 'INITIAL' | 'RENEWAL'; startDate: D; endDate: D; periods: number; gross: number; discountAmount: number; rate: number; policyId?: I | null; at?: D }[];
   /**
    * Lịch sử đổi ô kho (A1). Chỉ đổi được sang ô CÙNG loại (unitTypeId không đổi), nên
    * billing.monthlyRate và deposit giữ nguyên theo hợp đồng đã ký — đổi ô không phải là định giá lại.
@@ -416,6 +427,9 @@ export interface InspectionLog<I = ID, D = string> extends BaseEntity<I, D> {
     depositHeld: number; deductions: number; refundAmount: number;
     /** Phần chi phí hư hại + công nợ VƯỢT tiền giữ chân — khách còn nợ sau khi đóng hợp đồng (nằm ở contract.balance.outstanding). */
     shortfall?: number;
+    /** Tiền thuê trả trước khi gia hạn cho các kỳ chưa bắt đầu: `prepaidRentRefund` hoàn lại khách, `prepaidRentOffset` cấn trừ vào hư hại / công nợ. */
+    prepaidRentRefund?: number;
+    prepaidRentOffset?: number;
     refundPaymentId?: I | null; damagePaymentId?: I | null; approvedBy?: I | null; approvedAt?: D | null;
     /** Chỉ có khi trả kho SỚM (trước endDate của kỳ hạn) — % thời gian kỳ hạn đã dùng và trần hoàn cọc theo đó. */
     /** `discountClawback`: phần ưu đãi thuê dài hạn bị thu hồi (đã trừ vào tiền giữ chân) vì mới dùng `usedPeriods` kỳ. */

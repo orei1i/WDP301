@@ -61,6 +61,7 @@ export const CONTRACT_VARIABLES: readonly ContractVariableInfo[] = [
   { key: 'dong_uu_dai', label: 'Dòng ưu đãi thuê dài hạn và tiền thuê thực trả', kind: 'BLOCK', required: false, example: 'Ưu đãi thuê dài hạn: −99.000 ₫ mỗi tháng.' },
   { key: 'khoan_giu_chan', label: 'Khoản 1 — tiền giữ chân (số tiền, khi trả, khi hoàn)', kind: 'BLOCK', required: true, example: 'Khoản 1 — Tiền giữ chân (còn gọi là tiền cọc): 990.000 ₫, trả khi đặt chỗ…' },
   { key: 'khoan_tien_thue_ky_dau', label: 'Khoản 2 — tiền thuê kỳ đầu (trả khi đặt hay khi nhận kho)', kind: 'BLOCK', required: true, example: 'Khoản 2 — Tiền thuê tháng đầu: 891.000 ₫, thanh toán THÊM khi nhận kho…' },
+  { key: 'khoan_cac_ky_sau', label: 'Cách trả tiền thuê các kỳ sau (thuê tháng: từng kỳ; thuê ngày / tuần: đã trả trọn, không hoàn kỳ chưa dùng)', kind: 'BLOCK', required: true, example: 'Các kỳ sau thanh toán theo từng tháng vào đầu mỗi kỳ…' },
   { key: 'muc_hoan_khi_huy', label: 'Các mức hoàn tiền khi hủy đặt chỗ', kind: 'BLOCK', required: true, example: 'Hủy trước ngày nhận kho từ 72 giờ (3 ngày) trở lên: hoàn 100%…' },
   { key: 'muc_hoan_tra_som', label: 'Các mức hoàn tiền giữ chân khi trả kho sớm', kind: 'BLOCK', required: true, example: 'Trả kho sớm khi đã dùng đến 25% kỳ hạn: hoàn 0% tiền giữ chân…' },
 ];
@@ -86,7 +87,7 @@ export const DEFAULT_CONTRACT_CLAUSES: readonly ContractTemplateClause[] = [
   },
   {
     key: 'thoi-han', title: 'Thời hạn', numbered: true,
-    paragraphs: ['Từ ngày {{ngay_bat_dau}}, thời hạn {{thoi_han}} (dự kiến đến {{ngay_ket_thuc}}). Hết hạn mà chưa gia hạn hay trả kho, tiền thuê tiếp tục được tính theo giá cũ cho đến khi Bên thuê trả kho.'],
+    paragraphs: ['Từ ngày {{ngay_bat_dau}}, thời hạn {{thoi_han}} (dự kiến đến {{ngay_ket_thuc}}). Hết hạn mà chưa gia hạn hay trả kho, tiền thuê tiếp tục được tính theo từng {{don_vi}} với giá thuê CHƯA trừ ưu đãi thuê dài hạn, cho đến khi Bên thuê trả kho.'],
     bullets: [],
   },
   {
@@ -98,7 +99,7 @@ export const DEFAULT_CONTRACT_CLAUSES: readonly ContractTemplateClause[] = [
       'Trước khi sử dụng kho, Bên thuê thanh toán tổng cộng {{tong_truoc_khi_dung}}, gồm HAI khoản riêng biệt dưới đây. Bên thuê xác nhận đã được thông báo rõ cả hai khoản này khi đặt chỗ:',
       '{{khoan_giu_chan}}',
       '{{khoan_tien_thue_ky_dau}}',
-      'Các kỳ sau thanh toán theo từng {{don_vi}} vào đầu mỗi kỳ — không phải trả trước toàn bộ thời hạn. Bên thuê cũng có thể gia hạn và trả trước thêm.',
+      '{{khoan_cac_ky_sau}}',
       'Quá hạn thanh toán quá {{an_han_ngay}} ngày bị tính phí trễ; quá {{khoa_sau_ngay}} ngày bị khoá truy cập.',
       'Khi trả kho, nếu chi phí hư hại và công nợ lớn hơn tiền giữ chân thì Bên thuê phải thanh toán phần còn thiếu; chưa thanh toán xong thì chưa được đặt kho mới.',
     ],
