@@ -172,7 +172,7 @@ export default function FacilityDetailScreen() {
 
         <View style={{ marginTop: S.md }}>
           <Muted>Ca giờ dự kiến đến nhận kho</Muted>
-          <View style={{ marginTop: S.sm }}><Chips options={CHECK_IN_SHIFTS} value={checkInShift} onChange={setCheckInShift} columns={5} /></View>
+          <View style={{ marginTop: S.sm }}><Chips options={CHECK_IN_SHIFTS} value={checkInShift} onChange={setCheckInShift} /></View>
           {checkInShift !== 'UNKNOWN' && <Muted style={{ marginTop: 4 } as never}>{CHECK_IN_SHIFT[checkInShift].label} — giúp chi nhánh xếp đúng ca trực đón bạn</Muted>}
         </View>
 
@@ -225,7 +225,7 @@ export default function FacilityDetailScreen() {
       {ut && (
         <Card style={{ marginTop: S.md }}>
           <Text style={st.section}>Chọn ô kho — {ut.name}</Text>
-          <Chips options={LOCK_OPTIONS} value={lockFilter} onChange={setLockFilter} columns={4} />
+          <Chips options={LOCK_OPTIONS} value={lockFilter} onChange={setLockFilter} />
           <Muted style={{ marginTop: 4 } as never}>Bấm vào ô còn trống để chọn, bấm lại để bỏ — muốn thuê nhiều kho thì chọn nhiều ô (tối đa {MAX_UNITS}). Ô không khớp hình thức khoá đang lọc sẽ mờ đi.</Muted>
           <View style={{ marginTop: S.md }}>
             {floorPlan === null ? <Muted>Đang tải sơ đồ…</Muted> : (

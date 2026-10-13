@@ -77,7 +77,7 @@ export default function ContractScreen() {
       {c.status === 'ACTIVE' && (
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Gia hạn hợp đồng</Text>
-          <Chips options={PERIODS} value={periods} onChange={setPeriods} columns={4} />
+          <Chips options={PERIODS} value={periods} onChange={setPeriods} columns={2} />
           <Chips options={METHODS} value={extendMethod} onChange={setExtendMethod} columns={2} />
           <Text style={st.hint}>
             Hạn mới: {fmtDate(addPeriods(c.endDate, c.billing.rentalPeriod, periodsNum))} · Số tiền: {vnd(c.billing.rate * periodsNum)}

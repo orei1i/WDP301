@@ -52,7 +52,7 @@ export default function TicketNewScreen() {
           <Chips options={CATEGORY_OPTIONS} value={category} onChange={setCategory} />
         </Field>
         <Field label="Mức ưu tiên">
-          <Chips options={PRIORITY_OPTIONS} value={priority} onChange={setPriority} columns={4} />
+          <Chips options={PRIORITY_OPTIONS} value={priority} onChange={setPriority} columns={2} />
         </Field>
         <Field label="Tiêu đề">
           <Input value={subject} onChangeText={setSubject} placeholder="Ví dụ: Khóa kho bị kẹt" />

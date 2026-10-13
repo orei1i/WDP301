@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, fmtDate, paymentDueDate, relativeDay, todayISO, vnd } from '@ssm/shared';
+import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, dueAtCheckIn, fmtDate, paymentDueDate, relativeDay, todayISO, vnd } from '@ssm/shared';
 import { facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, EmptyState, H1, KV, Muted, Skeleton, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
@@ -84,7 +84,7 @@ export default function HomeScreen() {
                       ['Loại kho', typeName(db, r.unitTypeId)],
                       ['Kho được phân', r.unitId ? unitLabel(db, r.unitId) : 'Chi nhánh sẽ phân trước ngày nhận'],
                       ['Ngày nhận', `${fmtDate(r.startDate)} · ${relativeDay(r.startDate)}`],
-                      ['Trả thêm khi nhận kho', vnd(r.quote.firstPeriodRent)],
+                      ['Trả thêm khi nhận kho', dueAtCheckIn(r.quote) > 0 ? vnd(dueAtCheckIn(r.quote)) : 'Không — đã trả đủ khi đặt'],
                     ]} />
                   </View>
                   <Button

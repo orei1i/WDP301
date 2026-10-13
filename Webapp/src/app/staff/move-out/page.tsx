@@ -71,7 +71,7 @@ export default function MoveOutPage() {
         </Card>
 
         {!c ? (
-          <Card><EmptyState icon={<ClipboardCheck className="size-6" />} title="Chọn một lượt trả kho" description="Bước 1: nhận lại chìa khóa / thu hồi mã. Bước 2: kiểm tra và quyết toán cọc." /></Card>
+          <Card><EmptyState icon={<ClipboardCheck className="size-6" />} title="Chọn một lượt trả kho" description="Bước 1: nhận lại chìa khóa / thu hồi mã. Bước 2: kiểm tra và quyết toán tiền giữ chân." /></Card>
         ) : (
           <Card>
             <CardHeader title={`Kho ${unitLabel(db, c.unitId)} · ${typeName(db, c.unitTypeId)}`} description={`${userName(db, c.customerId)} · HĐ ${c.contractNumber}`} />

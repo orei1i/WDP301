@@ -67,7 +67,7 @@ export default function StaffSwaps() {
         : <span className="text-amber-700">Chưa phân công</span>) },
     { key: 'st', header: 'Trạng thái', cell: (s: UnitSwapRequest) => <StatusBadge map={SWAP_REQUEST_STATUS} value={s.status} /> },
     { key: 'a', header: '', className: 'text-right', cell: (s: UnitSwapRequest) => (
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         {s.status === 'SUBMITTED' && isFM && <Button size="sm" onClick={() => openDecide(s)}>Xét duyệt</Button>}
         {s.status === 'APPROVED' && s.method === 'DELIVERY' && isFM && <Button size="sm" variant="ghost" onClick={() => openAssign(s)}>Đổi người chuyển</Button>}
         {s.status === 'APPROVED' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'complete', s })}>Xác nhận đã chuyển</Button>}
