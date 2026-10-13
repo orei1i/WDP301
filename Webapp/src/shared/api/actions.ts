@@ -148,6 +148,9 @@ export const actions = {
 
   completeAccessRequest: async (p: { requestId: string; keyTag: string }) => { await api.post(`/access-requests/${p.requestId}/complete`, { keyTag: p.keyTag }); },
 
+  /** Khách xin cấp lại phương tiện vào kho (đặt lại mật khẩu / làm lại thẻ / cấp lại chìa). Có phí thì trả ngay khi gửi. */
+  requestAccess: async (p: { contractId: string; reason?: string; method?: PaymentMethod }) =>
+    api.post<{ requestNumber: string }>('/access-requests', { contractId: p.contractId, reason: p.reason || undefined, method: p.method }),
   cancelAccessRequest: async (p: { requestId: string; reason?: string }) => { await api.post(`/access-requests/${p.requestId}/cancel`, { reason: p.reason || undefined }); },
 
   emailContract: async (p: { reservationId: string }) => api.post<{ sent: true; to: string }>(`/reservations/${p.reservationId}/contract/email`),

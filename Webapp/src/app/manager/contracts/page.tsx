@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { ArrowLeftRight, Banknote, BadgePercent, Lock, PackageX, Plus, Trash2 } from 'lucide-react';
 import type { AbandonedItemsDisposal, RentalContract } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { OPEN_CONTRACT_STATUSES, PERIOD_UNIT } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, PERIOD_UNIT, paymentsOfContract } from '@ssm/shared';
 import { ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, DISPOSAL_METHOD, PAYMENT_STATUS, PAYMENT_TYPE } from '@/shared/lib/labels';
 import { effectivePolicy, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { addDays, daysBetween, fmtDate, todayISO, vnd } from '@/shared/lib/format';
@@ -48,7 +48,8 @@ export default function Contracts() {
     all: open,
   };
   const c = view ? db.contracts.find((x) => x._id === view._id) ?? null : null;
-  const cPayments = c ? db.payments.filter((p) => p.contractId === c._id).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8) : [];
+  // Gồm cả khoản thu lúc đặt chỗ (tiền giữ chân, tiền thuê kỳ đầu của kho cỡ lớn) — các khoản này chỉ gắn với đặt chỗ.
+  const cPayments = c ? paymentsOfContract(db.payments, c).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 8) : [];
 
   /** Đổi ô chỉ trong CÙNG loại kho — cùng loại thì cùng giá, hợp đồng không phải định giá lại. */
   const swapCandidates = swap

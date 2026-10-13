@@ -76,7 +76,7 @@ export const SWAP_REQUEST_MACHINE = {
 
 /** Đơn dịch vụ thêm: nhân viên/quản lý xác nhận xong; khách, nhân viên hoặc quản lý đều huỷ được khi chưa thực hiện. */
 export const SERVICE_ORDER_MACHINE = {
-  REQUESTED: { DONE: [ST, FM], CANCELLED: [CU, ST, FM] },
+  REQUESTED: { DONE: [ST, FM], CANCELLED: [CU, ST, FM, SYS] },   // SYS = hợp đồng trả kho / đóng khi đơn chưa làm
   DONE: {}, CANCELLED: {},
 } as const satisfies StateMachine<ServiceOrderStatus>;
 

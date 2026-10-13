@@ -48,7 +48,7 @@ export default function BookingPage() {
           ...(r.quote.firstPeriodAtBooking ? [[`Tiền thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu (trả khi đặt chỗ)`, vnd(r.quote.firstPeriodRent)] as [string, string]] : []),
         ]} />
       </Card>
-      {(r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && <PaymentSchedule quotes={[r.quote]} className="mt-4" />}
+      {(r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && <PaymentSchedule quotes={[r.quote]} className="mt-4" paid={r.status !== 'PENDING'} />}
 
       {r.status === 'PENDING' && (
         <Card className="mt-4 p-5">

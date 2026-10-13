@@ -1,6 +1,6 @@
 import type { BusinessPolicy, Facility, PriceQuote, RentalContract, RentalPeriod, Reservation, StorageUnit, UnitType, User } from '@ssm/shared';
 import type { DB } from '@/shared/lib/mock-data';
-import { OPEN_CONTRACT_STATUSES, dueAtBooking, pickDiscount, tierTermsOf } from '@ssm/shared';
+import { OPEN_CONTRACT_STATUSES, dueAtBooking, localMidnightMs, pickDiscount, tierTermsOf } from '@ssm/shared';
 import { addMonths, daysBetween, monthKey, todayISO } from '@/shared/lib/format';
 
 export class DomainError extends Error {
@@ -76,7 +76,7 @@ export function availability(db: DB, facilityId: string, unitTypeId: string) {
 
 export function cancellationRefund(db: DB, r: Reservation, nowIso = new Date().toISOString()): { pct: number; amount: number } {
   if (r.status === 'PENDING' || !r.depositPaymentId) return { pct: 0, amount: 0 };
-  const hours = (new Date(r.startDate).getTime() - new Date(nowIso).getTime()) / 3_600_000;
+  const hours = (localMidnightMs(r.startDate) - new Date(nowIso).getTime()) / 3_600_000; // tính đến 00:00 giờ chi nhánh, như server
   const policy = db.policies.find((p) => p._id === r.quote.policyId) ?? effectivePolicy(db, r.facilityId);
   const tier = [...policy.cancellation].sort((a, b) => b.minHoursBeforeStart - a.minHoursBeforeStart).find((t) => hours >= t.minHoursBeforeStart);
   const pct = tier?.depositRefundPct ?? 0;

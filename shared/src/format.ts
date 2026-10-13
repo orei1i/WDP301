@@ -10,6 +10,14 @@ export const compactVnd = (n: number) => {
 };
 export const pct = (v: number, digits = 0) => `${(v * 100).toFixed(digits).replace('.', ',')}%`;
 
+/**
+ * Thời điểm THẬT của 00:00 giờ chi nhánh trong một ngày date-only. Ngày date-only được lưu là 00:00Z, tức 07:00 sáng giờ
+ * Việt Nam — nên mọi phép tính "còn bao nhiêu giờ trước ngày nhận" phải lùi 7 tiếng, nếu không khách được lợi 7 tiếng so với
+ * lời văn hợp đồng. Việt Nam không đổi giờ mùa nên độ lệch cố định.
+ */
+export const FACILITY_UTC_OFFSET_HOURS = 7;
+export const localMidnightMs = (dateOnly: string | Date) => new Date(dateOnly).getTime() - FACILITY_UTC_OFFSET_HOURS * 3_600_000;
+
 /** Date-only values are stored as the facility-local calendar day at 00:00Z. */
 export function todayISO(): string {
   const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

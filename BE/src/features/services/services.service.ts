@@ -1,4 +1,4 @@
-import { Types } from 'mongoose';
+import { Types, type ClientSession } from 'mongoose';
 import type { PaymentMethod } from '@ssm/shared';
 import { FacilityModel, PaymentModel, RentalContractModel, ServiceOfferingModel, ServiceOrderModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, NotFound, Unprocessable } from '../../shared/core/errors';
@@ -91,6 +91,32 @@ export async function completeServiceOrder(user: UserHydrated, id: string) {
 }
 
 // ---------------------------------------------------------------- huỷ trước khi thực hiện → hoàn đủ tiền
+/**
+ * Khách đã bàn giao kho / hợp đồng đóng: đơn dịch vụ còn chờ làm không thực hiện được nữa → huỷ và hoàn đủ tiền đã trả.
+ * Gọi TRONG transaction của thao tác làm hợp đồng đổi trạng thái.
+ */
+export async function cancelOpenServiceOrders(contractId: Types.ObjectId, session: ClientSession, reason: string) {
+  const open = await ServiceOrderModel.find({ contractId, status: 'REQUESTED' }).session(session);
+  for (const o of open) {
+    o.transitionTo('CANCELLED', { actor: 'SYSTEM', reason });
+    o.cancelReason = reason;
+    const paid = o.paymentId ? await PaymentModel.findById(o.paymentId).session(session) : null;
+    if (paid && paid.status === 'SUCCEEDED') {
+      const refund = await createPayment({
+        facilityId: o.facilityId, customerId: o.customerId, contractId: o.contractId, type: 'REFUND', amount: o.total,
+        status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: paid._id,
+      }, session);
+      paid.refundedAmount = o.total;
+      paid.transitionTo('REFUNDED', { actor: 'SYSTEM', reason: 'Huỷ đơn dịch vụ' });
+      await paid.save({ session });
+      o.refundPaymentId = refund._id;
+    }
+    await o.save({ session });
+    await audit({ action: 'service.cancel', entityType: 'ServiceOrder', entityId: o._id, facilityId: o.facilityId, reason, changes: { after: { refund: o.total } } }, session);
+  }
+  return open.length;
+}
+
 export async function cancelServiceOrder(user: UserHydrated, id: string, reason?: string) {
   return withTxn(async (session) => {
     const o = await ServiceOrderModel.findById(id).session(session);

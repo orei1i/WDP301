@@ -39,6 +39,11 @@ export interface PaymentSchedule {
 type QuoteLike = Pick<PriceQuote, 'depositAmount' | 'firstPeriodRent' | 'rentalPeriod'> & Partial<Pick<PriceQuote, 'firstPeriodAtBooking' | 'depositPeriods'>>;
 
 /** Số tiền phải trả khi đặt chỗ của MỘT báo giá (báo giá cũ không có cờ → chỉ tiền giữ chân). */
+/** Các khoản thanh toán thuộc về một hợp đồng: khoản gắn thẳng vào hợp đồng + khoản thu LÚC ĐẶT CHỖ (tiền giữ chân, tiền
+ * thuê kỳ đầu của kho cỡ lớn) — những khoản này phát sinh trước khi có hợp đồng nên chỉ mang reservationId. */
+export const paymentsOfContract = <P extends { contractId?: string | null; reservationId?: string | null }>(payments: readonly P[], c: { _id: string; reservationId?: string | null }) =>
+  payments.filter((p) => p.contractId === c._id || (!!c.reservationId && p.reservationId === c.reservationId));
+
 export const dueAtBooking = (q: QuoteLike) => q.depositAmount + (q.firstPeriodAtBooking ? q.firstPeriodRent : 0);
 /** Số tiền phải trả thêm khi nhận kho của MỘT báo giá. */
 export const dueAtCheckIn = (q: QuoteLike) => (q.firstPeriodAtBooking ? 0 : q.firstPeriodRent);
@@ -92,6 +97,13 @@ export const paymentAckText = (s: Pick<PaymentSchedule, 'holdFee' | 'prepaidRent
 };
 
 /** Dòng tóm tắt dưới lịch thanh toán. */
+/** Dòng tổng kết khi khách ĐÃ thanh toán các khoản lúc đặt chỗ (màn chi tiết đặt chỗ sau khi trả tiền). */
+export function paymentPaidText(s: Pick<PaymentSchedule, 'payNow' | 'payAtCheckIn'>): string {
+  return s.payAtCheckIn > 0
+    ? `Đã trả ${vnd(s.payNow)} khi đặt chỗ. Còn ${vnd(s.payAtCheckIn)} tiền thuê kỳ đầu, trả tại quầy khi nhận kho.`
+    : `Đã trả đủ ${vnd(s.payNow)} khi đặt chỗ — đến nhận kho không phải trả thêm.`;
+}
+
 export const paymentTotalText = (s: Pick<PaymentSchedule, 'holdFee' | 'prepaidRent' | 'payNow' | 'payAtCheckIn' | 'totalBeforeUse' | 'unit'>) => {
   if (s.payAtCheckIn === 0) {
     return `Tổng cần chuẩn bị trước khi dùng kho: ${vnd(s.totalBeforeUse)}${s.prepaidRent > 0 ? `, trả một lần hôm nay (giữ chân ${vnd(s.holdFee)} + tiền thuê ${s.unit} đầu ${vnd(s.prepaidRent)})` : ''}.`;

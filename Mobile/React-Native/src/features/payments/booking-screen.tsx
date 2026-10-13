@@ -54,7 +54,7 @@ export default function BookingScreen() {
       </Card>
 
       {(r.status === 'PENDING' || r.status === 'CONFIRMED' || r.status === 'ALLOCATED') && (
-        <View style={{ marginTop: S.md }}><PaymentSchedule quotes={[r.quote]} /></View>
+        <View style={{ marginTop: S.md }}><PaymentSchedule quotes={[r.quote]} paid={r.status !== 'PENDING'} /></View>
       )}
 
       {r.status === 'PENDING' && (

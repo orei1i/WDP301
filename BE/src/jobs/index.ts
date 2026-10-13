@@ -1,6 +1,7 @@
 import { RentalContractModel, ReservationModel, StorageUnitModel } from '../shared/db/models';
 import { runAsSystem } from '../shared/core/request-context';
 import { addDays, addPeriodsUTC, daysBetween, todayUTC } from '../shared/utils/dates';
+import { localMidnightMs } from '@ssm/shared';
 import { effectivePolicy } from '../features/policies/pricing';
 import { cancelReservation } from '../features/reservations/reservation.service';
 import { expireSwapRequests } from '../features/swaps/unit-swap-request.service';
@@ -56,7 +57,8 @@ export async function cancelNoShows() {
   for (const r of candidates) {
     const fid = String(r.facilityId);
     if (!hoursByFacility.has(fid)) hoursByFacility.set(fid, (await effectivePolicy(r.facilityId)).noShowAfterHours);
-    const deadline = addDays(r.startDate, 1).getTime() + hoursByFacility.get(fid)! * 3_600_000;
+    // Hết ngày nhận = 00:00 giờ chi nhánh của ngày kế tiếp.
+    const deadline = localMidnightMs(addDays(r.startDate, 1)) + hoursByFacility.get(fid)! * 3_600_000;
     if (now < deadline) continue;
     try { await cancelReservation(null, String(r._id), 'NO_SHOW', 'Khách không đến nhận kho trong thời gian quy định'); cancelled++; } catch (e) { console.error('no-show', r._id, e); }
   }

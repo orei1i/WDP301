@@ -10,11 +10,12 @@ import { addDays, fmtDate, todayISO, vnd } from '@/shared/lib/format';
 import { addPeriods, contractClawback, isValidPhone, MAX_AUTHORIZED_PERSONS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PERIOD_UNIT, paymentDueDate, periodLabel } from '@ssm/shared';
 import { Badge, Button, ButtonLink, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, cx, inputCls } from '@/shared/ui';
 import { PayMethodPicker } from '@/features/payments/pay-method';
+import { AccessPanel } from '@/features/access/access-panel';
 import { api } from '@/shared/api/client';
 import { FloorPlanPicker, type FloorPlanUnit } from '@/features/facilities/floor-plan-picker';
 import { ContractFileActions } from '@/features/contracts/contract-file-actions';
 
-type Dialog = { kind: 'pay' | 'extend' | 'moveout' | 'swap' | 'authorized'; c: RentalContract } | null;
+type Dialog = { kind: 'pay' | 'extend' | 'moveout' | 'swap' | 'authorized' | 'access'; c: RentalContract } | null;
 const EMPTY_PERSON = { fullName: '', phone: '', idNumberLast4: '', relationship: '' };
 
 export default function MyUnits() {
@@ -89,6 +90,7 @@ export default function MyUnits() {
                     {OPEN_CONTRACT_STATUSES.includes(c.status) && (
                       <div className="mt-5 flex flex-wrap gap-2 border-t border-stone-100 pt-4">
                         {c.balance.outstanding > 0 && <Button size="sm" onClick={() => setDlg({ kind: 'pay', c })}>Thanh toán {vnd(c.balance.outstanding)}</Button>}
+                        <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'access', c })}><KeyRound className="size-3.5" />Mã vào kho</Button>
                         {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'extend', c })}><RefreshCw className="size-3.5" />Gia hạn</Button>}
                         {c.status === 'ACTIVE' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'moveout', c })}><PackageOpen className="size-3.5" />Đăng ký trả kho</Button>}
                         {c.status === 'ACTIVE' && !openSwap && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'swap', c })}><Repeat className="size-3.5" />Đổi ô kho</Button>}
@@ -132,6 +134,10 @@ export default function MyUnits() {
         </Field>
         {dlg && <p className="mt-3 text-sm">Hạn mới: <b>{fmtDate(addPeriods(dlg.c.endDate, dlg.c.billing.rentalPeriod, periods))}</b> · Số tiền: <b>{vnd(dlg.c.billing.rate * periods)}</b></p>}
         <div className="mt-4"><PayMethodPicker value={method} onChange={setMethod} /></div>
+      </Modal>
+
+      <Modal open={dlg?.kind === 'access'} onClose={close} size="lg" title="Mã vào kho" description={dlg ? `Kho ${unitLabel(db, dlg.c.unitId)} · ${facilityName(db, dlg.c.facilityId)}` : ''}>
+        {dlg?.kind === 'access' && (() => { const live = db.contracts.find((x) => x._id === dlg.c._id) ?? dlg.c; return <AccessPanel c={live} />; })()}
       </Modal>
 
       <Modal open={dlg?.kind === 'moveout'} onClose={close} title="Đăng ký trả kho"

@@ -9,6 +9,7 @@ import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment } from '../payments/payment.service';
 import { releaseOpenSwapRequests } from '../swaps/unit-swap-request.service';
+import { cancelOpenServiceOrders } from '../services/services.service';
 import { moveAccessToUnit } from './unit-access';
 
 const loadContract = async (id: string, session?: ClientSession) => {
@@ -297,6 +298,7 @@ export async function receiveUnit(user: UserHydrated, id: string) {
     await c.save({ session });
     // Khách đã trả kho thì yêu cầu đổi ô còn treo (kể cả đã duyệt) không bao giờ thực hiện được nữa — huỷ để nhả ô đang giữ.
     await releaseOpenSwapRequests(c._id, session, 'Khách đã trả kho');
+    await cancelOpenServiceOrders(c._id, session, 'Khách đã trả kho — đơn chưa thực hiện được hoàn tiền');
     await audit({ action: 'unit.receive', entityType: 'StorageUnit', entityId: unit._id, facilityId: c.facilityId }, session);
     return { contract: c, unit };
   });
@@ -437,6 +439,7 @@ export async function processAbandonment(
     );
 
     await releaseOpenSwapRequests(c._id, session, 'Hợp đồng đóng do hàng bỏ lại');
+    await cancelOpenServiceOrders(c._id, session, 'Hợp đồng đóng do hàng bỏ lại — đơn chưa thực hiện được hoàn tiền');
     c.transitionTo('ABANDONED', { actor: user.role, by: user._id, reason: `Khóa truy cập ${daysLocked} ngày, khách không liên hệ` });
     c.closedAt = now;
     c.deposit.refundedAmount = 0;
