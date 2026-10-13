@@ -3,7 +3,7 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, dueAtCheckIn, fmtDate, paymentDueDate, relativeDay, todayISO, vnd } from '@ssm/shared';
+import { CONTRACT_STATUS, OPEN_CONTRACT_STATUSES, PERIOD_UNIT, RESERVATION_STATUS, daysBetween, dueAtCheckIn, fmtDate, paymentDueDate, paysWholeTerm, relativeDay, todayISO, vnd } from '@ssm/shared';
 import { facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, EmptyState, H1, KV, Muted, Skeleton, StatusBadge } from '../../shared/ui';
 import { C, R, S } from '../../shared/ui/theme';
@@ -112,7 +112,7 @@ export default function HomeScreen() {
                 <Muted style={{ marginTop: 6 } as never}>
                   {typeName(db, r.unitTypeId)} · {facilityName(db, r.facilityId)} · {r.quote.firstPeriodAtBooking
                     ? `giữ chân ${vnd(r.quote.depositAmount)} + thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu ${vnd(r.quote.firstPeriodRent)}, trả cùng lúc hôm nay`
-                    : `giữ chân ${vnd(r.quote.depositAmount)} hôm nay, thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu ${vnd(r.quote.firstPeriodRent)} trả thêm khi nhận kho`}
+                    : `giữ chân ${vnd(r.quote.depositAmount)} hôm nay, ${paysWholeTerm(r.quote) ? 'tiền thuê cả thời hạn' : `thuê ${PERIOD_UNIT[r.quote.rentalPeriod]} đầu`} ${vnd(dueAtCheckIn(r.quote))} trả thêm khi nhận kho`}
                 </Muted>
                 <Button
                   title="Thanh toán"

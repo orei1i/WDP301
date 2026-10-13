@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { PaymentMethod } from '@ssm/shared';
 import {
   ACCESS_METHOD, CONTRACT_STATUS, DEPOSIT_STATUS, OPEN_CONTRACT_STATUSES, OPEN_SWAP_STATUSES, PAYMENT_METHOD, PERIOD_UNIT, SWAP_REQUEST_STATUS,
-  addDays, addPeriods, contractClawback, fmtDate, paymentDueDate, periodLabel, todayISO, vnd,
+  addDays, contractClawback, exitCommitment, fmtDate, paymentDueDate, periodLabel, todayISO, vnd, type ExtensionQuote,
 } from '@ssm/shared';
+import { api } from '../../shared/api/client';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { Badge, Button, Card, Chips, DateStepper, EmptyState, KV, Screen, ScreenHeader, StatusBadge } from '../../shared/ui';
 import { C, S } from '../../shared/ui/theme';
@@ -39,6 +40,18 @@ export default function ContractScreen() {
   }
 
   const periodsNum = Number(periods);
+  // Báo giá gia hạn lấy từ server mỗi khi đổi số kỳ — gia hạn là cam kết mới nên giá và ưu đãi tính lại, không dùng giá cũ.
+  const [ext, setExt] = useState<{ key: string; quote: ExtensionQuote | null; error: string }>({ key: '', quote: null, error: '' });
+  const extKey = `${id}:${periodsNum}`;
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    api.get<ExtensionQuote>(`/contracts/${id}/extension-quote?periods=${periodsNum}`)
+      .then((quote) => alive && setExt({ key: `${id}:${periodsNum}`, quote, error: '' }))
+      .catch((e) => alive && setExt({ key: `${id}:${periodsNum}`, quote: null, error: e instanceof Error ? e.message : 'Không tính được giá gia hạn' }));
+    return () => { alive = false; };
+  }, [id, periodsNum]);
+  const extQuote = ext.key === extKey ? ext.quote : null;
   const openSwap = db.swapRequests.find((s) => s.contractId === c._id && (OPEN_SWAP_STATUSES as readonly string[]).includes(s.status));
 
   return (
@@ -81,17 +94,31 @@ export default function ContractScreen() {
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Gia hạn hợp đồng</Text>
           <Chips options={PERIODS} value={periods} onChange={setPeriods} columns={2} />
-          <Chips options={METHODS} value={extendMethod} onChange={setExtendMethod} columns={2} />
-          <Text style={st.hint}>
-            Hạn mới: {fmtDate(addPeriods(c.endDate, c.billing.rentalPeriod, periodsNum))} · Số tiền: {vnd(c.billing.rate * periodsNum)}
-          </Text>
+          {ext.key === extKey && ext.error ? <Text style={[st.hint, { color: C.red }]}>{ext.error}</Text> : !extQuote ? <Text style={st.hint}>Đang tính giá gia hạn…</Text> : (
+            <>
+              <KV items={[
+                ['Kỳ gia hạn', `${fmtDate(extQuote.from)} → ${fmtDate(extQuote.newEndDate)}`],
+                ['Giá niêm yết hiện hành', `${vnd(extQuote.gross)}/${PERIOD_UNIT[extQuote.rentalPeriod]}`],
+                ['Ưu đãi theo thời gian gia hạn', extQuote.discountAmount > 0 ? `−${vnd(extQuote.discountAmount)}/${PERIOD_UNIT[extQuote.rentalPeriod]}` : 'không có'],
+                ['Tiền thuê trong kỳ gia hạn', `${vnd(extQuote.rate)}/${PERIOD_UNIT[extQuote.rentalPeriod]}`],
+              ]} />
+              <Text style={st.hint}>
+                Gia hạn là một cam kết mới: ưu đãi tính theo số {PERIOD_UNIT[extQuote.rentalPeriod]} gia hạn, không cộng dồn thời gian đã thuê. Bạn đang trả {vnd(extQuote.currentRate)}/{PERIOD_UNIT[extQuote.rentalPeriod]}.{' '}
+                {extQuote.payNow > 0
+                  ? `Trả trọn ${vnd(extQuote.payNow)} ngay khi gia hạn, không hoàn các ${PERIOD_UNIT[extQuote.rentalPeriod]} chưa dùng.`
+                  : 'Không phải trả trước — tiền thuê vẫn xuất hoá đơn từng tháng. Tiền giữ chân giữ nguyên.'}
+              </Text>
+              {extQuote.payNow > 0 && <Chips options={METHODS} value={extendMethod} onChange={setExtendMethod} columns={2} />}
+            </>
+          )}
           <Button
-            title="Gia hạn & thanh toán"
+            title={extQuote && extQuote.payNow > 0 ? 'Gia hạn & thanh toán' : 'Xác nhận gia hạn'}
             style={{ marginTop: S.md }}
-            onPress={() => void run(
+            disabled={!extQuote}
+            onPress={() => extQuote && void run(
               'extendContract',
-              { contractId: c._id, periods: periodsNum, method: extendMethod },
-              (v) => `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — thanh toán ${vnd(v)}`,
+              { contractId: c._id, periods: periodsNum, method: extQuote.payNow > 0 ? extendMethod : undefined },
+              (v) => (v > 0 ? `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — thanh toán ${vnd(v)}` : `Đã gia hạn ${periodLabel(c.billing.rentalPeriod, periodsNum)} — tiền thuê trả theo từng tháng`),
             )}
           />
         </Card>
@@ -101,15 +128,20 @@ export default function ContractScreen() {
         <Card style={{ marginTop: S.md }}>
           <Text style={st.sectionTitle}>Đăng ký trả kho</Text>
           <Text style={st.hint}>Nhân viên sẽ kiểm tra kho khi bạn bàn giao chìa khóa. Tiền giữ chân hoàn sau khi trừ chi phí hư hại (nếu có).</Text>
-          <Text style={st.hint}>Tiền thuê vẫn được tính đến ngày bạn THỰC TẾ bàn giao kho. Trả kho trước hạn thì mức hoàn tiền giữ chân tính theo phần kỳ hạn đã dùng đến ngày đó — càng gần hết hạn càng được hoàn nhiều; bỏ ngang trong 25% đầu kỳ hạn có thể không được hoàn.</Text>
+          <Text style={st.hint}>
+            Tiền thuê vẫn được tính đến ngày bạn THỰC TẾ bàn giao kho.{' '}
+            {(exitCommitment(c, byId(db.reservations, c.reservationId)?.quote, todayISO())?.discountAmount ?? 0) > 0
+              ? 'Kỳ cam kết hiện tại của bạn được giảm giá vì thuê dài hạn: trả kho trước hạn thì mức hoàn tiền giữ chân tính theo phần kỳ hạn đã dùng đến ngày đó — càng gần hết hạn càng được hoàn nhiều; bỏ ngang trong 25% đầu kỳ hạn có thể không được hoàn.'
+              : 'Kỳ thuê hiện tại không có ưu đãi thuê dài hạn nên trả kho trước hạn vẫn được hoàn đủ tiền giữ chân.'}
+          </Text>
           <DateStepper label="Ngày trả kho dự kiến" value={moveOutDate} onChange={setMoveOutDate} min={todayISO()} />
           {(() => {
             // Thu hồi ưu đãi thuê dài hạn nếu trả vào ngày đang chọn — cùng công thức với server (shared).
             const rsv = byId(db.reservations, c.reservationId);
-            const claw = contractClawback(c, rsv?.quote, db.policies.find((p) => p._id === rsv?.quote.policyId)?.discounts, moveOutDate);
+            const claw = contractClawback(c, rsv?.quote, db.policies, moveOutDate);
             return claw ? (
               <Text style={[st.hint, { color: C.amber }]}>
-                Thu hồi ưu đãi: bạn mới dùng {claw.usedPeriods} tháng nên chỉ được giảm {vnd(claw.entitledPerPeriod)}/tháng thay vì {vnd(rsv!.quote.discountAmount)}/tháng — phần đã hưởng vượt {vnd(claw.amount)} sẽ trừ vào tiền giữ chân được hoàn.
+                Thu hồi ưu đãi: bạn mới dùng {claw.usedPeriods} tháng nên chỉ được giảm {vnd(claw.entitledPerPeriod)}/tháng thay vì {vnd(claw.discountPerPeriod)}/tháng — phần đã hưởng vượt {vnd(claw.amount)} sẽ trừ vào tiền giữ chân được hoàn.
               </Text>
             ) : null;
           })()}
