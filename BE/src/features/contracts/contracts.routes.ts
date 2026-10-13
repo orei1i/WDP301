@@ -8,7 +8,7 @@ import { authorize } from '../../shared/http/authorize';
 import { assertCanAccess, scopeFilter, scopeQueryFacility } from '../../shared/http/scope';
 import { idParams, paging, validate, zDate, zId, zMoney } from '../../shared/http/validate';
 import {
-  cancelMoveOut, extendContract, lockout, payBalance, writeOffDebt, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
+  cancelMoveOut, extendContract, extensionQuote, lockout, payBalance, writeOffDebt, processAbandonment, receiveUnit, requestMoveOut, submitMoveOutInspection,
   swapCandidates, swapUnit, SWAP_FEE_MAX, waiveLateFees,
 } from './contract.service';
 import { createSwapRequest, listSwapRequestsForContract } from '../swaps/unit-swap-request.service';
@@ -70,7 +70,12 @@ contractsRouter.delete('/:id/authorized-persons/:personId', authorize('CUSTOMER'
   res.json(await removeAuthorizedPerson(req.auth!.user, req.valid.params.id, req.valid.params.personId));
 });
 
-contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm }) }), async (req, res) => {
+// Xem trước giá gia hạn: gia hạn là cam kết mới — giá niêm yết hiện hành, ưu đãi theo số tháng gia hạn.
+contractsRouter.get('/:id/extension-quote', authorize('CUSTOMER'), validate({ params: idParams, query: z.object({ periods: z.coerce.number().int().min(1).max(60) }) }), async (req, res) => {
+  res.json(await extensionQuote(req.auth!.user, req.valid.params.id, req.valid.query.periods));
+});
+// `method` chỉ cần khi thuê theo ngày / tuần (trả trọn kỳ gia hạn ngay); thuê tháng không thu tiền lúc gia hạn.
+contractsRouter.post('/:id/extend', authorize('CUSTOMER'), validate({ params: idParams, body: z.object({ periods: z.number().int().min(1).max(60), method: pm.optional() }) }), async (req, res) => {
   res.json(await extendContract(req.auth!.user, req.valid.params.id, req.valid.body.periods, req.valid.body.method));
 });
 contractsRouter.post('/:id/pay-balance', authorize('CUSTOMER', 'STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({ method: pm }) }), async (req, res) => {

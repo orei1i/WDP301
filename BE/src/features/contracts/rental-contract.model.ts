@@ -95,6 +95,17 @@ const schema = new Schema<RentalContractDoc, RentalContractModelType, Methods>({
     }, subOptions)],
     default: [], validate: maxLen(120),
   },
+  // Các kỳ cam kết nối tiếp nhau (kỳ gốc + từng lần gia hạn), mỗi kỳ một giá — xem RentalContract.commitments trong @ssm/shared.
+  commitments: {
+    type: [new Schema({
+      kind: { type: String, enum: ['INITIAL', 'RENEWAL'], required: true },
+      startDate: { type: Date, required: true }, endDate: { type: Date, required: true },
+      periods: { type: Number, required: true, min: 1 },
+      gross: money(), discountAmount: money(false), rate: money(),
+      policyId: refOpt('BusinessPolicy'), at: { type: Date, default: Date.now },
+    }, subOptions)],
+    default: [], validate: maxLen(120),
+  },
   unitSwaps: {
     type: [new Schema({
       fromUnitId: refReq('StorageUnit'), toUnitId: refReq('StorageUnit'),

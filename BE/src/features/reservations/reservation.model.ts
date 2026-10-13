@@ -19,6 +19,8 @@ const quoteSchema = new Schema<PriceQuote<OID>>({
   // Báo giá cũ không có hai trường này: giữ chân = 1 kỳ, tiền thuê kỳ đầu trả khi nhận kho.
   depositPeriods: { type: Number, default: 1, min: 1, max: 12 },
   firstPeriodAtBooking: { type: Boolean, default: false },
+  // Số kỳ tiền thuê thu trước khi dùng kho: thuê tháng = 1, thuê ngày / tuần = cả thời hạn. Báo giá cũ không có = 1.
+  prepaidPeriods: { type: Number, default: 1, min: 1, max: 400 },
   policyId: refReq('BusinessPolicy'),
   policyVersion: { type: Number, required: true, min: 1 },
 }, subOptions);

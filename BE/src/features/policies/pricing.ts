@@ -1,5 +1,5 @@
 import type { ClientSession, Types } from 'mongoose';
-import { dueAtBooking, earlyTerminationOf, localMidnightMs, pickDiscount, tierTermsOf, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
+import { dueAtBooking, earlyTerminationOf, localMidnightMs, pickDiscount, prepaidPeriodsOf, tierTermsOf, type PriceQuote, type RentalPeriod, type UnitCategory } from '@ssm/shared';
 import { FacilityModel, PolicyModel, type PolicyDoc, type UnitTypeDoc, type ReservationDoc } from '../../shared/db/models';
 
 /** Facility override if active, otherwise the active GLOBAL policy. */
@@ -56,6 +56,8 @@ export function quote(
     totalDueAtBooking: depositAmount + (tier.firstPeriodAtBooking ? firstPeriodRent : 0),
     depositPeriods: ut.depositOverride == null && policy.deposit.mode === 'PERIODS_OF_RENT' ? rentPeriods : 1,
     firstPeriodAtBooking: tier.firstPeriodAtBooking,
+    // Thuê theo ngày / tuần: thu trọn tiền thuê cả thời hạn khi nhận kho (xem payment-schedule.ts trong @ssm/shared).
+    prepaidPeriods: prepaidPeriodsOf(period, periods),
     policyId: policy._id, policyVersion: policy.version,
   };
 }

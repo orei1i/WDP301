@@ -1,5 +1,5 @@
 import { Types, type ClientSession } from 'mongoose';
-import { PERIOD_UNIT, TERMS_VERSION, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation, type SignatureMethod } from '@ssm/shared';
+import { dueAtCheckIn, PERIOD_UNIT, TERMS_VERSION, type CancellationReason, type CheckInShift, type PaymentMethod, type RentalPeriod, type Reservation, type SignatureMethod } from '@ssm/shared';
 import {
   FacilityModel, PaymentModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, UserModel,
   type ReservationHydrated, type UserHydrated,
@@ -345,9 +345,10 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     if (r.quote.firstPeriodAtBooking) {
       const prepaid = await PaymentModel.exists({ reservationId: r._id, type: 'PREPAID_RENT', status: 'SUCCEEDED' }).session(session);
       if (!prepaid) throw Unprocessable('Chưa ghi nhận tiền thuê kỳ đầu đã trả khi đặt chỗ — liên hệ quản lý', 'PREPAID_RENT_MISSING');
-    } else if (!input.payMethod) {
-      throw Unprocessable('Chọn phương thức thu tiền thuê kỳ đầu', 'PAY_METHOD_REQUIRED');
     }
+    // Tiền thuê còn phải thu tại quầy: 1 kỳ (thuê tháng, kho thường) hoặc trọn cả thời hạn (thuê ngày / tuần).
+    const dueNow = dueAtCheckIn(r.quote);
+    if (dueNow > 0 && !input.payMethod) throw Unprocessable('Chọn phương thức thu tiền thuê khi nhận kho', 'PAY_METHOD_REQUIRED');
 
     const policy = await effectivePolicy(r.facilityId, session);
     const now = new Date();
@@ -364,12 +365,14 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     // Hình thức khoá đến từ chính ô khách nhận (unit.accessMethod), không phải loại kho — mỗi ô có
     // thể khác nhau trong cùng một loại. Nhân viên không tự chọn tại quầy.
     const pin = unit.accessMethod === 'PIN' ? sixDigitPin() : undefined;
-    const nextBilling = addPeriodsUTC(today, period, 1);
+    // Kỳ thu tiền kế tiếp bắt đầu sau các kỳ đã trả trước: thuê tháng là tháng sau; thuê ngày / tuần là hết thời hạn đã đặt
+    // (đến lúc đó mà chưa trả kho thì job mới tính tiếp từng kỳ).
+    const nextBilling = addPeriodsUTC(today, period, Math.max(1, r.quote.prepaidPeriods ?? 1));
     const periodEnd = addDays(nextBilling, -1);
-    if (!r.quote.firstPeriodAtBooking && input.payMethod) {
+    if (dueNow > 0 && input.payMethod) {
       await createPayment({
         facilityId: r.facilityId, customerId: r.customerId, contractId, reservationId: r._id, type: 'RENT',
-        amount: r.quote.firstPeriodRent, status: 'SUCCEEDED', method: input.payMethod,
+        amount: dueNow, status: 'SUCCEEDED', method: input.payMethod,
         recordedBy: input.payMethod === 'CASH' ? user._id : null, period: { start: today, end: periodEnd },
         // Mỗi đặt chỗ chỉ có đúng một khoản thu tiền thuê kỳ đầu — bấm nhận kho hai lần cũng không thu thêm được.
         idempotencyKey: `checkin-rent-${r._id}`,
@@ -378,7 +381,10 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
 
     const [contract] = await RentalContractModel.create([{
       _id: contractId, facilityId: r.facilityId, customerId: r.customerId, unitId: unit._id, unitTypeId: r.unitTypeId, reservationId: r._id,
-      status: 'ACTIVE', startDate: today, endDate: addPeriodsUTC(today, period, r.periods), autoRenew: period === 'MONTH' && r.periods >= 6,
+      status: 'ACTIVE', startDate: today, endDate: addPeriodsUTC(today, period, r.periods),
+      // Không tự gia hạn ngầm: hết hạn mà khách không gia hạn thì tính tiếp theo giá chưa ưu đãi (xem jobs/runBilling).
+      autoRenew: false,
+      commitments: [{ kind: 'INITIAL', startDate: today, endDate: addPeriodsUTC(today, period, r.periods), periods: r.periods, gross: r.quote.rate + r.quote.surchargeAmount, discountAmount: r.quote.discountAmount, rate: r.quote.firstPeriodRent, policyId: r.quote.policyId, at: now }],
       useAirConditioning: r.useAirConditioning,
       billing: { currency: 'VND', rentalPeriod: period, rate: r.quote.firstPeriodRent, nextBillingDate: nextBilling, paidThrough: periodEnd },
       deposit: { amount: r.quote.depositAmount, status: 'HELD', paymentId: r.depositPaymentId ?? null, refundedAmount: 0 },
@@ -392,7 +398,7 @@ export async function checkIn(user: UserHydrated, id: string, input: { keyTag?: 
     r.contractId = contractId;
     r.checkIn = { qrTokenHash: r.checkIn?.qrTokenHash ?? null, qrExpiresAt: r.checkIn?.qrExpiresAt ?? null, checkedInAt: now, checkedInBy: user._id };
     await r.save({ session });
-    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: unit.accessMethod, rent: r.quote.firstPeriodRent, rentPrepaid: !!r.quote.firstPeriodAtBooking } } }, session);
+    await audit({ action: 'reservation.check_in', entityType: 'RentalContract', entityId: contractId, facilityId: r.facilityId, changes: { after: { unit: unit.unitNumber, access: unit.accessMethod, rent: r.quote.firstPeriodRent, rentCollected: dueNow, prepaidPeriods: r.quote.prepaidPeriods ?? 1, rentPrepaid: !!r.quote.firstPeriodAtBooking } } }, session);
     return { contract, unit, pin }; // PIN is returned exactly once; only its hash is stored
   });
 }

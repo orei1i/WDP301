@@ -7,7 +7,7 @@ import { cancelReservation } from '../features/reservations/reservation.service'
 import { expireSwapRequests } from '../features/swaps/unit-swap-request.service';
 import { audit } from '../features/audit/audit.service';
 import { createPayment } from '../features/payments/payment.service';
-import { coveredByPaidRenewal } from '../features/contracts/billing-rules';
+import { coveredByPaidRenewal, rentForPeriod } from '../features/contracts/billing-rules';
 import { withTxn } from '../shared/db/txn';
 
 /**
@@ -90,18 +90,15 @@ export async function runBilling() {
         await c.save({ session });
         return;
       }
-      // Hết hạn (start >= endDate) mà chưa autoRenew, hoặc khách đã đăng ký trả kho nhưng chưa bàn giao — vẫn
-      // giữ đồ trong kho nên tiếp tục tính tiền thuê theo đúng giá cũ (holdover), KHÔNG tự gia hạn cam kết
-      // (endDate giữ nguyên, không push vào `renewals`) để phân biệt với autoRenew thật. Nếu sau đó khách
-      // không đóng tiền, luồng DELINQUENT → LOCKED_OUT bên dưới tự xử lý như nợ thông thường.
-      await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount: c.billing.rate, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
-      c.balance.outstanding += c.billing.rate;
+      // Giá của kỳ này theo KỲ CAM KẾT chứa nó (kỳ gốc hoặc một lần gia hạn, mỗi kỳ ưu đãi riêng). Hết hạn mà không gia hạn — hoặc
+      // đã đăng ký trả kho nhưng chưa bàn giao sau ngày hết hạn — thì vẫn giữ đồ trong kho nên tiếp tục tính tiền, nhưng theo giá
+      // CHƯA ưu đãi: không còn cam kết thì không còn ưu đãi. Hệ thống KHÔNG tự gia hạn cam kết thay khách (endDate giữ nguyên).
+      // Nếu khách không đóng tiền, luồng DELINQUENT → LOCKED_OUT bên dưới tự xử lý như nợ thông thường.
+      const amount = rentForPeriod(c, start);
+      c.billing.rate = amount; // giá đang áp dụng — để mọi màn hình hiện đúng số khách đang trả
+      await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENT', amount, status: 'PENDING', method: 'BANK_TRANSFER', period: { start, end }, idempotencyKey: `rent-${c._id}-${start.toISOString().slice(0, 10)}` }, session);
+      c.balance.outstanding += amount;
       c.billing.nextBillingDate = addPeriodsUTC(start, period, 1);
-      if (start >= c.endDate && c.autoRenew && c.status !== 'MOVE_OUT_PENDING') { // đang chờ trả kho thì không tự gia hạn cam kết
-        const newEnd = addPeriodsUTC(c.endDate, period, 1);
-        c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, periods: 1, paymentId: null, at: new Date() });
-        c.endDate = newEnd;
-      }
       await c.save({ session });
     }).catch((e) => console.error('billing', _id, e));
   }

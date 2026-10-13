@@ -12,3 +12,20 @@ export function coveredByPaidRenewal(
   const t = start.getTime();
   return renewals.some((r) => !!r.paymentId && r.previousEndDate.getTime() <= t && t < r.newEndDate.getTime());
 }
+
+/**
+ * Tiền thuê của kỳ bắt đầu từ `start`. Hợp đồng có các KỲ CAM KẾT (`commitments`): trong kỳ nào tính giá của kỳ đó (đã trừ ưu đãi
+ * của chính kỳ đó); ngoài mọi kỳ cam kết — hết hạn mà không gia hạn — tính giá CHƯA ưu đãi của kỳ gần nhất, vì không còn cam kết
+ * thì không còn ưu đãi. Hợp đồng cũ chưa có `commitments` giữ nguyên `billing.rate`.
+ */
+export function rentForPeriod(
+  c: { billing: { rate: number }; commitments?: readonly { startDate: Date; endDate: Date; gross: number; rate: number }[] | null },
+  start: Date,
+): number {
+  const list = c.commitments ?? [];
+  if (!list.length) return c.billing.rate;
+  const t = start.getTime();
+  const seg = list.find((s) => s.startDate.getTime() <= t && t < s.endDate.getTime());
+  if (seg) return seg.rate;
+  return [...list].sort((a, b) => b.endDate.getTime() - a.endDate.getTime())[0].gross;
+}

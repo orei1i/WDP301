@@ -1,9 +1,9 @@
 import { Types, type ClientSession } from 'mongoose';
-import { abandonDaysOf, discountClawback, PERIOD_UNIT, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
+import { abandonDaysOf, discountClawback, exitCommitment, PERIOD_UNIT, unusedPrepaidRent, type AbandonedItemsDisposal, type InspectionLog, type PaymentMethod, type UnitStatus } from '@ssm/shared';
 import { InspectionModel, PaymentModel, PolicyModel, RentalContractModel, ReservationModel, StorageUnitModel, UnitTypeModel, type UserHydrated } from '../../shared/db/models';
 import { Conflict, Forbidden, NotFound, Unprocessable } from '../../shared/core/errors';
 import { assertCanAccess, assertFacility } from '../../shared/http/scope';
-import { earlyTerminationRefundPct, effectivePolicy, elapsedTermPct } from '../policies/pricing';
+import { climateEligible, earlyTerminationRefundPct, effectivePolicy, elapsedTermPct, quote } from '../policies/pricing';
 import { addDays, addPeriodsUTC, daysBetween, localDay, todayUTC, toDateOnly } from '../../shared/utils/dates';
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
@@ -19,28 +19,77 @@ const loadContract = async (id: string, session?: ClientSession) => {
 };
 
 // ---------------------------------------------------------------- extend (CUSTOMER owner)
-export async function extendContract(user: UserHydrated, id: string, periods: number, method: PaymentMethod) {
+type ContractDoc = Awaited<ReturnType<typeof loadContract>>;
+
+/**
+ * Hợp đồng tạo trước khi có `commitments`: dựng lại kỳ cam kết GỐC từ báo giá lúc đặt, để khi gia hạn hệ thống biết đâu là
+ * kỳ gốc (giá cũ) và đâu là kỳ gia hạn (giá mới) — không thì cả quãng trước bị coi như "ngoài cam kết".
+ */
+async function ensureInitialCommitment(c: ContractDoc, session: ClientSession) {
+  if (c.commitments?.length) return;
+  const rsv = await ReservationModel.findById(c.reservationId, { quote: 1, periods: 1 }).session(session).lean();
+  const initialEnd = c.renewals[0]?.previousEndDate ?? c.endDate;
+  c.commitments = [{
+    kind: 'INITIAL', startDate: c.startDate, endDate: initialEnd, periods: rsv?.periods ?? 1,
+    gross: rsv ? rsv.quote.rate + rsv.quote.surchargeAmount : c.billing.rate, discountAmount: rsv?.quote.discountAmount ?? 0, rate: c.billing.rate,
+    policyId: rsv?.quote.policyId ?? c.terms.policyId, at: c.startDate,
+  }] as ContractDoc['commitments'];
+}
+
+/**
+ * Báo giá cho một lần gia hạn — GIA HẠN LÀ MỘT CAM KẾT MỚI:
+ *  - giá gốc là giá NIÊM YẾT HIỆN HÀNH của loại kho (+ phụ phí điều hòa nếu hợp đồng đang dùng), theo chính sách đang áp dụng;
+ *  - ưu đãi thuê dài hạn tính theo số tháng GIA HẠN, không cộng dồn thời gian đã thuê (cam kết bao lâu thì giảm theo bấy lâu);
+ *  - thuê tháng: KHÔNG trả trước, tiền thuê vẫn xuất hoá đơn từng tháng với giá mới; thuê ngày / tuần: trả trọn khi gia hạn;
+ *  - bắt đầu từ ngày hết hạn hiện tại, hoặc từ kỳ chưa xuất hoá đơn nếu hợp đồng đã quá hạn (không phủ lại kỳ đã tính tiền);
+ *  - tiền giữ chân giữ nguyên, không thu thêm.
+ */
+async function quoteExtension(c: ContractDoc, periods: number, session?: ClientSession) {
+  const policy = await effectivePolicy(c.facilityId, session);
+  const ut = await UnitTypeModel.findById(c.unitTypeId).session(session ?? null);
+  if (!ut) throw NotFound('loại kho');
+  const period = c.billing.rentalPeriod;
+  const q = quote(ut, policy, period, periods, !!c.useAirConditioning && climateEligible(policy, ut.category));
+  const from = c.billing.nextBillingDate.getTime() > c.endDate.getTime() ? c.billing.nextBillingDate : c.endDate;
+  const newEnd = addPeriodsUTC(from, period, periods);
+  // Tổng thời gian thuê tính thô từ số ngày để chặn vượt trần chính sách.
+  const perDays = period === 'MONTH' ? 30 : period === 'WEEK' ? 7 : 1;
+  if (daysBetween(c.startDate, newEnd) / perDays > policy.maxPeriods + 1) throw Unprocessable(`Tổng thời hạn vượt tối đa ${policy.maxPeriods} ${PERIOD_UNIT[period]}`);
+  const gross = q.rate + q.surchargeAmount;
+  return {
+    policy, period, periods, from, newEnd, gross, discountAmount: q.discountAmount, rate: q.firstPeriodRent,
+    currentRate: c.billing.rate,
+    // Thuê ngày / tuần trả trọn tiền thuê cả kỳ gia hạn ngay; thuê tháng trả theo từng tháng.
+    payNow: period === 'MONTH' ? 0 : q.firstPeriodRent * periods,
+  };
+}
+
+/** Xem trước giá gia hạn (khách chọn số kỳ → thấy giá mới, ưu đãi, hạn mới) — không ghi gì. */
+export async function extensionQuote(user: UserHydrated, id: string, periods: number) {
+  const c = await loadContract(id);
+  await assertCanAccess(user, c, 'contract.extend');
+  const x = await quoteExtension(c, periods);
+  return { rentalPeriod: x.period, periods, from: x.from, newEndDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, currentRate: x.currentRate, payNow: x.payNow, policyVersion: x.policy.version };
+}
+
+export async function extendContract(user: UserHydrated, id: string, periods: number, method?: PaymentMethod) {
   return withTxn(async (session) => {
     const c = await loadContract(id, session);
     await assertCanAccess(user, c, 'contract.extend');
-    if (c.status !== 'ACTIVE') throw Unprocessable('Chỉ gia hạn được hợp đồng đang hiệu lực, không có công nợ');
-    const policy = await effectivePolicy(c.facilityId, session);
-    const period = c.billing.rentalPeriod;
-    // Tổng số chu kỳ đã thuê + gia hạn thêm, tính thô từ số ngày để chặn vượt trần chính sách.
-    const perDays = period === 'MONTH' ? 30 : period === 'WEEK' ? 7 : 1;
-    const totalPeriods = daysBetween(c.startDate, addPeriodsUTC(c.endDate, period, periods)) / perDays;
-    if (totalPeriods > policy.maxPeriods + 1) throw Unprocessable(`Tổng thời hạn vượt tối đa ${policy.maxPeriods} ${PERIOD_UNIT[period]}`);
+    if (c.status !== 'ACTIVE') throw Unprocessable('Chỉ gia hạn được hợp đồng đang hiệu lực');
+    const x = await quoteExtension(c, periods, session);
+    if (x.payNow > 0 && !method) throw Unprocessable('Chọn hình thức thanh toán tiền thuê của kỳ gia hạn', 'PAY_METHOD_REQUIRED');
+    await ensureInitialCommitment(c, session);
 
-    const newEnd = addPeriodsUTC(c.endDate, period, periods);
-    const pay = await createPayment({
-      facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENEWAL',
-      amount: c.billing.rate * periods, status: 'SUCCEEDED', method, period: { start: c.endDate, end: newEnd },
-    }, session);
-    c.renewals.push({ previousEndDate: c.endDate, newEndDate: newEnd, periods, paymentId: pay._id, at: new Date() });
-    c.endDate = newEnd;
+    const pay = x.payNow > 0
+      ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'RENEWAL', amount: x.payNow, status: 'SUCCEEDED', method: method!, period: { start: x.from, end: x.newEnd } }, session)
+      : null;
+    c.renewals.push({ previousEndDate: x.from, newEndDate: x.newEnd, periods, paymentId: pay?._id ?? null, at: new Date() });
+    c.commitments = [...(c.commitments ?? []), { kind: 'RENEWAL', startDate: x.from, endDate: x.newEnd, periods, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, policyId: x.policy._id, at: new Date() }] as ContractDoc['commitments'];
+    c.endDate = x.newEnd;
     await c.save({ session });
-    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { periods, amount: pay.amount, endDate: newEnd } } }, session);
-    return { contract: c, amount: pay.amount };
+    await audit({ action: 'contract.extend', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, changes: { after: { periods, from: x.from, endDate: x.newEnd, gross: x.gross, discountAmount: x.discountAmount, rate: x.rate, paidNow: x.payNow } } }, session);
+    return { contract: c, amount: x.payNow, rate: x.rate, discountAmount: x.discountAmount, newEndDate: x.newEnd };
   });
 }
 
@@ -317,36 +366,58 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const normalDeductions = Math.min(c.deposit.amount, owed);
     let refundAmount = c.deposit.amount - normalDeductions;
     // Chi phí hư hại + công nợ VƯỢT tiền giữ chân: không xoá, ghi thành khoản nợ còn lại sau quyết toán.
-    const shortfall = owed - normalDeductions;
+    let shortfall = owed - normalDeductions;
 
     // Trả kho SỚM (trước endDate của kỳ hạn hiện tại) bị áp trần hoàn cọc theo % thời gian đã dùng —
     // trả đúng/quá hạn là move-out bình thường, không bị phạt thêm. Mốc xét là ngày khách THỰC TẾ bàn giao kho
     // (returnedOn, ghi lúc nhân viên nhận lại), KHÔNG phải ngày khách tự hẹn — hẹn ngày hết hạn rồi trả ngay hôm sau
     // vẫn là trả sớm. Hợp đồng cũ chưa có returnedOn thì lấy ngày thu hồi quyền truy cập.
+    // CHỈ áp cho hợp đồng có cam kết thời hạn (được giảm giá thuê dài hạn): hợp đồng ngắn / theo ngày / theo tuần không được
+    // ưu đãi gì nên trả sớm vẫn hoàn đủ tiền giữ chân (sau hư hại, công nợ).
     let earlyTermination: NonNullable<InspectionLog['depositSettlement']>['earlyTermination'] = null;
     let clawback = 0;
     const returnedOn = c.moveOut?.returnedOn ?? (c.access.revokedAt ? localDay(c.access.revokedAt) : todayUTC());
-    if (returnedOn.getTime() < c.endDate.getTime()) {
-      const policy = await effectivePolicy(c.facilityId, session);
-      const elapsedPct = elapsedTermPct(c.startDate, c.endDate, returnedOn);
+    const rsv = await ReservationModel.findById(c.reservationId, { quote: 1 }).session(session).lean();
+    // Kỳ cam kết khách đang "phá" khi trả kho hôm nay: kỳ gốc hoặc một lần gia hạn (mỗi lần gia hạn là cam kết mới, giá và ưu đãi
+    // riêng). Đã hết hạn mà không gia hạn → không trong kỳ nào → không bị giới hạn mức hoàn, không thu hồi ưu đãi.
+    const iso = (d: Date) => d.toISOString();
+    const seg = exitCommitment(
+      { startDate: iso(c.startDate), endDate: iso(c.endDate), commitments: (c.commitments ?? []).map((x) => ({ startDate: iso(x.startDate), endDate: iso(x.endDate), gross: x.gross, discountAmount: x.discountAmount, policyId: x.policyId ? String(x.policyId) : null })) },
+      rsv ? { rentalPeriod: rsv.quote.rentalPeriod, rate: rsv.quote.rate, surchargeAmount: rsv.quote.surchargeAmount, discountAmount: rsv.quote.discountAmount, policyId: String(rsv.quote.policyId) } : null,
+      iso(returnedOn),
+    );
+    if (seg && seg.discountAmount > 0 && c.billing.rentalPeriod === 'MONTH') {
+      // Chính sách ĐÃ CHỐT lúc cam kết (lúc đặt với kỳ gốc, lúc gia hạn với kỳ gia hạn) — không lấy bản đang áp dụng, nếu không
+      // Quản lý vận hành đổi bảng giữa chừng là khách bị quyết toán khác với điều đã thoả thuận.
+      const policy = (seg.policyId ? await PolicyModel.findById(seg.policyId).session(session) : null) ?? await effectivePolicy(c.facilityId, session);
+      const elapsedPct = elapsedTermPct(new Date(seg.startDate), new Date(seg.endDate), returnedOn);
       const refundCapPct = earlyTerminationRefundPct(policy, elapsedPct);
       refundAmount = Math.min(refundAmount, Math.round((c.deposit.amount * refundCapPct) / 100));
       earlyTermination = { elapsedPct: Math.round(elapsedPct), refundCapPct };
 
-      // Thu hồi ưu đãi thuê dài hạn: giảm giá vì cam kết thuê dài, trả sớm thì chỉ được mức giảm của số tháng thực dùng.
-      // Tính theo báo giá và chính sách ĐÃ CHỐT lúc đặt; trừ vào phần tiền giữ chân còn lại (không truy thu vượt quá).
-      const rsv = await ReservationModel.findById(c.reservationId, { quote: 1 }).session(session).lean();
-      const quoted = rsv ? await PolicyModel.findById(rsv.quote.policyId, { discounts: 1 }).session(session).lean() : null;
-      const claw = rsv && quoted ? discountClawback({
-        rentalPeriod: rsv.quote.rentalPeriod, rate: rsv.quote.rate, surchargeAmount: rsv.quote.surchargeAmount, discountAmount: rsv.quote.discountAmount,
-        discounts: quoted.discounts, startDate: c.startDate.toISOString(), moveOutDate: returnedOn.toISOString(),
-      }) : null;
+      // Thu hồi ưu đãi thuê dài hạn của CHÍNH kỳ cam kết đó: trả sớm thì chỉ được mức giảm của số tháng thực dùng trong kỳ.
+      // Trừ vào phần tiền giữ chân còn lại (không truy thu vượt quá).
+      const claw = discountClawback({ rentalPeriod: 'MONTH', rate: seg.gross, surchargeAmount: 0, discountAmount: seg.discountAmount, discounts: policy.discounts, startDate: seg.startDate, moveOutDate: iso(returnedOn) });
       if (claw) {
         clawback = Math.min(refundAmount, claw.amount);
         refundAmount -= clawback;
         earlyTermination = { ...earlyTermination, discountClawback: clawback, usedPeriods: claw.usedPeriods };
       }
     }
+    // Tiền thuê trả trước khi gia hạn cho các kỳ CHƯA bắt đầu tại ngày bàn giao: trả lại khách (trước đây mất trắng). Phần này
+    // cấn trừ vào hư hại / công nợ vượt tiền giữ chân trước, còn lại mới hoàn tiền.
+    const paidRenewals = c.renewals.filter((x) => x.paymentId);
+    const renewalPays = paidRenewals.length
+      ? await PaymentModel.find({ _id: { $in: paidRenewals.map((x) => x.paymentId) }, status: { $in: ['SUCCEEDED', 'PARTIALLY_REFUNDED'] } }).session(session)
+      : [];
+    const unused = unusedPrepaidRent(c.billing.rentalPeriod, paidRenewals.flatMap((x) => {
+      const p = renewalPays.find((y) => String(y._id) === String(x.paymentId));
+      return p ? [{ key: String(p._id), previousEndDate: x.previousEndDate.toISOString(), periods: x.periods, amount: p.amount }] : [];
+    }), returnedOn.toISOString());
+    const prepaidRentOffset = Math.min(unused.total, shortfall);
+    const prepaidRentRefund = unused.total - prepaidRentOffset;
+    shortfall -= prepaidRentOffset;
+
     const deductions = c.deposit.amount - refundAmount;
     const outcome: InspectionLog['outcome'] = input.damages.some((d) => d.severity === 'SEVERE') ? 'MAINTENANCE_REQUIRED' : input.damages.length ? 'PASS_WITH_DAMAGE' : 'PASS';
     const now = new Date();
@@ -361,11 +432,24 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
       ? await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: refundAmount, status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: c.deposit.paymentId ?? null }, session)
       : null;
 
+    let offsetLeft = prepaidRentOffset;
+    for (const it of unused.items) {
+      const p = renewalPays.find((y) => String(y._id) === it.key)!;
+      const offset = Math.min(it.amount, offsetLeft);
+      offsetLeft -= offset;
+      // Phần cấn trừ vào hư hại / công nợ ghi sổ nội bộ (không có tiền ra); phần còn lại là tiền hoàn thật.
+      if (offset > 0) await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: offset, status: 'SUCCEEDED', method: 'INTERNAL', refundOf: p._id }, session);
+      if (it.amount - offset > 0) await createPayment({ facilityId: c.facilityId, customerId: c.customerId, contractId: c._id, type: 'REFUND', amount: it.amount - offset, status: 'SUCCEEDED', method: 'BANK_TRANSFER', refundOf: p._id }, session);
+      p.refundedAmount = (p.refundedAmount ?? 0) + it.amount;
+      p.transitionTo(p.refundedAmount >= p.amount ? 'REFUNDED' : 'PARTIALLY_REFUNDED', { actor: 'SYSTEM', reason: `Trả kho — hoàn ${it.unusedPeriods} kỳ gia hạn chưa dùng` });
+      await p.save({ session });
+    }
+
     const inspectionId = new Types.ObjectId();
     const [inspection] = await InspectionModel.create([{
       _id: inspectionId, facilityId: c.facilityId, unitId: unit._id, contractId: c._id, type: 'MOVE_OUT', status: 'APPROVED',
       inspectorId: user._id, performedAt: now, checklist: input.checklist, damages: input.damages, outcome, notes: input.notes,
-      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, shortfall, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now, earlyTermination },
+      depositSettlement: { depositHeld: c.deposit.amount, deductions, refundAmount, shortfall, prepaidRentRefund, prepaidRentOffset, refundPaymentId: refundPay?._id ?? null, damagePaymentId: damagePay?._id ?? null, approvedBy: user._id, approvedAt: now, earlyTermination },
     }], { session });
 
     // Outstanding charges are settled from the deposit
@@ -394,7 +478,7 @@ export async function submitMoveOutInspection(user: UserHydrated, id: string, in
     const r = await ReservationModel.findById(c.reservationId).session(session);
     if (r && r.status === 'CHECKED_IN') { r.transitionTo('COMPLETED', { actor: 'SYSTEM' }); await r.save({ session }); }
 
-    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome, discountClawback: clawback, shortfall } } }, session);
+    await audit({ action: 'inspection.move_out', entityType: 'InspectionLog', entityId: inspectionId, facilityId: c.facilityId, changes: { after: { damageFee, refundAmount, outcome, discountClawback: clawback, shortfall, prepaidRentRefund, prepaidRentOffset } } }, session);
     return { inspection, contract: c };
   });
 }
