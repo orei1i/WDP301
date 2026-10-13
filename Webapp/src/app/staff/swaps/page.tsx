@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import type { UnitSwapRequest } from '@ssm/shared';
 import { useStore } from '@/shared/store/store';
-import { CHECK_IN_SHIFT, SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
-import { facilityName, typeName, unitLabel, userName } from '@/shared/lib/domain';
+import { ACCESS_METHOD, CHECK_IN_SHIFT, SWAP_METHOD, SWAP_REQUEST_STATUS } from '@/shared/lib/labels';
+import { byId, facilityName, typeName, unitLabel, userName } from '@/shared/lib/domain';
 import { fmtDate, fmtDateTime, vnd } from '@/shared/lib/format';
 import { Badge, Button, Card, EmptyState, Field, KV, Modal, PageHeader, StatusBadge, Table, Tabs, inputCls } from '@/shared/ui';
 import { FacilityPicker, useFacilityScope } from '@/features/facilities/facility-picker';
@@ -25,6 +25,7 @@ export default function StaffSwaps() {
   // Nhân viên được phân công chuyển đồ cho yêu cầu "Thuê người chuyển" — FM chọn lúc duyệt, đổi lại được khi chưa hoàn tất.
   const [moverId, setMoverId] = useState('');
   const [rejectReason, setRejectReason] = useState('');
+  const [keyTag, setKeyTag] = useState('');
   if (!user) return null;
   const close = () => setDlg(null);
 
@@ -70,7 +71,8 @@ export default function StaffSwaps() {
       <div className="flex flex-wrap justify-end gap-2">
         {s.status === 'SUBMITTED' && isFM && <Button size="sm" onClick={() => openDecide(s)}>Xét duyệt</Button>}
         {s.status === 'APPROVED' && s.method === 'DELIVERY' && isFM && <Button size="sm" variant="ghost" onClick={() => openAssign(s)}>Đổi người chuyển</Button>}
-        {s.status === 'APPROVED' && <Button size="sm" variant="secondary" onClick={() => setDlg({ kind: 'complete', s })}>Xác nhận đã chuyển</Button>}
+        {s.status === 'APPROVED' && isFM && <Button size="sm" variant="ghost" onClick={() => { if (window.confirm(`Huỷ yêu cầu ${s.requestNumber}? Ô đang giữ cho yêu cầu này sẽ được nhả.`)) void run('cancelSwapRequest', { swapRequestId: s._id }, 'Đã huỷ yêu cầu đổi ô — ô đích trống trở lại'); }}>Huỷ</Button>}
+        {s.status === 'APPROVED' && <Button size="sm" variant="secondary" onClick={() => { setKeyTag(''); setDlg({ kind: 'complete', s }); }}>Xác nhận đã chuyển</Button>}
       </div>
     ) },
   ];
@@ -149,8 +151,30 @@ export default function StaffSwaps() {
 
       <Modal open={dlg?.kind === 'complete'} onClose={close} title="Xác nhận đã chuyển xong"
         description={dlg ? `${unitLabel(db, dlg.s.fromUnitId)} → ${unitLabel(db, dlg.s.toUnitId)}${dlg.s.fee ? ` · phí ${vnd(dlg.s.fee)}` : ' · miễn phí'}` : ''}
-        footer={<Button onClick={() => dlg && void run('completeSwapRequest', { swapRequestId: dlg.s._id }, 'Đã đổi ô — hợp đồng cập nhật ô mới', () => close())}>Xác nhận</Button>}>
+        footer={<Button onClick={() => dlg && void run('completeSwapRequest', { swapRequestId: dlg.s._id, keyTag: keyTag.trim() },
+          (r) => (r.pin ? `Đã đổi ô — mật khẩu mới của ô: ${r.pin} (khách cũng xem được trong tài khoản)` : r.accessChanged ? 'Đã đổi ô — hình thức khoá của hợp đồng đã đổi theo ô mới' : 'Đã đổi ô — hợp đồng cập nhật ô mới'), () => close())}>Xác nhận</Button>}>
         <p className="text-sm text-stone-600">Kiểm tra khách đã dọn hết đồ sang ô mới và trả lại ô cũ trước khi xác nhận. Ô cũ sẽ chuyển sang chờ kiểm tra.</p>
+        {dlg?.kind === 'complete' && (() => {
+          // Hình thức khoá thuộc về từng ô — ô mới khác khoá thì hợp đồng đổi theo và phải giao phương tiện mới.
+          const oldLock = byId(db.contracts, dlg.s.contractId)?.access.method;
+          const newLock = byId(db.units, dlg.s.toUnitId)?.accessMethod;
+          if (!newLock) return null;
+          return (
+            <div className="mt-3 space-y-3">
+              {oldLock && oldLock !== newLock && (
+                <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 ring-1 ring-amber-200">
+                  Ô mới khoá bằng <b>{ACCESS_METHOD[newLock]}</b>, khác ô cũ (<b>{ACCESS_METHOD[oldLock]}</b>). Thu lại {ACCESS_METHOD[oldLock].toLowerCase()} cũ nếu có
+                  {newLock === 'PIN' ? ' — hệ thống sẽ cấp mật khẩu mới ngay khi xác nhận.' : ` và giao ${ACCESS_METHOD[newLock].toLowerCase()} của ô mới cho khách.`}
+                </p>
+              )}
+              {newLock !== 'PIN' && (
+                <Field label={newLock === 'RFID_CARD' ? 'Số thẻ khoá giao cho khách' : 'Nhãn chìa khoá giao cho khách'} hint="Để trống nếu khách tiếp tục dùng thẻ / chìa cũ.">
+                  <input className={inputCls} value={keyTag} maxLength={50} onChange={(e) => setKeyTag(e.target.value)} />
+                </Field>
+              )}
+            </div>
+          );
+        })()}
         {dlg?.s.fee ? <p className="mt-2 text-sm">Phí <b>{vnd(dlg.s.fee)}</b> sẽ được cộng vào công nợ của khách.</p> : null}
       </Modal>
     </>

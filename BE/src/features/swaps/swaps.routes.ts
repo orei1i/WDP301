@@ -42,10 +42,13 @@ swapsRouter.post('/:id/assign', authorize('FACILITY_MANAGER'), validate({ params
   res.json(await assignSwapMover(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
-swapsRouter.post('/:id/complete', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
-  res.json(await completeSwapRequest(req.auth!.user, req.valid.params.id));
+swapsRouter.post('/:id/complete', authorize('STAFF', 'FACILITY_MANAGER'), validate({ params: idParams, body: z.object({
+  keyTag: z.string().max(50).optional().describe('Nhãn chìa / số thẻ vừa giao cho khách, khi ô mới khoá bằng chìa hoặc thẻ'),
+}) }), async (req, res) => {
+  res.json(await completeSwapRequest(req.auth!.user, req.valid.params.id, req.valid.body));
 });
 
-swapsRouter.post('/:id/cancel', authorize('CUSTOMER'), validate({ params: idParams }), async (req, res) => {
+// Khách rút yêu cầu của mình; Quản lý chi nhánh huỷ yêu cầu không thực hiện được. Cả khi đã duyệt nhưng chưa chuyển.
+swapsRouter.post('/:id/cancel', authorize('CUSTOMER', 'FACILITY_MANAGER'), validate({ params: idParams }), async (req, res) => {
   res.json(await cancelSwapRequest(req.auth!.user, req.valid.params.id));
 });

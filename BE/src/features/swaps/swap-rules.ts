@@ -17,6 +17,8 @@ export const SWAP_FEE_MAX = 1_000_000;
 
 /** Khách tự chuyển có 7 ngày kể từ lúc được duyệt để lên chuyển đồ; quá hạn thì yêu cầu tự hủy. */
 export const SWAP_SELF_MOVE_DAYS = 7;
+/** Thuê người chuyển: quá ngày hẹn chuyển bấy nhiêu ngày mà chưa xác nhận xong thì yêu cầu hết hạn, ô đích được nhả. */
+export const SWAP_DELIVERY_GRACE_DAYS = 3;
 
 /** Phí mặc định hệ thống đề xuất khi FM mở màn duyệt — FM có thể sửa trong trần SWAP_FEE_MAX. */
 export function defaultSwapFee(input: { facilityFault: boolean; isFirstSwap: boolean; method: 'SELF' | 'DELIVERY' }): number {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import type { SwapMethod } from '@ssm/shared';
-import { SWAP_METHOD } from '@ssm/shared';
+import { ACCESS_METHOD, SWAP_METHOD } from '@ssm/shared';
 import { byId, facilityName, typeName, unitLabel, useStore } from '../../shared/store/store';
 import { api } from '../../shared/api/client';
 import { Button, Card, Chips, EmptyState, Input, Screen, ScreenHeader } from '../../shared/ui';
@@ -47,6 +47,15 @@ export default function SwapRequestScreen() {
         <Text style={st.sectionTitle}>Chọn ô mới trên sơ đồ</Text>
         <Text style={st.hint}>Giá thuê và tiền giữ chân giữ nguyên vì chỉ đổi sang ô cùng loại.</Text>
         {candidates === null ? <Text style={st.hint}>Đang tải sơ đồ…</Text> : <FloorPlanPicker items={candidates} value={unitId} onChange={setUnitId} />}
+        {(() => {
+          // Hình thức khoá thuộc về từng ô: chọn ô khác khoá thì báo trước để khách không bất ngờ.
+          const lock = candidates?.find((u) => u._id === unitId)?.accessMethod;
+          return lock && lock !== c.access.method ? (
+            <Text style={[st.hint, { color: '#92400e' }]}>
+              Ô này khoá bằng {ACCESS_METHOD[lock]}, khác ô bạn đang thuê ({ACCESS_METHOD[c.access.method]}). Khi đổi xong, {ACCESS_METHOD[c.access.method].toLowerCase()} cũ hết hiệu lực và chi nhánh cấp {ACCESS_METHOD[lock].toLowerCase()} mới cho bạn.
+            </Text>
+          ) : null;
+        })()}
       </Card>
 
       <Card style={{ marginTop: S.md }}>

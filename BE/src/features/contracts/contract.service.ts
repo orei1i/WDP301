@@ -8,6 +8,8 @@ import { addDays, addPeriodsUTC, daysBetween, localDay, todayUTC, toDateOnly } f
 import { audit } from '../audit/audit.service';
 import { withTxn } from '../../shared/db/txn';
 import { createPayment } from '../payments/payment.service';
+import { releaseOpenSwapRequests } from '../swaps/unit-swap-request.service';
+import { moveAccessToUnit } from './unit-access';
 
 const loadContract = async (id: string, session?: ClientSession) => {
   const c = await RentalContractModel.findById(id).session(session ?? null);
@@ -178,11 +180,10 @@ export async function swapUnit(user: UserHydrated, id: string, input: { toUnitId
     // (4) hợp đồng trỏ sang ô mới; billing.rate và deposit giữ nguyên
     c.unitId = toUnit._id;
     c.unitSwaps = [...(c.unitSwaps ?? []), { fromUnitId, toUnitId: toUnit._id, reason: input.reason, fee, paymentId: feePayment?._id ?? null, at: now, by: user._id }];
-    if (input.keyTag !== undefined) {
-      c.access.keyTag = input.keyTag || null;
-      c.access.issuedAt = now;
-      c.access.issuedBy = user._id;
-    }
+    // Hình thức khoá đi theo Ô: ô mới khác khoá thì hợp đồng đổi theo và cấp phương tiện mới.
+    const access = moveAccessToUnit(c, toUnit, user._id, input.keyTag);
+    // Yêu cầu đổi ô khách gửi trước đó (nếu còn treo) không còn ý nghĩa — huỷ và nhả ô đang giữ cho nó.
+    await releaseOpenSwapRequests(c._id, session, 'Chi nhánh đã đổi ô trực tiếp');
     if (fee > 0) c.balance.outstanding += fee;
     await c.save({ session }); // chỉ mục unique {unitId} trên hợp đồng đang mở là lớp chặn cuối cùng
 
@@ -192,9 +193,9 @@ export async function swapUnit(user: UserHydrated, id: string, input: { toUnitId
     await UnitTypeModel.updateOne({ _id: c.unitTypeId }, { $inc: { inventoryVersion: 1 } }, { session });
     await audit({
       action: 'contract.swap_unit', entityType: 'RentalContract', entityId: c._id, facilityId: c.facilityId, reason: input.reason,
-      changes: { before: { unit: fromUnit.unitNumber }, after: { unit: toUnit.unitNumber, fee, rate: c.billing.rate } },
+      changes: { before: { unit: fromUnit.unitNumber }, after: { unit: toUnit.unitNumber, fee, rate: c.billing.rate, access: c.access.method, accessChanged: access.changed } },
     }, session);
-    return { contract: c, fromUnit, toUnit, fee };
+    return { contract: c, fromUnit, toUnit, fee, pin: access.pin }; // mật khẩu mới (nếu có) trả về đúng một lần
   });
 }
 
@@ -204,9 +205,9 @@ export async function swapCandidates(user: UserHydrated, id: string) {
   const c = await loadContract(id);
   await assertCanAccess(user, c, 'contract.swap_unit');
   const items = await StorageUnitModel
-    .find({ facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', _id: { $ne: c.unitId } }, { unitNumber: 1, location: 1, status: 1 })
+    .find({ facilityId: c.facilityId, unitTypeId: c.unitTypeId, status: 'AVAILABLE', isDeleted: false, _id: { $ne: c.unitId } }, { unitNumber: 1, location: 1, status: 1, accessMethod: 1 })
     .sort({ 'location.floor': 1, unitNumber: 1 }).limit(200).lean();
-  return { currentUnitId: c.unitId, rate: c.billing.rate, items };
+  return { currentUnitId: c.unitId, currentAccessMethod: c.access.method, rate: c.billing.rate, items };
 }
 
 // ---------------------------------------------------------------- move-out request (CUSTOMER owner, STAFF/FM)
@@ -262,6 +263,8 @@ export async function receiveUnit(user: UserHydrated, id: string) {
     // Ngày khách THỰC TẾ bàn giao — mốc để quyết toán (trả sớm hay không, đã dùng bao lâu), không dùng ngày khách tự hẹn.
     c.moveOut = { requestedAt: c.moveOut?.requestedAt ?? new Date(), scheduledFor: c.moveOut?.scheduledFor ?? null, returnedOn: todayUTC(), completedAt: null, inspectionId: null };
     await c.save({ session });
+    // Khách đã trả kho thì yêu cầu đổi ô còn treo (kể cả đã duyệt) không bao giờ thực hiện được nữa — huỷ để nhả ô đang giữ.
+    await releaseOpenSwapRequests(c._id, session, 'Khách đã trả kho');
     await audit({ action: 'unit.receive', entityType: 'StorageUnit', entityId: unit._id, facilityId: c.facilityId }, session);
     return { contract: c, unit };
   });
@@ -393,6 +396,7 @@ export async function processAbandonment(
       { session },
     );
 
+    await releaseOpenSwapRequests(c._id, session, 'Hợp đồng đóng do hàng bỏ lại');
     c.transitionTo('ABANDONED', { actor: user.role, by: user._id, reason: `Khóa truy cập ${daysLocked} ngày, khách không liên hệ` });
     c.closedAt = now;
     c.deposit.refundedAmount = 0;

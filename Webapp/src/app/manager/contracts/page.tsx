@@ -146,7 +146,7 @@ export default function Contracts() {
               <Field label={`Ô kho mới (${swapCandidates.length} ô trống cùng loại)`}>
                 <select className={inputCls} value={swapForm.toUnitId} onChange={(e) => setSwapForm((f) => ({ ...f, toUnitId: e.target.value }))}>
                   <option value="">— Chọn ô —</option>
-                  {swapCandidates.map((u) => <option key={u._id} value={u._id}>{u.unitNumber} · tầng {u.location.floor}{u.location.zone ? ` · khu ${u.location.zone}` : ''}</option>)}
+                  {swapCandidates.map((u) => <option key={u._id} value={u._id}>{u.unitNumber} · tầng {u.location.floor}{u.location.zone ? ` · khu ${u.location.zone}` : ''} · {ACCESS_METHOD[u.accessMethod]}{u.accessMethod !== swap?.access.method ? ' (khác khoá ô cũ)' : ''}</option>)}
                 </select>
               </Field>
             )}

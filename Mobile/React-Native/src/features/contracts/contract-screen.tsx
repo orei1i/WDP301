@@ -141,7 +141,7 @@ export default function ContractScreen() {
           {openSwap.status === 'APPROVED' && openSwap.method === 'DELIVERY' && (
             <Text style={st.hint}>Chi nhánh chuyển ngày {fmtDate(openSwap.scheduledFor)}{openSwap.assignedStaffName ? ` — nhân viên ${openSwap.assignedStaffName}` : ''}</Text>
           )}
-          {openSwap.status === 'SUBMITTED' && (
+          {(openSwap.status === 'SUBMITTED' || openSwap.status === 'APPROVED') && (
             <Button
               title="Rút yêu cầu" variant="ghost" style={{ marginTop: S.sm }}
               onPress={() => void run('cancelSwapRequest', { swapRequestId: openSwap._id }, 'Đã rút yêu cầu đổi ô')}

@@ -69,8 +69,8 @@ export const CLAIM_MACHINE = {
  * đã chuyển xong; hết hạn 7 ngày tự chuyển thì hệ thống tự hủy (EXPIRED), không cần ai thao tác.
  */
 export const SWAP_REQUEST_MACHINE = {
-  SUBMITTED: { APPROVED: [FM], REJECTED: [FM], CANCELLED: [CU] },
-  APPROVED:  { DONE: [ST, FM], EXPIRED: [SYS] },
+  SUBMITTED: { APPROVED: [FM], REJECTED: [FM], CANCELLED: [CU, SYS] },   // SYS = hợp đồng trả kho / đóng khi yêu cầu còn treo
+  APPROVED:  { DONE: [ST, FM], EXPIRED: [SYS], CANCELLED: [CU, FM, SYS] }, // đã duyệt nhưng chưa chuyển vẫn huỷ được → nhả ô đang giữ
   REJECTED:  {}, DONE: {}, EXPIRED: {}, CANCELLED: {},
 } as const satisfies StateMachine<SwapRequestStatus>;
 

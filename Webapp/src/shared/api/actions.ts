@@ -201,7 +201,9 @@ export const actions = {
   assignSwapMover: async (p: { swapRequestId: string; assignedStaffId: string; scheduledFor?: string }) =>
     api.post<UnitSwapRequest>(`/swap-requests/${p.swapRequestId}/assign`, { assignedStaffId: p.assignedStaffId, scheduledFor: p.scheduledFor }),
 
-  completeSwapRequest: async (p: { swapRequestId: string }) => api.post<{ contract: RentalContract }>(`/swap-requests/${p.swapRequestId}/complete`),
+  /** `keyTag`: nhãn chìa / số thẻ vừa giao khi ô mới khoá bằng chìa hoặc thẻ. Ô mới khoá mật khẩu khác ô cũ → server trả `pin` đúng một lần. */
+  completeSwapRequest: async (p: { swapRequestId: string; keyTag?: string }) =>
+    api.post<{ contract: RentalContract; accessChanged: boolean; pin?: string }>(`/swap-requests/${p.swapRequestId}/complete`, { keyTag: p.keyTag || undefined }),
 
   saveUser: async (p: { _id?: string; fullName: string; email: string; role: Role; facilityIds: string[]; status: User['status']; shift?: CheckInShift | null }) => {
     if (p._id) { await api.patch(`/users/${p._id}`, { fullName: p.fullName, role: p.role, facilityIds: p.facilityIds, status: p.status, shift: p.role === 'STAFF' ? p.shift : null }); return { resetLink: null as string | null }; }

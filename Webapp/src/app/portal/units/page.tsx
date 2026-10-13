@@ -97,7 +97,7 @@ export default function MyUnits() {
                           {openSwap.status === 'APPROVED' && openSwap.method === 'SELF' && openSwap.moveDeadline && <> · hạn chuyển {fmtDate(openSwap.moveDeadline)}</>}
                           {openSwap.status === 'APPROVED' && openSwap.method === 'DELIVERY' && <> · chi nhánh chuyển ngày {fmtDate(openSwap.scheduledFor)}{openSwap.assignedStaffName ? `, nhân viên ${openSwap.assignedStaffName}` : ''}</>}
                         </span>
-                        {openSwap.status === 'SUBMITTED' && (
+                        {(openSwap.status === 'SUBMITTED' || openSwap.status === 'APPROVED') && (
                           <Button size="sm" variant="ghost" onClick={() => void run('cancelSwapRequest', { swapRequestId: openSwap._id }, 'Đã rút yêu cầu đổi ô')}>Rút yêu cầu</Button>
                         )}
                       </div>
@@ -194,6 +194,15 @@ export default function MyUnits() {
         <div className="space-y-4">
           <Field label="Chọn ô mới trên sơ đồ">
             {swapCandidates === null ? <p className="text-sm text-stone-500">Đang tải sơ đồ…</p> : <FloorPlanPicker items={swapCandidates} value={swapUnitId} onChange={setSwapUnitId} />}
+            {(() => {
+              // Hình thức khoá thuộc về từng ô: chọn ô khác khoá thì báo trước để khách không bất ngờ.
+              const lock = swapCandidates?.find((u) => u._id === swapUnitId)?.accessMethod;
+              return dlg && lock && lock !== dlg.c.access.method ? (
+                <p className="mt-2 rounded-lg bg-amber-50 p-2.5 text-xs text-amber-900 ring-1 ring-amber-200">
+                  Ô này khoá bằng <b>{ACCESS_METHOD[lock]}</b>, khác ô bạn đang thuê ({ACCESS_METHOD[dlg.c.access.method]}). Khi đổi xong, {ACCESS_METHOD[dlg.c.access.method].toLowerCase()} cũ hết hiệu lực và chi nhánh cấp {ACCESS_METHOD[lock].toLowerCase()} mới cho bạn.
+                </p>
+              ) : null;
+            })()}
           </Field>
           <Field label="Hình thức chuyển">
             <div className="grid grid-cols-2 gap-2">
